@@ -39,9 +39,10 @@
     }
   ],
   "sense_rules": {
-    "source": "Lucassen, Gevers, Gijsenij, Texture Affects Color Emotion (Color Research & Application, 2010)",
+    "source": "Lucassen, Gevers, Gijsenij (2011), Texture Affects Color Emotion, Color Research & Application 36(6), 426–436",
     "color": "온도·무게·남성적–여성적 인상을 결정한다",
     "texture": "단단함–부드러움의 감각 축을 결정한다",
-    "roles": "언어 모델은 의도를 고르고, 시각 알고리즘은 신호를 만든다"
+    "roles": "언어 모델은 의도를 고르고, 시각 알고리즘은 신호를 만든다",
+    "details": "data/knowledge/paper_rules.md"
   }
 }
