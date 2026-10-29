@@ -6,6 +6,7 @@
     <title>{{ bot.name }}와 대화하기</title>
     <link rel="stylesheet" href="{{ asset_url('assets/css/style.css') }}">
     <script src="{{ asset_url('assets/js/chatbot.js') }}" defer></script>
+    <script type="module" src="{{ asset_url('assets/js/noizilian/composer.js') }}"></script>
   </head>
   <body class="chat-page">
     <header class="chat-header">
@@ -16,10 +17,23 @@
       <div id="chat-log" role="log" aria-live="polite" aria-label="대화 내용">
         <div class="message bot"><p>{{ bot.greeting }}</p></div>
       </div>
+      <section id="signal-composer" class="signal-composer" aria-label="학종이 작성기">
+        <div class="signal-tile">
+          <canvas width="120" height="120" aria-label="보낼 학종이 미리보기"></canvas>
+          <button type="button" class="reseed-button" data-reseed>패턴 바꾸기</button>
+        </div>
+        <div class="signal-sliders">
+          <div class="sense-row" data-axis="wc"></div>
+          <div class="sense-row" data-axis="hl"></div>
+          <div class="sense-row" data-axis="mf"></div>
+          <div class="sense-row" data-axis="hs"></div>
+          <p class="sense-legend">막대 손잡이는 원하는 값, 검은 점은 실제 타일의 값입니다. 위 세 막대는 색을, 단단함–부드러움은 질감만 바꿉니다.</p>
+        </div>
+      </section>
       <form id="chat-form" class="chat-input-area">
         <label class="visually-hidden" for="user-message">메시지</label>
-        <input id="user-message" type="text" maxlength="2000" placeholder="메시지를 입력하세요..." autocomplete="off" required>
-        <button id="send-btn" class="send-button" type="submit">전송</button>
+        <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
+        <button id="send-btn" class="send-button" type="submit">신호 보내기</button>
       </form>
     </main>
   </body>

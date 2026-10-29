@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, url_for
 
 from services import ChatbotService
+from services.sense_model import parse_signal
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -93,8 +94,16 @@ def api_chat():
         return error_response("invalid_username", "이름은 문자열이어야 합니다.", 400)
     username = username.strip()[:50] or "사용자"
 
+    # 학종이 신호(선택): 색·질감 값을 검증하고 서버에서 감각 점수를 다시 계산합니다.
+    signal = payload.get("signal")
+    if signal is not None:
+        try:
+            signal = parse_signal(signal)
+        except ValueError as error:
+            return error_response("invalid_signal", str(error), 400)
+
     try:
-        response = chatbot.generate_response(message, username, load_config())
+        response = chatbot.generate_response(message, username, load_config(), signal=signal)
         if not isinstance(response, dict) or not isinstance(response.get("reply"), str):
             raise TypeError("챗봇 응답에는 문자열 reply가 필요합니다.")
         image = response.get("image")

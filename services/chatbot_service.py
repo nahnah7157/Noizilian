@@ -12,12 +12,22 @@ class ChatbotService:
         self.image_selector = image_selector or DemoImageSelector()
 
     def generate_response(
-        self, user_message: str, username: str = "사용자", character: dict | None = None
+        self,
+        user_message: str,
+        username: str = "사용자",
+        character: dict | None = None,
+        signal: dict | None = None,
     ) -> dict:
-        """`reply`, `image`, `sources`로 이루어진 응답을 반환합니다."""
+        """`reply`, `image`, `sources`로 이루어진 응답을 반환합니다.
+
+        signal은 sense_model.parse_signal()이 만든 학종이 신호(색·질감·감각 점수·설명)입니다.
+        """
         knowledge = self.retriever.search(user_message)
         character = character or {}
-        reply = self.generator.generate(user_message, username, character, knowledge)
+        if signal is None:
+            reply = self.generator.generate(user_message, username, character, knowledge)
+        else:
+            reply = self.generator.generate(user_message, username, character, knowledge, signal=signal)
         image = self.image_selector.select(reply, character)
         return {
             "reply": reply,

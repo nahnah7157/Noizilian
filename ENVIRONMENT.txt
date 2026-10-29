@@ -1,0 +1,27 @@
+Noizilian 팀 개발 환경
+======================
+새 패키지를 추가하거나 버전을 바꾸면 이 파일과 requirements.txt를 같이 고쳐서 PR로 올려 주세요.
+
+[Python]
+- 버전: 3.12 (.python-version과 같음)
+- 가상환경: Conda
+    conda create -n noizilian python=3.12 pip
+    conda activate noizilian
+    python -m pip install -r requirements.txt
+
+[실행]
+- 서버: python app.py → http://localhost:5000
+- Docker를 쓸 때: docker compose up --build → http://localhost:5001
+- 테스트: python -m unittest discover -s tests -v
+
+[환경 변수 (.env, 커밋 금지)]
+- cp .env.example .env 후 OPENAI_API_KEY에 운영진이 준 키 입력
+- OPENAI_MODEL=gpt-6-luna
+- OPENAI_REASONING_EFFORT=none (기능 테스트하면서 필요할 때만 low로)
+
+[설치된 패키지] requirements.txt 기준
+- Flask, python-dotenv, gunicorn
+- openai: 아직 추가 전 (4단계 답변 생성 연결 때 추가 예정)
+
+[변경 기록]
+- 2026-10-29 처음 작성

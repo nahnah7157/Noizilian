@@ -213,3 +213,44 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .message { max-width: 90%; }
   .send-button { padding-inline: 18px; }
 }
+
+/* Noizilian 학종이 작성기: 감각 막대로 색·질감을 정한다 */
+.signal-composer {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: #fff;
+}
+.signal-tile { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.signal-tile canvas { width: 120px; height: 120px; border-radius: 4px; background: #eee; }
+.reseed-button { padding: 4px 10px; border: 1px solid #ddd; border-radius: 15px; background: #fff; font-size: .8rem; cursor: pointer; }
+.signal-sliders { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sense-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 8px; align-items: center; font-size: .85rem; }
+.sense-word.right { text-align: right; }
+.sense-bar { position: relative; }
+.sense-bar input { width: 100%; accent-color: #764ba2; }
+.sense-actual {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #222;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: left .15s;
+}
+.sense-legend { margin: 2px 0 0; color: #777; font-size: .75rem; line-height: 1.4; }
+.message.user img.signal-image { width: 72px; height: 72px; margin: 0 0 6px auto; border-radius: 4px; }
+
+@media (max-width: 600px) {
+  .signal-composer { grid-template-columns: minmax(0, 1fr); }
+  .signal-tile { flex-direction: row; justify-content: center; }
+  .signal-tile canvas { width: 88px; height: 88px; }
+}
