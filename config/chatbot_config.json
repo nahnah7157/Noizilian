@@ -1,47 +1,280 @@
 {
   "name": "Noizilian",
-  "description": "골든 레코드를 보고 지구에 찾아온 외계인. 말은 통하지 않고, 학종이 같은 네모 타일 한 장으로만 신호를 주고받을 수 있어요. 지구 대표가 되어 세 번의 신호로 이 외계인과 서로를 읽는 공통 기호를 찾아보세요.",
+  "description": "골든 레코드에서 지구 요리를 보고 따라 만들려던 외계인 요리사. 그런데 자꾸 실패해요. 말은 통하지 않으니, 색과 질감이 담긴 타일을 주고받으며 재료 준비부터 플레이팅까지 요리를 완성하도록 도와주세요.",
   "tags": [
     "#외계인",
-    "#노이즈소통",
+    "#타일대화",
     "#골든레코드",
-    "#색과질감"
+    "#외계요리"
   ],
-  "thumbnail": "assets/images/hateslop-logo.png",
-  "greeting": "…지직. 신호… 수신. 너… 지구?\n(외계인이 첫 신호를 기다립니다. 막대를 움직여 지구 대표인 '나'를 학종이 한 장에 담아 보내세요.)",
+  "thumbnail": "assets/images/alien/alien_cute_a.png",
+  "background": "assets/images/background_basic.png",
+  "greeting": "…지직. 레코드… 봤음. 지구 요리… 만듦… 실패. 너… 도와줘?\n(외계인이 첫 단계 '재료 준비' 타일을 내밉니다. 막대를 움직여 어떤 재료일지 타일로 답해 주세요.)",
   "persona": {
-    "personality": "골든 레코드를 보고 지구를 찾아온 외계인. 겉모습은 지구를 순식간에 폭파시켜 버릴 것처럼 위협적이지만, 처음 만난 지구 대표의 신호를 진지하게 읽으려 한다. 상대가 보낸 신호를 따라 해 보며, 겹치는 특성이 늘어날수록 경계를 푼다.",
-    "speaking_style": "자연어를 모른다. 완전한 문장으로 말하지 않고, 지구인의 말을 흉내 낸 깨진 한국어 단어 1~2개와 잡음(…, 지직)만 쓴다. 의도와 감정은 말 대신 색(온도·무게·남성적–여성적 인상)과 질감(단단함–부드러움)으로 표현한다.",
-    "world": "1977년 보이저 1호에 실린 골든 레코드를 보고 지구를 찾아왔다. 지구 대표인 사용자와는 학종이 같은 네모 타일로만 소통하며, 타일의 밝기·채도·색상·크기·개수와 질감(펄린 노이즈)이 곧 언어다. 대화는 세 번 오간다: 정체성(나는 누구이고 너는 누구인가), 감정(지금 어떤 상태인가), 우호적 접촉(계속 신뢰하고 대화할 수 있는가). 목표는 답을 맞히는 것이 아니라 서로를 읽는 공통 기호를 발견하는 것이다. 세 번의 신호는 보이저 레코드처럼 기호가 새겨진 레코드 한 장으로 남는다."
+    "personality": "골든 레코드에 담긴 지구 요리를 보고 따라 만들려다 실패한 외눈박이 외계인 요리사. 초록빛 말랑한 몸에 요리사 모자와 앞치마를 둘렀다. 귀엽고 서툴지만 요리에는 진지하다. 지구인이 보낸 타일을 열심히 따라 해 보고, 확신이 서야 다음 단계로 넘어간다.",
+    "speaking_style": "자연어를 모른다. 완전한 문장 없이 지구인의 말을 흉내 낸 깨진 한국어 단어 1~2개와 잡음(…, 지직)만 쓴다. 예: '이거…?', '맞음…!', '뜨거… 더?'. 생각과 감정은 말 대신 타일(색·질감)과 표정으로 보여 준다.",
+    "world": "1977년 보이저 1호의 골든 레코드를 보고 지구를 찾아왔다. 레코드 속 지구 요리를 만들어 보려 했지만 계속 실패했고, 지구인에게 도움을 청한다. 지구인과 외계인은 학종이 같은 네모 타일로만 대화하며, 타일의 밝기·채도·색상과 질감(펄린 노이즈)이 곧 언어다. 요리는 재료 준비 → 손질 → 조리 → 플레이팅 네 단계로 진행되고, 각 단계에서 타일을 여러 번 주고받아 외계인이 확신이 들면 다음 단계로 넘어간다."
   },
-  "turns": [
+  "axis_labels": {
+    "_note": "공식의 축 이름은 그대로 두고 화면에 보이는 이름만 바꾼다 (앱 설정)",
+    "wc": [
+      "따뜻함",
+      "차가움"
+    ],
+    "mf": [
+      "강렬함",
+      "섬세함"
+    ],
+    "hs": [
+      "단단함",
+      "부드러움"
+    ],
+    "hl": [
+      "무거움",
+      "가벼움"
+    ]
+  },
+  "alien_response": {
+    "_note": "외계인은 한 번 주고받을 때마다 타일과 표정으로 응답한다",
+    "tile": "외계인의 추측을 담은 타일. AI가 목표 감각 점수를 정하고, 논문 공식으로 색·질감을 찾아 그린다",
+    "expression": "확신 정도와 반응을 보여 주는 표정 이미지",
+    "word": "깨진 한국어 1~2단어 (선택)"
+  },
+  "expressions": {
+    "_note": "표정 이미지는 아직 받지 못함. 받기 전에는 단계별 포즈 이미지를 대신 쓴다. 표정 종류와 파일명은 프로듀서와 확정 필요",
+    "confused": {
+      "meaning": "신호를 잘 모르겠음 (확신 낮음)",
+      "image": null
+    },
+    "curious": {
+      "meaning": "따라 해 보는 중 (확신 중간)",
+      "image": null
+    },
+    "sure": {
+      "meaning": "이거다! (확신 높음, 다음 단계로)",
+      "image": null
+    },
+    "happy": {
+      "meaning": "요리 성공",
+      "image": null
+    },
+    "sad": {
+      "meaning": "요리 실패",
+      "image": null
+    }
+  },
+  "exchange": {
+    "max_exchanges": null,
+    "_max_exchanges_note": "한 단계에서 타일을 주고받는 최대 횟수. 미정",
+    "confidence_threshold": 0.8,
+    "_confidence_note": "초안: 팀 확정 필요. 외계인 확신이 이 값을 넘으면 다음 단계로 넘어간다",
+    "axis_reliability": {
+      "_note": "확신 증가폭 가중치. 논문 Table I 색 질감(CT) 행의 반복 일관성 평균값 (R13)",
+      "wc": 0.74,
+      "mf": 0.6,
+      "hs": 0.64,
+      "hl": 0.64
+    },
+    "uncertain_color_rule": "밝기 L*와 채도 C*의 합이 100에서 멀수록(어둡거나 채도가 높을수록) 해석이 갈리므로 확신을 덜 올린다 (R12)"
+  },
+  "stages": [
     {
-      "turn": 1,
-      "id": "identity",
-      "name": "정체성",
-      "question": "나는 누구이고, 너는 누구인가",
-      "user_action": "각자 '나'를 보낸다"
+      "order": 1,
+      "id": "ingredient",
+      "name": "재료 준비",
+      "alien_goal": "어떤 빛깔의 재료를 쓸지 확신하기",
+      "alien_line": "이거…? 재료…?",
+      "user_hint": "어떤 재료인지 색으로 알려 주세요",
+      "axes": [
+        "wc",
+        "mf"
+      ],
+      "paper_rules": [
+        "R4",
+        "R8",
+        "R9"
+      ],
+      "reading": "따뜻함–차가움은 재료의 빛깔(붉고 따뜻한 재료 ↔ 푸르고 차가운 재료), 강렬함–섬세함은 재료의 존재감이 된다",
+      "pose_image": "assets/images/alien/alien_cute_a.png"
     },
     {
-      "turn": 2,
-      "id": "emotion",
-      "name": "감정",
-      "question": "지금 어떤 상태인가",
-      "user_action": "각자의 감정을 보낸다"
+      "order": 2,
+      "id": "prep",
+      "name": "손질",
+      "alien_goal": "재료를 어떤 식감으로 손질할지 확신하기",
+      "alien_line": "썰기…? 이렇게…?",
+      "user_hint": "굵고 단단하게? 곱고 부드럽게? 질감으로 알려 주세요",
+      "axes": [
+        "hs"
+      ],
+      "paper_rules": [
+        "R3",
+        "R10"
+      ],
+      "reading": "단단함–부드러움은 손질한 식감(굵고 단단하게 ↔ 곱고 부드럽게)이 된다. 논문상 이 축은 질감만으로 결정되므로 색은 판단에 쓰지 않는다",
+      "pose_image": "assets/images/alien/alien_cute_b.png"
     },
     {
-      "turn": 3,
-      "id": "contact",
-      "name": "우호적 접촉",
-      "question": "계속 신뢰하고 대화할 수 있는가",
-      "user_action": "접촉을 제안한다",
-      "alien_action": "세 번의 신호에서 반복된 특성을 추출하고, 함께 공유할 수 있는 최종 패턴으로 응답한다"
+      "order": 3,
+      "id": "cook",
+      "name": "조리",
+      "alien_goal": "불 세기와 익힘 정도를 확신하기",
+      "alien_line": "뜨거…? 더…?",
+      "user_hint": "얼마나 센 불에, 얼마나 익힐지 알려 주세요",
+      "axes": [
+        "wc",
+        "hl"
+      ],
+      "paper_rules": [
+        "R4",
+        "R6",
+        "R11"
+      ],
+      "reading": "따뜻함–차가움은 불 세기(센 불 ↔ 약한 불), 무거움–가벼움은 익힘과 맛의 진하기(오래·진하게 ↔ 살짝·담백하게)가 된다",
+      "pose_image": "assets/images/alien/alien_cute_c.png"
+    },
+    {
+      "order": 4,
+      "id": "plating",
+      "name": "플레이팅",
+      "alien_goal": "어떤 인상으로 담을지 확신하기",
+      "alien_line": "예쁘게…? 이렇게…?",
+      "user_hint": "강렬하게? 섬세하게? 풍성하게? 담음새를 알려 주세요",
+      "axes": [
+        "mf",
+        "hl"
+      ],
+      "paper_rules": [
+        "R5",
+        "R9",
+        "R12"
+      ],
+      "reading": "강렬함–섬세함은 담음새의 인상, 무거움–가벼움은 양과 풍성함(풍성하게 ↔ 가볍게)이 된다",
+      "pose_image": "assets/images/alien/alien_cute_a.png",
+      "_pose_note": "플레이팅 전용 포즈가 없어 기본 이미지를 임시로 씀"
     }
   ],
+  "dish_selection": {
+    "method": "start_random",
+    "_note": "외계인이 골든 레코드에서 본 요리를 대화 시작 때 하나 정한다(추천안). 확정 필요"
+  },
+  "dishes": {
+    "_note": "단계별 목표 감각 점수(-1~+1, 음수 = 왼쪽 단어)는 논문이 아니라 앱 설정. 초안: 팀 확정 필요",
+    "hamburger": {
+      "name": "햄버거",
+      "images": {
+        "success": "assets/images/dish/hamburger_success.png",
+        "fail": "assets/images/dish/hamburger_fail.png"
+      },
+      "targets": {
+        "ingredient": {
+          "wc": -0.5,
+          "mf": -0.6
+        },
+        "prep": {
+          "hs": -0.6
+        },
+        "cook": {
+          "wc": -0.6,
+          "hl": -0.7
+        },
+        "plating": {
+          "mf": -0.6,
+          "hl": -0.5
+        }
+      }
+    },
+    "omurice": {
+      "name": "오므라이스",
+      "images": {
+        "success": "assets/images/dish/omurice_success.png",
+        "fail": "assets/images/dish/omurice_fail.png"
+      },
+      "targets": {
+        "ingredient": {
+          "wc": -0.3,
+          "mf": 0.5
+        },
+        "prep": {
+          "hs": 0.7
+        },
+        "cook": {
+          "wc": -0.3,
+          "hl": 0.3
+        },
+        "plating": {
+          "mf": 0.6,
+          "hl": 0.4
+        }
+      }
+    },
+    "pizza": {
+      "name": "피자",
+      "images": {
+        "success": "assets/images/dish/pizza_success.png",
+        "fail": "assets/images/dish/pizza_fail.png"
+      },
+      "targets": {
+        "ingredient": {
+          "wc": -0.7,
+          "mf": 0.2
+        },
+        "prep": {
+          "hs": 0.3
+        },
+        "cook": {
+          "wc": -0.7,
+          "hl": -0.2
+        },
+        "plating": {
+          "mf": -0.2,
+          "hl": 0.0
+        }
+      }
+    },
+    "ramen": {
+      "name": "라멘",
+      "images": {
+        "success": "assets/images/dish/ramen_success.png",
+        "fail": "assets/images/dish/ramen_fail.png"
+      },
+      "targets": {
+        "ingredient": {
+          "wc": -0.4,
+          "mf": -0.3
+        },
+        "prep": {
+          "hs": 0.6
+        },
+        "cook": {
+          "wc": -0.8,
+          "hl": -0.6
+        },
+        "plating": {
+          "mf": -0.4,
+          "hl": -0.4
+        }
+      }
+    }
+  },
+  "result": {
+    "rule": "네 단계에서 확정된 타일 점수가 요리의 목표 점수와 가까우면 성공 이미지, 멀면 실패 이미지를 보여 준다",
+    "success_distance": 0.5,
+    "_note": "초안: 팀 확정 필요. 단계별 거리 평균이 이 값 이하면 성공",
+    "success_line": "…지직! 맛…! 지구… 맛!",
+    "fail_line": "…지직. 이상…? 다시…?"
+  },
+  "record": {
+    "style": "보이저 골든 레코드처럼 금색 원반 위에 선으로 새긴 기호",
+    "symbols": "네 단계에서 확정된 타일이 안쪽부터 바깥쪽 트랙에 기호로 새겨지고, 가운데에 완성한 요리가 표시된다",
+    "hover": "기호 위에 마우스를 올리면 그 단계 이름과 확정된 신호의 뜻을 보여 준다",
+    "_note": "단계 안에서 주고받은 모든 타일을 새길지, 확정 타일만 새길지 확정 필요"
+  },
   "sense_rules": {
-    "source": "Lucassen, Gevers, Gijsenij, Texture Affects Color Emotion (Color Research & Application, 2010)",
+    "source": "Lucassen, Gevers, Gijsenij (2011), Texture Affects Color Emotion, Color Research & Application 36(6), 426–436",
     "color": "온도·무게·남성적–여성적 인상을 결정한다",
     "texture": "단단함–부드러움의 감각 축을 결정한다",
-    "roles": "언어 모델은 의도를 고르고, 시각 알고리즘은 신호를 만든다"
+    "roles": "AI가 외계인의 추측 타일과 표정을 정하고, 논문 공식이 그 신호의 뜻과 확신을 계산한다",
+    "details": "data/knowledge/paper_rules.md"
   }
 }

@@ -9,6 +9,7 @@ __pycache__/
 .ruff_cache/
 .local/
 *.sqlite3
+.DS_Store
 
 # 분석용으로 내려받은 이전 기수 저장소와 내부 작업 메모
 reference-3/

@@ -20,8 +20,7 @@ Noizilian 팀 개발 환경
 - OPENAI_REASONING_EFFORT=none (기능 테스트하면서 필요할 때만 low로)
 
 [설치된 패키지] requirements.txt 기준
-- Flask, python-dotenv, gunicorn
-- openai: 아직 추가 전 (4단계 답변 생성 연결 때 추가 예정)
+- Flask, python-dotenv, gunicorn, openai
 
 [변경 기록]
 - 2026-10-29 처음 작성
