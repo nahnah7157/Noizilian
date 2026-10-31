@@ -42,13 +42,12 @@
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-10-31)
-- 완료: 학종이 작성기(감각 막대 4개 → 색·질감 타일), 논문 기준 정리, 요리 4단계 config, 확신 계산·요리 판정, 단계 진행 API(/api/start, state), 단계별 포즈·음식 결과 이미지 선택. 테스트 35개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직, 화면 연결(chatbot.js, chat.html, style.css). 테스트 35개
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
-  1. 화면 연결: chatbot.js가 시작할 때 /api/start 호출, state 보관, 외계인 타일을 alien.scores로 그리기(colorFor·textureFor 재사용), 4단계 진행 표시·확신 막대, 끝나면 음식 결과 표시 후 입력 막기
-  2. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
-  3. 검색: retriever.py가 현재 단계의 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김
-  4. 레코드 생성, 디자인 토큰(tokens.css), 배포
+  1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
+  2. 검색: retriever.py가 현재 단계의 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김
+  3. 레코드 생성, 디자인 토큰(tokens.css), 배포
 - 팀 확정 필요: config에서 "초안: 팀 확정 필요"가 붙은 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 요리 이름 화면 표시 여부, 표정 이미지, 레코드에 새길 타일 범위
 
 ## 디자인 규칙
