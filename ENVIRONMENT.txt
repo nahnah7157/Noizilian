@@ -15,12 +15,15 @@ Noizilian 팀 개발 환경
 - 테스트: python -m unittest discover -s tests -v
 
 [환경 변수 (.env, 커밋 금지)]
-- cp .env.example .env 후 OPENAI_API_KEY에 운영진이 준 키 입력
-- OPENAI_MODEL=gpt-6-luna
-- OPENAI_REASONING_EFFORT=none (기능 테스트하면서 필요할 때만 low로)
+- 프로젝트 맨 위에 .env 파일을 만들고 아래 세 줄을 적는다 (.env.example은 쓰지 않음)
+    OPENAI_API_KEY=운영진이 준 키
+    OPENAI_MODEL=gpt-6-luna
+    OPENAI_REASONING_EFFORT=none
+- 추론 강도는 none으로 시작하고, 기능 테스트하면서 필요할 때만 low로
 
 [설치된 패키지] requirements.txt 기준
 - Flask, python-dotenv, gunicorn, openai
 
 [변경 기록]
 - 2026-10-29 처음 작성
+- 2026-10-31 .env 만드는 방법 수정
