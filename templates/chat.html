@@ -13,6 +13,17 @@
       <a class="close-button" href="{{ url_for('index') }}" aria-label="대화 닫기">&times;</a>
     </header>
     <main class="chat-area" data-username="{{ username }}">
+      <header id="game-status" class="game-status">
+        <div id="dish-name" class="dish-name"></div>
+        <div id="stage-info" class="stage-info">
+          <div id="stage-steps" class="stage-steps"></div>
+          <p id="stage-hint" class="stage-hint"></p>
+        </div>
+        <div id="confidence-meter" class="confidence-meter">
+          <div class="confidence-bar"><div id="confidence-fill"></div></div>
+          <span class="confidence-text">외계인의 확신</span>
+        </div>
+      </header>
       <div id="chat-log" role="log" aria-live="polite" aria-label="대화 내용">
         <div class="message bot"><p>{{ bot.greeting }}</p></div>
       </div>
@@ -34,6 +45,13 @@
         <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
         <button id="send-btn" class="send-button" type="submit">신호 보내기</button>
       </form>
+      <div id="result-overlay" class="result-overlay" hidden>
+        <div class="result-content">
+          <img id="result-image" src="" alt="요리 결과">
+          <p id="result-line"></p>
+          <button id="restart-btn" class="start-button">다시 하기</button>
+        </div>
+      </div>
     </main>
   </body>
 </html>

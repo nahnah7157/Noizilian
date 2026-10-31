@@ -294,23 +294,49 @@ if (root) {
 }
 })();
 
-// ── 6. 채팅 ─────────────────────────────────────────────────
+// ── 6. 채팅 및 요리 진행 ─────────────────────────────────────
 const shell = document.querySelector(".chat-area");
 const form = document.getElementById("chat-form");
 const input = document.getElementById("user-message");
 const log = document.getElementById("chat-log");
 const sendButton = document.getElementById("send-btn");
 
-function addMessage(sender, text, image = null, imageClass = "") {
+const dishNameEl = document.getElementById("dish-name");
+const stageStepsEl = document.getElementById("stage-steps");
+const stageHintEl = document.getElementById("stage-hint");
+const confidenceFillEl = document.getElementById("confidence-fill");
+const resultOverlayEl = document.getElementById("result-overlay");
+const resultImageEl = document.getElementById("result-image");
+const resultLineEl = document.getElementById("result-line");
+const restartBtn = document.getElementById("restart-btn");
+
+let currentState = null;
+
+const STAGE_NAMES = ["재료 준비", "손질", "조리", "플레이팅"];
+
+function addMessage(sender, text, image = null, imageClass = "", alienScores = null) {
   const item = document.createElement("div");
   item.className = `message ${sender}`;
 
   if (image) {
     const img = document.createElement("img");
     img.src = image;
-    img.alt = imageClass ? "내가 보낸 학종이" : "챗봇이 보낸 이미지";
+    img.alt = imageClass ? "내가 보낸 학종이" : "외계인 표정/요리 이미지";
     if (imageClass) img.className = imageClass;
     item.append(img);
+  }
+
+  if (alienScores) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 100;
+    canvas.height = 100;
+    canvas.style.display = "block";
+    canvas.style.marginBottom = "8px";
+    canvas.style.borderRadius = "6px";
+    const texture = textureFor(alienScores.hs);
+    const color = colorFor({ wc: alienScores.wc, mf: alienScores.mf, hl: alienScores.hl }, texture);
+    renderTile(canvas, color, texture, 12345);
+    item.append(canvas);
   }
 
   const body = document.createElement("p");
@@ -322,9 +348,84 @@ function addMessage(sender, text, image = null, imageClass = "") {
   return item;
 }
 
+function updateGameState(data) {
+  if (data.state) {
+    currentState = data.state;
+  }
+
+  if (data.dish && dishNameEl) {
+    dishNameEl.textContent = `목표 요리: ${data.dish.name}`;
+  }
+
+  if (data.stage && stageStepsEl) {
+    const currentIndex = data.stage.index;
+    stageStepsEl.innerHTML = STAGE_NAMES.map((name, idx) => {
+      let cls = "stage-step";
+      if (idx === currentIndex) cls += " active";
+      else if (idx < currentIndex) cls += " done";
+      return `<span class="${cls}">${idx + 1}. ${name}</span>`;
+    }).join("");
+
+    if (stageHintEl) {
+      stageHintEl.textContent = data.stage.hint || "";
+    }
+
+    if (data.stage.advanced) {
+      addMessage("bot notice", `✨ 다음 단계(${data.stage.name})로 넘어갔습니다!`);
+    }
+  }
+
+  if (currentState && typeof currentState.confidence === "number" && confidenceFillEl) {
+    const pct = Math.round(currentState.confidence * 100);
+    confidenceFillEl.style.width = `${pct}%`;
+  }
+
+  if (currentState && currentState.done) {
+    if (data.result && resultOverlayEl) {
+      if (resultImageEl) resultImageEl.src = data.result.image;
+      if (resultLineEl) resultLineEl.textContent = data.result.line;
+      resultOverlayEl.hidden = false;
+    }
+    input.disabled = true;
+    sendButton.disabled = true;
+  }
+}
+
+async function startCooking() {
+  log.innerHTML = "";
+  if (resultOverlayEl) resultOverlayEl.hidden = true;
+  input.disabled = false;
+  sendButton.disabled = false;
+
+  const pending = addMessage("bot pending", "요리를 준비하는 중…");
+
+  try {
+    const response = await fetch("/api/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || "요리를 시작하지 못했습니다.");
+    }
+    pending.remove();
+    addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    updateGameState(data);
+  } catch (error) {
+    pending.remove();
+    addMessage("bot error", error.message || "오류가 발생했습니다.");
+    input.disabled = true;
+    sendButton.disabled = true;
+  }
+}
+
+restartBtn?.addEventListener("click", () => {
+  startCooking();
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  // 학종이 작성기(위 5번)가 있으면 현재 신호를 함께 보낸다.
   const signal = window.noizilian?.getSignal() ?? null;
   const message = input.value.trim() || signal?.description || "";
   if (!message || sendButton.disabled) return;
@@ -341,8 +442,8 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         message,
         username: shell.dataset.username || "사용자",
-        // 점수는 서버가 같은 논문 공식으로 다시 계산하므로 색·질감·seed만 보낸다.
         signal: signal ? { color: signal.color, texture: signal.texture, seed: signal.seed } : undefined,
+        state: currentState || undefined,
       }),
     });
     const data = await response.json();
@@ -353,12 +454,21 @@ form.addEventListener("submit", async (event) => {
       throw new Error("서버 응답 형식이 올바르지 않습니다.");
     }
     pending.remove();
-    addMessage("bot", data.reply, data.image);
+    addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    updateGameState(data);
   } catch (error) {
     pending.remove();
     addMessage("bot error", error.message || "오류가 발생했습니다.");
   } finally {
-    sendButton.disabled = false;
-    input.focus();
+    if (!currentState?.done) {
+      sendButton.disabled = false;
+      input.focus();
+    }
   }
 });
+
+// 페이지 시작 시 요리 시작 API 호출
+if (shell) {
+  startCooking();
+}
+
