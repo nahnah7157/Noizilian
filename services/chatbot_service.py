@@ -11,6 +11,7 @@
 """
 
 import math
+import random
 
 from .generator import DemoGenerator
 from .image_selector import DemoImageSelector
@@ -322,3 +323,104 @@ class ChatbotService:
             "image": image,
             "sources": list(dict.fromkeys(hit.title for hit in knowledge)),
         }
+
+    # ── 요리 단계 진행 ──────────────────────────────────────────
+    # 상태(state)는 브라우저가 들고 다니고, 서버는 매번 받은 상태로 다음 상태를 계산해 돌려준다.
+    #   dish          외계인이 만들려는 요리 id (config.dishes의 키)
+    #   stage_index   지금 단계 (0 재료 준비 · 1 손질 · 2 조리 · 3 플레이팅)
+    #   exchange_count 이 단계에서 주고받은 횟수
+    #   confidence    외계인의 확신 (0~1)
+    #   alien_scores  외계인의 현재 추측 타일 점수
+    #   finals        단계별로 확정된 사용자 타일 점수
+    #   done          요리가 끝났는지
+
+    @staticmethod
+    def dishes_of(character: dict) -> dict:
+        return {k: v for k, v in (character.get("dishes") or {}).items() if not k.startswith("_")}
+
+    @staticmethod
+    def _stage_view(stage: dict, index: int, total: int, advanced: bool = False, reason: str | None = None) -> dict:
+        return {"id": stage["id"], "name": stage["name"], "index": index, "total": total,
+                "hint": stage.get("user_hint", ""), "advanced": advanced, "reason": reason}
+
+    @staticmethod
+    def _alien_view(alien: dict) -> dict:
+        return {k: alien.get(k) for k in ("scores", "word", "expression", "reading")}
+
+    def start(self, character: dict, dish_id: str | None = None, rng=random) -> dict:
+        """대화를 시작한다: 요리를 정하고 첫 단계에서 외계인의 첫 추측 타일을 낸다."""
+        dishes = self.dishes_of(character)
+        if dish_id is None:
+            dish_id = rng.choice(sorted(dishes))  # config.dish_selection: start_random
+        dish = dishes[dish_id]
+        stages = character["stages"]
+        stage = stages[0]
+        alien = self.generator.first_guess(stage, dish, character)
+        state = {"dish": dish_id, "stage_index": 0, "exchange_count": 0, "confidence": 0.0,
+                 "alien_scores": alien["scores"], "finals": {}, "done": False}
+        return {
+            "reply": alien["reply"],
+            "image": self.image_selector.select(alien["reply"], character, stage=stage, expression=alien["expression"]),
+            "sources": [],
+            "alien": self._alien_view(alien),
+            "state": state,
+            "stage": self._stage_view(stage, 0, len(stages)),
+            "dish": {"id": dish_id, "name": dish["name"]},
+            "result": None,
+        }
+
+    def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict) -> dict:
+        """사용자 타일 한 장을 받아 확신을 갱신하고, 외계인의 다음 타일·표정을 돌려준다.
+
+        1. 외계인 추측과 사용자 타일을 비교해 확신 갱신 (2부 update_confidence: R3·R12·R13)
+        2. 확신이 기준을 넘거나 최대 횟수에 닿으면 사용자 타일을 그 단계의 확정 값으로 저장하고 다음 단계로
+        3. 마지막 단계가 끝나면 요리 판정 (2부 judge_dish)
+        """
+        stages = character["stages"]
+        exchange = character.get("exchange") or {}
+        dish = self.dishes_of(character)[state["dish"]]
+        index = state["stage_index"]
+        stage = stages[index]
+        knowledge = self.retriever.search(user_message)
+
+        update = update_confidence(state["confidence"], signal["scores"], state["alien_scores"],
+                                   stage, signal.get("color"), exchange)
+        count = state["exchange_count"] + 1
+        decision = should_advance(update["confidence"], count, exchange)
+        new_state = {**state, "finals": dict(state["finals"])}
+        result = None
+        advanced = False
+
+        if decision["advance"]:
+            advanced = True
+            new_state["finals"][stage["id"]] = signal["scores"]
+            if index + 1 >= len(stages):
+                result = judge_dish(new_state["finals"], dish, character.get("result"))
+                alien = self.generator.finish(result, dish, character)
+                new_state.update(exchange_count=count, confidence=update["confidence"], done=True)
+                current, current_index = stage, index
+            else:
+                current_index = index + 1
+                current = stages[current_index]
+                alien = self.generator.first_guess(current, dish, character, previous=stage, reason=decision["reason"])
+                new_state.update(stage_index=current_index, exchange_count=0, confidence=0.0,
+                                 alien_scores=alien["scores"])
+        else:
+            current, current_index = stage, index
+            alien = self.generator.respond_to_tile(stage, dish, character, signal, state["alien_scores"],
+                                                   update, knowledge, username, user_message)
+            new_state.update(exchange_count=count, confidence=update["confidence"], alien_scores=alien["scores"])
+
+        return {
+            "reply": alien["reply"],
+            "image": self.image_selector.select(alien["reply"], character, stage=current,
+                                                expression=alien["expression"], result=result),
+            "sources": list(dict.fromkeys(hit.title for hit in knowledge)),
+            "alien": self._alien_view(alien),
+            "state": new_state,
+            "stage": self._stage_view(current, current_index, len(stages), advanced, decision["reason"]),
+            "dish": {"id": state["dish"], "name": dish["name"]},
+            "result": result,
+            "update": update,  # 확신 계산 내역 (개발 확인용)
+        }
+

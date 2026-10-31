@@ -308,5 +308,92 @@ class DishTest(unittest.TestCase):
                 self.assertTrue((ROOT / "public" / path).exists(), path)
 
 
+# ═══════════════════════════════════════════════════════════════
+# 4. 요리 단계 진행 (/api/start, /api/chat + state)
+# ═══════════════════════════════════════════════════════════════
+
+TILE = {"color": {"L": 50, "C": 50, "h": 40}, "texture": {"oct": 6, "freq": 0.5, "pers": 0.6, "lac": 2.5}, "seed": 7}
+
+
+class CookingFlowTest(unittest.TestCase):
+    def setUp(self):
+        self.client = app.test_client()
+
+    def start(self, dish="ramen"):
+        response = self.client.post("/api/start", json={"dish": dish})
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()
+
+    def send(self, state, tile=TILE):
+        return self.client.post("/api/chat", json={"message": "신호", "username": "헤슬", "signal": tile, "state": state})
+
+    def test_start_returns_first_stage_and_alien_tile(self):
+        data = self.start()
+        self.assertEqual(data["state"]["stage_index"], 0)
+        self.assertEqual(data["stage"]["id"], "ingredient")
+        self.assertEqual(data["dish"], {"id": "ramen", "name": "라멘"})
+        self.assertEqual(set(data["alien"]["scores"]), set(AXES))
+        self.assertEqual(data["image"], "/" + STAGES["ingredient"]["pose_image"])
+
+    def test_start_random_dish(self):
+        self.assertIn(self.client.post("/api/start", json={}).get_json()["dish"]["id"], DISHES)
+
+    def test_one_exchange_updates_state(self):
+        data = self.send(self.start()["state"]).get_json()
+        self.assertEqual(data["state"]["exchange_count"], 1)
+        self.assertIn(data["alien"]["expression"], CONFIG["expressions"])
+        self.assertIsNone(data["result"])
+
+    def test_stage_advances_within_max_exchanges(self):
+        # 같은 타일만 보내도 최대 4번 안에는 다음 단계로 넘어간다 (exchange.max_exchanges)
+        state = self.start()["state"]
+        for _ in range(EXCHANGE["max_exchanges"]):
+            data = self.send(state).get_json()
+            state = data["state"]
+            if data["stage"]["advanced"]:
+                break
+        self.assertTrue(data["stage"]["advanced"])
+        self.assertEqual(state["stage_index"], 1)
+        self.assertIn("ingredient", state["finals"])
+        self.assertEqual(data["image"], "/" + STAGES["prep"]["pose_image"])  # 손질: 칼 든 외계인
+
+    def test_full_game_ends_with_dish_image(self):
+        state, data = self.start()["state"], None
+        for _ in range(len(STAGES) * EXCHANGE["max_exchanges"]):
+            data = self.send(state).get_json()
+            state = data["state"]
+            if state["done"]:
+                break
+        self.assertTrue(state["done"])
+        self.assertIn(data["result"]["image"], DISHES["ramen"]["images"].values())
+        self.assertEqual(data["image"], "/" + data["result"]["image"])
+        # 끝난 뒤에는 더 보낼 수 없다
+        self.assertEqual(self.send(state).get_json()["error"]["code"], "invalid_state")
+
+    def test_bad_state_is_rejected(self):
+        good = self.start()["state"]
+        for bad in ({**good, "dish": "kimchi"}, {**good, "stage_index": 9}, {**good, "confidence": 2},
+                    {**good, "alien_scores": {"wc": 0}}, "문자열"):
+            with self.subTest(bad=str(bad)[:40]):
+                self.assertEqual(self.send(bad).get_json()["error"]["code"], "invalid_state")
+        response = self.client.post("/api/chat", json={"message": "안녕", "state": good})
+        self.assertEqual(response.get_json()["error"]["code"], "invalid_state")  # 신호 없이 상태만
+
+    def test_following_the_recipe_succeeds(self):
+        # 요리 목표와 같은 타일을 계속 보내면 성공 이미지가 나온다
+        service, dish = ChatbotService(), DISHES["omurice"]
+        state = service.start(CONFIG, "omurice")["state"]
+        while not state["done"]:
+            stage_id = STAGES_ORDER[state["stage_index"]]
+            scores = {**{a: 0.0 for a in AXES}, **dish["targets"][stage_id]}
+            data = service.play_turn("", "헤슬", CONFIG, {"scores": scores, "color": TILE["color"]}, state)
+            state = data["state"]
+        self.assertTrue(data["result"]["success"])
+        self.assertEqual(data["image"], "/" + dish["images"]["success"])
+
+
+STAGES_ORDER = [s["id"] for s in CONFIG["stages"]]
+
+
 if __name__ == "__main__":
     unittest.main()

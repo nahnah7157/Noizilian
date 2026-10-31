@@ -64,8 +64,8 @@
     }
   },
   "exchange": {
-    "max_exchanges": null,
-    "_max_exchanges_note": "한 단계에서 타일을 주고받는 최대 횟수. 미정",
+    "max_exchanges": 4,
+    "_max_exchanges_note": "한 단계에서 타일을 주고받는 최대 횟수. 임시로 4번 (팀 확정 필요)",
     "confidence_threshold": 0.8,
     "_confidence_note": "초안: 팀 확정 필요. 외계인 확신이 이 값을 넘으면 다음 단계로 넘어간다",
     "learning_rate": 0.5,
