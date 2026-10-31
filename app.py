@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, url_for
 
 from services import ChatbotService
-from services.sense_model import parse_signal
+from services.chatbot_service import parse_signal
 
 
 BASE_DIR = Path(__file__).resolve().parent

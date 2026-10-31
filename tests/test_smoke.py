@@ -1,12 +1,32 @@
-"""화면·정적 파일·채팅 응답과 서비스 연결을 확인합니다."""
+"""화면·정적 파일·채팅 응답과 서비스 연결, 학종이 신호 해석, 요리 단계 규칙을 확인합니다.
 
+신호 해석과 단계 규칙의 근거는 data/knowledge/paper_rules.md(R1~R15)를 따릅니다.
+"""
+
+import json
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from app import app
-from services.chatbot_service import ChatbotService
+from services.chatbot_service import (
+    AXES,
+    DEFAULT_RELIABILITY,
+    ChatbotService,
+    color_clarity,
+    judge_dish,
+    parse_signal,
+    scores_of,
+    should_advance,
+    stage_distance,
+    update_confidence,
+)
 from services.retriever import KnowledgeHit
 
+
+# ═══════════════════════════════════════════════════════════════
+# 1. 베이스 스모크 테스트 (화면·API·서비스 연결)
+# ═══════════════════════════════════════════════════════════════
 
 class SmokeTest(unittest.TestCase):
     def setUp(self):
@@ -84,6 +104,208 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(generator.args, ("도서관은 어디?", "헤슬", character, [hit]))
         self.assertEqual(result["sources"], ["세계관 설정"])
         self.assertEqual(result["reply"], "도서관을 찾아보세요.")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2. 학종이 신호 해석 (색·질감 → 감각 점수)
+# ═══════════════════════════════════════════════════════════════
+
+SIGNAL = {
+    "color": {"L": 40, "C": 85, "h": 40},
+    "texture": {"oct": 12, "freq": 0.9, "pers": 0.8, "lac": 3.2},
+    "seed": 42,
+}
+
+
+class SenseModelTest(unittest.TestCase):
+    def test_scores_match_browser_library(self):
+        # 브라우저 library.js의 scoresOf()가 같은 입력에 낸 값 (소수 둘째 자리)
+        cases = (
+            ({"L": 40, "C": 85, "h": 40}, {"oct": 12, "freq": 0.9, "pers": 0.8, "lac": 3.2},
+             {"wc": -0.77, "mf": 0.22, "hs": -1.0, "hl": 0.0}),
+            ({"L": 60, "C": 35, "h": 230}, {"oct": 1, "freq": 0.4, "pers": 0.4, "lac": 1.8},
+             {"wc": 0.64, "mf": -0.02, "hs": 1.0, "hl": 0.32}),
+        )
+        for color, texture, expected in cases:
+            scores = scores_of(color, texture)
+            for axis, value in expected.items():
+                with self.subTest(color=color, axis=axis):
+                    self.assertAlmostEqual(scores[axis], value, delta=0.01)
+
+    def test_paper_directions(self):
+        smooth = {"oct": 1, "freq": 0.4, "pers": 0.4, "lac": 1.8}
+        rough = {"oct": 12, "freq": 0.9, "pers": 0.8, "lac": 3.2}
+        gray = {"L": 50, "C": 0, "h": 0}
+        # 단단함–부드러움은 질감만으로 정해진다: 거칠면 단단함(음수)
+        self.assertLess(scores_of(gray, rough)["hs"], scores_of(gray, smooth)["hs"])
+        # 어두울수록 무거움(음수)
+        self.assertLess(scores_of({"L": 10, "C": 0, "h": 0}, smooth)["hl"], scores_of({"L": 90, "C": 0, "h": 0}, smooth)["hl"])
+
+    def test_parse_signal_recomputes_scores(self):
+        parsed = parse_signal({**SIGNAL, "scores": {"wc": 1, "mf": 1, "hs": 1, "hl": 1}})
+        self.assertAlmostEqual(parsed["scores"]["hs"], -1.0, delta=0.01)  # 보낸 점수가 아니라 다시 계산한 값
+        self.assertIn("따뜻", parsed["description"])
+
+    def test_parse_signal_rejects_bad_values(self):
+        bad = (
+            "문자열",
+            {"color": SIGNAL["color"]},
+            {**SIGNAL, "color": {"L": 400, "C": 10, "h": 0}},
+            {**SIGNAL, "texture": {**SIGNAL["texture"], "oct": 50}},
+            {**SIGNAL, "seed": "x"},
+        )
+        for data in bad:
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                parse_signal(data)
+
+
+class SignalApiTest(unittest.TestCase):
+    def setUp(self):
+        self.client = app.test_client()
+
+    def test_chat_with_signal(self):
+        response = self.client.post("/api/chat", json={"message": "안녕", "username": "헤슬", "signal": SIGNAL})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("신호를 받았어요", response.get_json()["reply"])
+
+    def test_chat_rejects_bad_signal(self):
+        response = self.client.post("/api/chat", json={"message": "안녕", "signal": {"color": {}}})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"]["code"], "invalid_signal")
+
+    def test_chat_page_includes_composer(self):
+        page = self.client.get("/chat").get_data(as_text=True)
+        self.assertIn('id="signal-composer"', page)
+        response = self.client.get("/assets/js/chatbot.js")
+        self.assertEqual(response.status_code, 200)
+        response.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3. 요리 단계 규칙 (확신 갱신 · 다음 단계 판정 · 요리 성공 판정)
+# ═══════════════════════════════════════════════════════════════
+
+ROOT = Path(__file__).resolve().parent.parent
+CONFIG = json.loads((ROOT / "config" / "chatbot_config.json").read_text(encoding="utf-8"))
+STAGES = {s["id"]: s for s in CONFIG["stages"]}
+EXCHANGE = CONFIG["exchange"]
+DISHES = {k: v for k, v in CONFIG["dishes"].items() if not k.startswith("_")}
+
+ROUGH = {"oct": 12, "freq": 0.9, "pers": 0.8, "lac": 3.2}
+SMOOTH = {"oct": 1, "freq": 0.4, "pers": 0.4, "lac": 1.8}
+CLEAR = {"L": 50, "C": 50, "h": 40}      # L*+C* = 100 (R12에서 가장 일관된 색)
+DARK = {"L": 10, "C": 0, "h": 0}         # L*+C* = 10
+VIVID = {"L": 70, "C": 110, "h": 324}    # L*+C* = 180
+
+
+def flat(value):
+    return {a: value for a in AXES}
+
+
+class ConfigTest(unittest.TestCase):
+    def test_four_stages_in_order(self):
+        self.assertEqual([s["id"] for s in CONFIG["stages"]], ["ingredient", "prep", "cook", "plating"])
+
+    def test_stage_axes_follow_paper(self):
+        # R3: 손질(식감)은 질감만으로 정해지는 단단함–부드러움 축만 본다
+        self.assertEqual(STAGES["prep"]["axes"], ["hs"])
+        for stage in CONFIG["stages"]:
+            self.assertTrue(set(stage["axes"]) <= set(AXES), stage["id"])
+
+    def test_dish_targets_use_stage_axes(self):
+        for name, dish in DISHES.items():
+            self.assertEqual(set(dish["targets"]), set(STAGES), name)
+            for stage_id, target in dish["targets"].items():
+                self.assertTrue(set(target) <= set(STAGES[stage_id]["axes"]), f"{name}/{stage_id}")
+                self.assertTrue(all(-1 <= v <= 1 for v in target.values()), f"{name}/{stage_id}")
+
+    def test_reliability_matches_paper_table1(self):
+        # R13: Table I 색 질감 행 평균
+        self.assertEqual(DEFAULT_RELIABILITY, {"wc": 0.74, "mf": 0.60, "hs": 0.64, "hl": 0.64})
+        weights = {k: v for k, v in EXCHANGE["axis_reliability"].items() if not k.startswith("_")}
+        self.assertEqual(weights, DEFAULT_RELIABILITY)
+
+
+class DistanceTest(unittest.TestCase):
+    def test_prep_ignores_color(self):
+        # R3: 같은 질감이면 색이 완전히 달라도 손질 단계의 거리는 0
+        red, blue = scores_of({"L": 50, "C": 70, "h": 40}, ROUGH), scores_of({"L": 80, "C": 30, "h": 220}, ROUGH)
+        self.assertAlmostEqual(stage_distance(red, blue, STAGES["prep"]["axes"]), 0.0)
+        self.assertGreater(stage_distance(red, blue, STAGES["ingredient"]["axes"]), 0.3)
+
+    def test_prep_sees_texture(self):
+        rough, smooth = scores_of(CLEAR, ROUGH), scores_of(CLEAR, SMOOTH)
+        self.assertGreater(stage_distance(rough, smooth, STAGES["prep"]["axes"]), 1.5)
+
+
+class ConfidenceTest(unittest.TestCase):
+    def test_close_tiles_raise_far_tiles_lower(self):
+        up = update_confidence(0.5, flat(0.4), flat(0.4), STAGES["cook"], CLEAR, EXCHANGE)
+        down = update_confidence(0.5, flat(0.9), flat(-0.9), STAGES["cook"], CLEAR, EXCHANGE)
+        self.assertGreater(up["confidence"], 0.5)
+        self.assertLess(down["confidence"], 0.5)
+
+    def test_confidence_stays_between_0_and_1(self):
+        self.assertEqual(update_confidence(0.95, flat(0), flat(0), STAGES["cook"], CLEAR, EXCHANGE)["confidence"], 1.0)
+        self.assertEqual(update_confidence(0.05, flat(1), flat(-1), STAGES["cook"], CLEAR, EXCHANGE)["confidence"], 0.0)
+
+    def test_dark_or_vivid_color_counts_less(self):
+        # R12: L*+C*가 100에서 멀수록 해석이 갈리므로 같은 일치라도 확신이 덜 오른다
+        clear = update_confidence(0, flat(0.2), flat(0.2), STAGES["ingredient"], CLEAR, EXCHANGE)["step"]
+        dark = update_confidence(0, flat(0.2), flat(0.2), STAGES["ingredient"], DARK, EXCHANGE)["step"]
+        vivid = update_confidence(0, flat(0.2), flat(0.2), STAGES["ingredient"], VIVID, EXCHANGE)["step"]
+        self.assertGreater(clear, dark)
+        self.assertGreater(clear, vivid)
+        self.assertAlmostEqual(color_clarity(CLEAR), 1.0)
+        self.assertAlmostEqual(color_clarity({"L": 10, "C": 0, "h": 0}), 0.5)  # 양 끝에서 표준편차 2배 [가정]
+
+    def test_prep_confidence_does_not_depend_on_color(self):
+        # R3 + R12: 손질 단계는 단단함–부드러움만 보므로 색의 불확실성이 끼어들지 않는다
+        a = update_confidence(0, flat(0.3), flat(0.3), STAGES["prep"], CLEAR, EXCHANGE)["step"]
+        b = update_confidence(0, flat(0.3), flat(0.3), STAGES["prep"], DARK, EXCHANGE)["step"]
+        self.assertEqual(a, b)
+
+    def test_more_consistent_axis_counts_more(self):
+        # R13: 따뜻함–차가움(0.74)은 남성적–여성적(0.60)보다 일관되므로 같은 일치에 확신이 더 오른다
+        wc = update_confidence(0, flat(0), flat(0), {"id": "t", "axes": ["wc"]}, CLEAR, EXCHANGE)["step"]
+        mf = update_confidence(0, flat(0), flat(0), {"id": "t", "axes": ["mf"]}, CLEAR, EXCHANGE)["step"]
+        self.assertGreater(wc, mf)
+
+    def test_several_agreements_reach_threshold(self):
+        conf, count = 0.0, 0
+        while not should_advance(conf, count, EXCHANGE)["advance"]:
+            conf = update_confidence(conf, flat(0.1), flat(0.1), STAGES["ingredient"], CLEAR, EXCHANGE)["confidence"]
+            count += 1
+            self.assertLess(count, 10)
+        self.assertGreaterEqual(count, 2)  # 한 번 맞았다고 바로 넘어가지 않는다
+
+
+class AdvanceTest(unittest.TestCase):
+    def test_advance_rules(self):
+        self.assertEqual(should_advance(0.85, 1, {"confidence_threshold": 0.8})["reason"], "confident")
+        self.assertFalse(should_advance(0.3, 99, {"confidence_threshold": 0.8, "max_exchanges": None})["advance"])
+        self.assertEqual(should_advance(0.3, 4, {"confidence_threshold": 0.8, "max_exchanges": 4})["reason"], "max_reached")
+
+
+class DishTest(unittest.TestCase):
+    def test_exact_targets_succeed(self):
+        for name, dish in DISHES.items():
+            final = {s: {**flat(0), **t} for s, t in dish["targets"].items()}
+            result = judge_dish(final, dish, CONFIG["result"])
+            self.assertTrue(result["success"], name)
+            self.assertEqual(result["image"], dish["images"]["success"])
+
+    def test_opposite_targets_fail(self):
+        dish = DISHES["ramen"]
+        final = {s: {**flat(0), **{a: -v if v else 1 for a, v in t.items()}} for s, t in dish["targets"].items()}
+        result = judge_dish(final, dish, CONFIG["result"])
+        self.assertFalse(result["success"])
+        self.assertEqual(result["image"], dish["images"]["fail"])
+
+    def test_dish_images_exist(self):
+        for dish in DISHES.values():
+            for path in dish["images"].values():
+                self.assertTrue((ROOT / "public" / path).exists(), path)
 
 
 if __name__ == "__main__":

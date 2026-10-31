@@ -68,6 +68,9 @@
     "_max_exchanges_note": "한 단계에서 타일을 주고받는 최대 횟수. 미정",
     "confidence_threshold": 0.8,
     "_confidence_note": "초안: 팀 확정 필요. 외계인 확신이 이 값을 넘으면 다음 단계로 넘어간다",
+    "learning_rate": 0.5,
+    "match_tolerance": 0.6,
+    "_rate_note": "초안: 팀 확정 필요. learning_rate는 한 번에 확신이 오르는 최대 폭, match_tolerance는 이 차이 안이면 '맞다'에 가깝게 읽는 축별 점수 차이(-1~+1 기준)",
     "axis_reliability": {
       "_note": "확신 증가폭 가중치. 논문 Table I 색 질감(CT) 행의 반복 일관성 평균값 (R13)",
       "wc": 0.74,

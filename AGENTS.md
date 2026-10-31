@@ -14,7 +14,7 @@
 - Python 3.12 (Conda 환경). 실행 방법과 팀 환경은 ENVIRONMENT.txt
 
 ## 코드 구조에서 지킬 것
-- 감각 공식은 두 곳에 있음: public/assets/js/noizilian/senseModel.js·library.js(브라우저)와 services/sense_model.py(서버). 한쪽을 고치면 다른 쪽도 같이 고치고 tests/test_signal.py를 실행
+- 감각 공식은 두 곳에 있음: public/assets/js/chatbot.js(브라우저)와 services/chatbot_service.py(서버). 한쪽을 고치면 다른 쪽도 같이 고치고 tests/test_smoke.py를 실행
 - 서버는 브라우저가 보낸 점수를 믿지 않고 색·질감 값으로 다시 계산함
 - 화면 ↔ 서버 계약은 POST /api/chat의 {message, username, signal} → {reply, image, sources}. 바꾸면 app.py, chatbot.js, 테스트를 같이 고침
 
