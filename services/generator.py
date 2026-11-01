@@ -179,9 +179,12 @@ class DemoGenerator:
         axis = max(AXES, key=lambda a: abs(scores[a]))
         name, cause, rules = AXIS_RULES[axis]
         side = name.split("–")[0 if scores[axis] < 0 else 1]
-        return {"line": "", "basis": (f"{entry['stage']} 단계에서 {who}이 보낸 {describe(scores)}. "
-                                      f"가장 뚜렷한 축은 {name}이고 {side} 쪽입니다({cause}, {rules}). "
-                                      "[공식 계산] 논문 10명의 평균 경향 기준이며 정답은 아닙니다(R15).")}
+        desc = describe(scores)
+        if "뚜렷한 쪽이 없는" in desc:
+            main = f"{entry['stage']} 단계에서 {who}이 보낸 신호는 뚜렷한 쪽이 없지만, 가장 뚜렷한 축은 {name}이고 {side} 쪽입니다({cause}, {rules}). "
+        else:
+            main = f"{entry['stage']} 단계에서 {who}이 보낸 {desc}에서 가장 뚜렷한 축은 {name}이고 {side} 쪽입니다({cause}, {rules}). "
+        return {"line": "", "basis": main + "[공식 계산] 논문 10명의 평균 경향 기준이며 정답은 아닙니다(R15)."}
 
     @staticmethod
     def _interpret_with_openai(entries: list[dict], dish: dict) -> list[dict]:

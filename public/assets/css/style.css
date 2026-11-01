@@ -20,7 +20,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .landing-title { margin: 0; padding: 30px 20px 0; font-size: 2rem; text-align: center; }
 .landing-title .glass { display: inline-block; padding: 8px 28px; border-radius: 999px; }
 /* 배경 그림 위 글씨가 읽히도록: 반투명 흰 판 + 뒤 배경 흐림 */
-.glass, #chat-log, .game-status, .signal-composer, .chat-input-area {
+.glass {
   border-radius: 12px;
   background: rgb(255 255 255 / 82%);
   backdrop-filter: blur(6px);
@@ -131,18 +131,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   padding: 14px 48px;
 }
 .chat-area {
-  width: min(900px, 100%);
+  position: relative;
+  width: 100%;
   min-height: 0;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  margin: 0 auto;
-  padding: 20px;
+  margin: 0;
+  padding: 0;
 }
+.layout-row { position: absolute; inset: 0; }
 #chat-log {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   margin-bottom: 15px;
   padding: 20px;
 }
@@ -160,7 +161,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .message.notice { margin: 10px auto; background: #fef9c3; border: 1px solid #fde68a; color: #854d0e; font-size: 0.9rem; text-align: center; max-width: 100%; }
 .message.error { background: #fff0ee; color: #8a3028; }
 .message.pending { color: #666; }
-.message img { display: block; max-width: 100%; max-height: 300px; margin-bottom: 8px; border-radius: 8px; }
+.message img { display: block; max-width: 100%; max-height: 500px; margin-bottom: 8px; border-radius: 8px; }
 .chat-input-area { flex: none; display: flex; gap: 10px; align-items: center; padding: 10px; }
 .chat-input-area input {
   min-width: 0;
@@ -337,8 +338,137 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .sense-legend { margin: 2px 0 0; color: #777; font-size: .75rem; line-height: 1.4; }
 .message.user img.signal-image { width: 72px; height: 72px; margin: 0 0 6px auto; border-radius: 4px; }
 
-@media (max-width: 600px) {
-  .signal-composer { grid-template-columns: minmax(0, 1fr); }
-  .signal-tile { flex-direction: row; justify-content: center; }
-  .signal-tile canvas { width: 88px; height: 88px; }
+/* 와이어프레임 레이아웃: 부엌 배경 위 좌우 패널 + 가운데 외계인 */
+.title {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 2;
+  padding: 8px 20px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 85%);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #4a3b6b;
 }
+.signal-left, .signal-right {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgb(206 208 214 / 92%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+.signal-left { left: 24px; width: 230px; }
+.signal-right { right: 24px; width: 236px; }
+
+.signal-center {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 270px;
+  right: 276px;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+.alien-expression { max-width: 100%; max-height: 78vh; object-fit: contain; }
+
+/* 왼쪽: 타일 기록 (윗줄 외계인, 아랫줄 나) */
+#tile-record {
+  display: grid;
+  grid-template-columns: auto repeat(4, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 70%);
+}
+.record-row-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+.record-row-icon.user { background: #fff; border: 1px solid #bbb; }
+#tile-record canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: #e8e8ee;
+}
+.record-cell.current { outline: 2px solid #e06b6b; outline-offset: 1px; }
+
+/* 왼쪽: 큰 미리보기 */
+.signal-tile { display: block; }
+#preview-tile {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* 왼쪽: 되돌리기(파랑)·보내기(초록) 아이콘 버튼 */
+.signal-buttons { display: flex; gap: 10px; }
+.signal-buttons button {
+  flex: 1;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.button-undo { background: #7b8cde; }
+.button-undo:hover { background: #6879d0; }
+.button-send { background: #5bbf7a; }
+.button-send:hover { background: #4aae69; }
+.signal-buttons button:disabled { opacity: .5; cursor: wait; }
+
+/* 오른쪽: HSV 색 선택 (가로 채도 · 세로 명도 + 무지개 색상 막대) */
+#color-picker { display: flex; flex-direction: column; gap: 8px; }
+#color-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.25;
+  border-radius: 6px;
+  cursor: crosshair;
+}
+.hue-slider {
+  width: 100%;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #333;
+  border-radius: 8px;
+  background: linear-gradient(to right,
+    hsl(0, 100%, 50%),
+    hsl(60, 100%, 50%),
+    hsl(120, 100%, 50%),
+    hsl(180, 100%, 50%),
+    hsl(240, 100%, 50%),
+    hsl(300, 100%, 50%),
+    hsl(360, 100%, 50%));
+}
+
+/* 오른쪽: 크기·밀도 막대 (아이콘만, 글자 없음) */
+.sense-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 22px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 70%);
+}
+.sense-bar input { width: 100%; accent-color: #764ba2; }
+.sense-icon { justify-self: center; border-radius: 50%; background: #555; }
+.sense-icon.freq-min, .sense-icon.density-min { width: 7px; height: 7px; }
+.sense-icon.freq-max, .sense-icon.density-max { width: 15px; height: 15px; }

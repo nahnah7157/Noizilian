@@ -41,14 +41,19 @@
   - alien = {scores, word, expression, reading}, state = {dish, stage_index, exchange_count, confidence, alien_scores, finals, done}
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-10-31)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직, 화면 연결(chatbot.js, chat.html, style.css). 테스트 35개
+## 현재 진행 상황 (2026-11-01)
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 38개
+- 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
+  - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
+  - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
+  - 왼쪽: 기록 2줄(윗줄 외계인+머리 아이콘·4단계 / 아랫줄 나+흰 원·4단계), 현재 단계 칸 하이라이트·교환마다 갱신(단계 끝나면 마지막 타일 고정). 큰 미리보기. 되돌리기(↺ 파랑)·보내기(✓ 초록) 아이콘 버튼. "패턴 바꾸기" 제거
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
   1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
   2. 검색: retriever.py가 현재 단계의 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김
-  3. 레코드 생성, 디자인 토큰(tokens.css), 배포
-- 팀 확정 필요: config에서 "초안: 팀 확정 필요"가 붙은 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 요리 이름 화면 표시 여부, 표정 이미지, 레코드에 새길 타일 범위
+  3. 결과 화면 레코드 재작업, 디자인 토큰(tokens.css), 배포
+- 이번에 안 건드린 것: 결과 화면(음식+레코드)은 안 깨지게만 두고 그대로. 레코드는 다음에 교체
+- 팀 확정 필요: 부엌 전용 배경 이미지(지금은 background_basic.png 유지), config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 이미지, 레코드에 새길 타일 범위
 
 ## 디자인 규칙
 - 색, 간격, 폰트는 public/assets/css/tokens.css의 변수만 사용. 새 색상 하드코딩 금지 (tokens.css는 레퍼런스 확정 후 작성 예정)

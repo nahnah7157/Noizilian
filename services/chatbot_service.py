@@ -272,6 +272,8 @@ def judge_dish(final_scores: dict, dish: dict, result: dict | None = None) -> di
     final_scores: {"ingredient": {...점수}, "prep": {...}, ...}. 단계마다 확정된 사용자 타일 점수.
     목표에 적힌 축만 비교하고, 단계별 거리의 평균이 success_distance 이하면 성공이다 [앱 설정].
     """
+    from .image_selector import _url
+
     result = result or {}
     limit = result.get("success_distance", DEFAULT_SUCCESS_DISTANCE)
     per_stage = {}
@@ -285,7 +287,7 @@ def judge_dish(final_scores: dict, dish: dict, result: dict | None = None) -> di
         "success": success,
         "distance": round(distance, 4),
         "per_stage": per_stage,
-        "image": dish["images"]["success" if success else "fail"],
+        "image": _url(dish["images"]["success" if success else "fail"]),
         "line": result.get("success_line" if success else "fail_line", ""),
     }
 
