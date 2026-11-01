@@ -8,48 +8,26 @@
     <script src="{{ asset_url('assets/js/chatbot.js') }}" defer></script>
   </head>
   <body class="chat-page">
-    <header class="chat-header">
-      <a class="close-button" href="{{ url_for('index') }}" aria-label="대화 닫기">&times;</a>
-    </header>
     <main class="chat-area" data-username="{{ username }}">
-      <header id="game-status" class="game-status">
-        <div id="dish-name" class="dish-name"></div>
-        <div id="stage-info" class="stage-info">
-          <div id="stage-steps" class="stage-steps"></div>
-          <p id="stage-hint" class="stage-hint"></p>
-        </div>
-        <div id="confidence-meter" class="confidence-meter">
-          <div class="confidence-bar"><div id="confidence-fill"></div></div>
-          <span class="confidence-text">외계인의 확신</span>
-        </div>
-      </header>
+      <div id="title" class="title">Noizilian</div>
       <section class="layout-row">
-        <section id="signal-left" class="signal-left" aria-label="학종이 작성기 왼쪽">
-          <div class="signal-tile">
-            <canvas width="120" height="120" aria-label="보낼 학종이 미리보기"></canvas>
-            <button type="button" class="reseed-button" data-reseed>패턴 바꾸기</button>
-          </div>
+        <section id="signal-left" class="signal-left" aria-label="타일 작성기">
           <div id="tile-record" class="tile-record"></div>
+          <div class="signal-tile">
+            <canvas id="preview-tile" width="200" height="200" aria-label="지금 고르는 타일"></canvas>
+          </div>
           <div class="signal-buttons">
-            <button type="button" id="undo-btn" class="button-undo">↶ 되돌리기</button>
-            <button type="submit" id="send-btn" form="chat-form">신호 보내기</button>
+            <button type="button" id="undo-btn" class="button-undo" aria-label="되돌리기">↺</button>
+            <button type="button" id="send-btn" class="button-send" aria-label="보내기">✓</button>
           </div>
         </section>
-        <section id="signal-center" class="signal-center" aria-label="대화 창">
-          <div id="alien-stage" class="alien-stage">
-            <img id="alien-expression" class="alien-expression" alt="외계인" hidden>
-            <canvas id="alien-tile" class="alien-tile" width="160" height="160" aria-label="외계인이 내민 타일"></canvas>
-            <p id="chat-status" class="chat-status" role="status" aria-live="polite">{{ bot.greeting }}</p>
-          </div>
-          <form id="chat-form" class="chat-input-area">
-            <label class="visually-hidden" for="user-message">메시지</label>
-            <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
-          </form>
+        <section id="signal-center" class="signal-center" aria-label="외계인">
+          <img id="alien-expression" class="alien-expression" alt="외계인" src="{{ asset_url('assets/images/alien/alien_cute_a.png') }}">
         </section>
-        <section id="signal-right" class="signal-right" aria-label="색상 선택">
+        <section id="signal-right" class="signal-right" aria-label="색 선택">
           <div id="color-picker" class="color-picker">
-            <canvas id="color-canvas" width="200" height="200" aria-label="색상 선택기"></canvas>
-            <input id="hue-slider" type="range" min="0" max="360" value="0" class="hue-slider" aria-label="색상각">
+            <canvas id="color-canvas" width="220" height="176" aria-label="채도·명도 선택"></canvas>
+            <input id="hue-slider" type="range" min="0" max="360" value="0" class="hue-slider" aria-label="색상">
           </div>
           <div class="sense-row" data-axis="freq"></div>
           <div class="sense-row" data-axis="density"></div>
