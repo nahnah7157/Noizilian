@@ -293,14 +293,14 @@ class DishTest(unittest.TestCase):
             final = {s: {**flat(0), **t} for s, t in dish["targets"].items()}
             result = judge_dish(final, dish, CONFIG["result"])
             self.assertTrue(result["success"], name)
-            self.assertEqual(result["image"], dish["images"]["success"])
+            self.assertEqual(result["image"], "/" + dish["images"]["success"])
 
     def test_opposite_targets_fail(self):
         dish = DISHES["ramen"]
         final = {s: {**flat(0), **{a: -v if v else 1 for a, v in t.items()}} for s, t in dish["targets"].items()}
         result = judge_dish(final, dish, CONFIG["result"])
         self.assertFalse(result["success"])
-        self.assertEqual(result["image"], dish["images"]["fail"])
+        self.assertEqual(result["image"], "/" + dish["images"]["fail"])
 
     def test_dish_images_exist(self):
         for dish in DISHES.values():
@@ -358,6 +358,7 @@ class CookingFlowTest(unittest.TestCase):
         self.assertEqual(data["image"], "/" + STAGES["prep"]["pose_image"])  # 손질: 칼 든 외계인
 
     def test_full_game_ends_with_dish_image(self):
+        from services.image_selector import _url
         state, data = self.start()["state"], None
         for _ in range(len(STAGES) * EXCHANGE["max_exchanges"]):
             data = self.send(state).get_json()
@@ -365,8 +366,8 @@ class CookingFlowTest(unittest.TestCase):
             if state["done"]:
                 break
         self.assertTrue(state["done"])
-        self.assertIn(data["result"]["image"], DISHES["ramen"]["images"].values())
-        self.assertEqual(data["image"], "/" + data["result"]["image"])
+        self.assertIn(data["result"]["image"], [_url(p) for p in DISHES["ramen"]["images"].values()])
+        self.assertEqual(data["image"], _url(DISHES["ramen"]["images"]["fail"] if not data["result"]["success"] else DISHES["ramen"]["images"]["success"]))
         # 끝난 뒤에는 더 보낼 수 없다
         self.assertEqual(self.send(state).get_json()["error"]["code"], "invalid_state")
 
