@@ -6,7 +6,7 @@
 
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
-body { margin: 0; }
+body { margin: 0; background: #f7f7f7 url("../images/background_basic.png") center / cover no-repeat fixed; }
 button, input { font: inherit; }
 a { color: inherit; }
 
@@ -15,31 +15,25 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   outline-offset: 3px;
 }
 
-/* 첫 화면: 기존의 가운데 카드와 로고 구성 */
-.landing-page {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 20px;
+/* 첫 화면: 배경 바닥에 선 외계인, 우하단 시작 버튼 */
+.landing-page { min-height: 100dvh; }
+.landing-title { margin: 0; padding: 30px 20px 0; font-size: 2rem; text-align: center; }
+.landing-title .glass { display: inline-block; padding: 8px 28px; border-radius: 999px; }
+/* 배경 그림 위 글씨가 읽히도록: 반투명 흰 판 + 뒤 배경 흐림 */
+.glass, #chat-log, .game-status, .signal-composer, .chat-input-area {
+  border-radius: 12px;
+  background: rgb(255 255 255 / 82%);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 15%);
 }
-.landing-card {
-  width: min(600px, 100%);
-  overflow: hidden;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgb(0 0 0 / 18%);
-  text-align: center;
-}
-.landing-header { padding: 30px 30px 10px; }
-.landing-header h1 { margin: 0; font-size: 2rem; }
-.landing-content { padding: 18px 40px 42px; display: flex; flex-direction: column; align-items: center; }
 .brand-image {
-  width: 200px;
-  height: 200px;
-  object-fit: contain;
-  border-radius: 50%;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 10%);
+  position: fixed;
+  left: 50%;
+  bottom: 2vh; /* PNG 아래 투명 여백(약 8%)만큼 발이 바닥 타일 위로 올라옴 */
+  height: min(55vh, 520px);
+  transform: translateX(-50%);
 }
+.landing-page .start-button { position: fixed; right: 24px; bottom: 24px; margin: 0; }
 .start-button {
   display: inline-block;
   margin-top: 24px;
@@ -135,10 +129,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: grid;
   place-items: center;
   padding: 14px 48px;
-  background: #fff;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 }
-.chat-header h1 { margin: 0; font-size: 1.5rem; }
 .chat-area {
   width: min(900px, 100%);
   min-height: 0;
@@ -154,10 +145,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   overflow-y: auto;
   margin-bottom: 15px;
   padding: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 5%);
 }
 .message {
   max-width: 80%;
@@ -174,7 +161,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .message.error { background: #fff0ee; color: #8a3028; }
 .message.pending { color: #666; }
 .message img { display: block; max-width: 100%; max-height: 300px; margin-bottom: 8px; border-radius: 8px; }
-.chat-input-area { flex: none; display: flex; gap: 10px; align-items: center; }
+.chat-input-area { flex: none; display: flex; gap: 10px; align-items: center; padding: 10px; }
 .chat-input-area input {
   min-width: 0;
   flex: 1;
@@ -209,9 +196,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   flex: none;
   margin-bottom: 15px;
   padding: 16px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 5%);
 }
 .dish-name {
   margin-bottom: 12px;
@@ -264,11 +248,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   place-items: center;
   background: rgb(0 0 0 / 70%);
   padding: 20px;
+  overflow-y: auto;
   backdrop-filter: blur(4px);
 }
 .result-overlay[hidden] { display: none; }
 .result-content {
-  width: min(400px, 100%);
+  width: min(960px, 100%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  align-items: center;
   padding: 30px;
   border-radius: 20px;
   background: #fff;
@@ -283,12 +272,33 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   object-fit: contain;
 }
 #result-line { margin: 0 0 24px; font-size: 1.1rem; font-weight: 600; line-height: 1.5; }
+.result-dish { flex: 1 1 260px; }
+.record { flex: 1.4 1 320px; margin: 0; }
+.record-disc { position: relative; aspect-ratio: 1; }
+.record-disc img, .record-disc canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.record-tip {
+  position: absolute;
+  z-index: 1;
+  width: min(280px, 80%);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+  font-size: .85rem;
+  line-height: 1.5;
+  text-align: left;
+  pointer-events: none;
+}
+.record-tip strong { display: block; margin-bottom: 4px; color: #764ba2; }
+.record-tip q { display: block; margin-bottom: 6px; font-size: .95rem; font-weight: 600; }
+.record-tip [hidden] { display: none; }
+.record-tip small { display: block; color: #666; }
+.record figcaption { margin-top: 10px; color: #777; font-size: .8rem; }
+.record figcaption button { margin-left: 6px; }
 
 @media (max-width: 600px) {
-  .landing-header h1 { font-size: 1.6rem; }
-  .landing-content { padding: 18px 24px 32px; }
+  .landing-title { font-size: 1.6rem; }
   .modal-content { padding: 18px 22px 24px; }
-  .chat-header h1 { font-size: 1.2rem; }
   .chat-area { padding: 12px; }
   #chat-log { padding: 14px; }
   .message { max-width: 90%; }
@@ -304,13 +314,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   align-items: center;
   margin-bottom: 12px;
   padding: 14px 16px;
-  border: 1px solid #e0e0e0;
-  border-radius: 12px;
-  background: #fff;
 }
 .signal-tile { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .signal-tile canvas { width: 120px; height: 120px; border-radius: 4px; background: #eee; }
-.reseed-button { padding: 4px 10px; border: 1px solid #ddd; border-radius: 15px; background: #fff; font-size: .8rem; cursor: pointer; }
+.reseed-button { padding: 4px 10px; border: 1px solid #555; border-radius: 15px; background: none; font-size: .8rem; cursor: pointer; }
 .signal-sliders { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .sense-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 8px; align-items: center; font-size: .85rem; }
 .sense-word.right { text-align: right; }

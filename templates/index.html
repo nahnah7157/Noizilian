@@ -7,14 +7,10 @@
     <link rel="stylesheet" href="{{ asset_url('assets/css/style.css') }}">
   </head>
   <body class="landing-page">
-    <main class="landing-card">
-      <header class="landing-header">
-        <h1>캐릭터 챗봇</h1>
-      </header>
-      <div class="landing-content">
-        <img class="brand-image" src="{{ asset_url('assets/images/hateslop-logo.png') }}" alt="hateSlop 로고">
-        <a class="start-button" href="{{ url_for('detail') }}">시작하기</a>
-      </div>
+    <main>
+      <h1 class="landing-title"><span class="glass">{{ bot.name }}</span></h1>
+      <img class="brand-image" src="{{ asset_url('assets/images/alien/alien_cute_a.png') }}" alt="요리사 모자를 쓴 외계인">
+      <a class="start-button" href="{{ url_for('detail') }}">시작하기</a>
     </main>
   </body>
 </html>
