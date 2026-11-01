@@ -97,6 +97,40 @@ def parse_state(data, config: dict) -> dict:
     }
 
 
+MAX_RECORD_ENTRIES = 60  # 4단계 × 최대 주고받기 × 2명보다 넉넉하게
+
+
+def parse_record(data, config: dict) -> tuple[str, list[dict]]:
+    """레코드 해석 요청을 검증한다. 지구인 타일 점수는 색·질감으로 다시 계산한다. 형식이 틀리면 ValueError."""
+    if not isinstance(data, dict) or data.get("dish") not in chatbot.dishes_of(config):
+        raise ValueError("알 수 없는 요리입니다.")
+    entries = data.get("entries")
+    if not isinstance(entries, list) or not 1 <= len(entries) <= MAX_RECORD_ENTRIES:
+        raise ValueError(f"entries는 1~{MAX_RECORD_ENTRIES}개의 목록이어야 합니다.")
+    stage_names = {s["id"]: s["name"] for s in config.get("stages") or []}
+    clean = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("stage") not in stage_names:
+            raise ValueError("entries의 단계가 올바르지 않습니다.")
+        message = entry.get("message", "")
+        if not isinstance(message, str):
+            raise ValueError("message는 문자열이어야 합니다.")
+        item = {"who": entry.get("who"), "stage": stage_names[entry["stage"]], "message": message.strip()[:200]}
+        if item["who"] == "user":
+            signal = parse_signal(entry.get("signal"))
+            item.update(scores=signal["scores"], color=signal["color"], texture=signal["texture"])
+        elif item["who"] == "alien":
+            scores = entry.get("scores")
+            if not isinstance(scores, dict) or set(scores) != set(AXES) or not all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool) and -1 <= v <= 1 for v in scores.values()):
+                raise ValueError(f"외계인 타일에는 {', '.join(AXES)} 점수(-1~1)가 모두 필요합니다.")
+            item["scores"] = {a: float(scores[a]) for a in AXES}
+        else:
+            raise ValueError("who는 user 또는 alien이어야 합니다.")
+        clean.append(item)
+    return data["dish"], clean
+
+
 def error_response(code: str, message: str, status: int):
     return jsonify({"error": {"code": code, "message": message}}), status
 
@@ -192,6 +226,21 @@ def api_start():
     except Exception:
         app.logger.exception("요리 시작 실패")
         return error_response("start_failed", "시작하지 못했습니다. 다시 시도해주세요.", 500)
+
+
+@app.post("/api/interpret")
+def api_interpret():
+    """대화가 끝난 뒤 레코드에 새긴 타일마다 논문 기준 해석을 돌려줍니다."""
+    config = load_config()
+    try:
+        dish, entries = parse_record(request.get_json(silent=True), config)
+    except ValueError as error:
+        return error_response("invalid_record", str(error), 400)
+    try:
+        return jsonify(chatbot.interpret_record(config, dish, entries))
+    except Exception:
+        app.logger.exception("레코드 해석 실패")
+        return error_response("interpret_failed", "해석을 만들지 못했습니다.", 500)
 
 
 @app.get("/health")

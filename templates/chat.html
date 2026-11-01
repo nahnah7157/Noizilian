@@ -9,7 +9,6 @@
   </head>
   <body class="chat-page">
     <header class="chat-header">
-      <h1>{{ bot.name }}</h1>
       <a class="close-button" href="{{ url_for('index') }}" aria-label="대화 닫기">&times;</a>
     </header>
     <main class="chat-area" data-username="{{ username }}">
@@ -47,9 +46,19 @@
       </form>
       <div id="result-overlay" class="result-overlay" hidden>
         <div class="result-content">
-          <img id="result-image" src="" alt="요리 결과">
-          <p id="result-line"></p>
-          <button id="restart-btn" class="start-button">다시 하기</button>
+          <div class="result-dish">
+            <img id="result-image" src="" alt="요리 결과">
+            <p id="result-line"></p>
+            <button id="restart-btn" class="start-button">다시 하기</button>
+          </div>
+          <figure class="record">
+            <div class="record-disc">
+              <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
+              <canvas id="record-canvas" width="600" height="600" aria-label="주고받은 타일이 새겨진 골든 레코드"></canvas>
+              <div id="record-tip" class="record-tip" hidden></div>
+            </div>
+            <figcaption id="record-caption">홈 위에 마우스를 올리면 그 신호의 해석이 보여요.</figcaption>
+          </figure>
         </div>
       </div>
     </main>

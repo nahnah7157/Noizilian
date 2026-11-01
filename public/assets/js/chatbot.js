@@ -257,6 +257,12 @@ if (root) {
       <span class="sense-word right">${right}</span>`;
     const input = row.querySelector("input");
     input.addEventListener("input", schedule);
+    // 휠 위 = 오른쪽. passive: false여야 페이지 스크롤을 막을 수 있음
+    input.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      input.value = Number(input.value) + (event.deltaY < 0 ? 5 : -5);
+      schedule();
+    }, { passive: false });
     sliders[axis] = { input, dot: row.querySelector(".sense-actual") };
   }
 
@@ -311,6 +317,11 @@ const resultLineEl = document.getElementById("result-line");
 const restartBtn = document.getElementById("restart-btn");
 
 let currentState = null;
+let currentStageId = null;
+let currentDishId = null;
+const stageNames = {};
+// 레코드에 새길 대화: 지구인 {who, stage, message, signal, scores} / 외계인 {who, stage, message, scores}
+let history = [];
 
 const STAGE_NAMES = ["재료 준비", "손질", "조리", "플레이팅"];
 
@@ -353,6 +364,12 @@ function updateGameState(data) {
     currentState = data.state;
   }
 
+  if (data.stage) {
+    currentStageId = data.stage.id;
+    stageNames[data.stage.id] = data.stage.name;
+  }
+  if (data.dish) currentDishId = data.dish.id;
+
   if (data.dish && dishNameEl) {
     dishNameEl.textContent = `목표 요리: ${data.dish.name}`;
   }
@@ -385,14 +402,22 @@ function updateGameState(data) {
       if (resultImageEl) resultImageEl.src = data.result.image;
       if (resultLineEl) resultLineEl.textContent = data.result.line;
       resultOverlayEl.hidden = false;
+      showRecord();
     }
     input.disabled = true;
     sendButton.disabled = true;
   }
 }
 
+function addAlienToHistory(data) {
+  if (data.alien?.scores && data.stage) {
+    history.push({ who: "alien", stage: data.stage.id, message: data.alien.word || "", scores: data.alien.scores });
+  }
+}
+
 async function startCooking() {
   log.innerHTML = "";
+  history = [];
   if (resultOverlayEl) resultOverlayEl.hidden = true;
   input.disabled = false;
   sendButton.disabled = false;
@@ -411,6 +436,7 @@ async function startCooking() {
     }
     pending.remove();
     addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
     pending.remove();
@@ -431,6 +457,7 @@ form.addEventListener("submit", async (event) => {
   if (!message || sendButton.disabled) return;
 
   addMessage("user", message, signal ? window.noizilian.tileImage() : null, signal ? "signal-image" : "");
+  const sentStage = currentStageId;
   input.value = "";
   sendButton.disabled = true;
   const pending = addMessage("bot pending", "답변을 기다리는 중…");
@@ -454,7 +481,14 @@ form.addEventListener("submit", async (event) => {
       throw new Error("서버 응답 형식이 올바르지 않습니다.");
     }
     pending.remove();
+    if (signal && sentStage) {
+      history.push({
+        who: "user", stage: sentStage, message,
+        signal: { color: signal.color, texture: signal.texture, seed: signal.seed }, scores: signal.scores,
+      });
+    }
     addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
     pending.remove();
@@ -466,6 +500,162 @@ form.addEventListener("submit", async (event) => {
     }
   }
 });
+
+// ── 7. 골든 레코드 ──────────────────────────────────────────
+// 주고받은 타일을 바깥에서 안쪽으로 도는 나선 홈에 순서대로 새긴다. 홈 위에 마우스를 올리면 해석이 뜬다.
+
+const recordCanvas = document.getElementById("record-canvas");
+const recordTip = document.getElementById("record-tip");
+const recordCaption = document.getElementById("record-caption");
+const PER_TURN = 12; // 한 바퀴에 새기는 타일 수
+let interpretations = null;
+let recordToken = 0;
+
+function recordGeometry() {
+  const S = recordCanvas.width;
+  return { S, band: S * 0.035, pitch: S * 0.045, outer: S * 0.44, step: (2 * Math.PI) / PER_TURN };
+}
+
+function arcOf(i) {
+  const { band, pitch, outer, step } = recordGeometry();
+  const start = -Math.PI / 2 + i * step;
+  return { r: outer - (i * pitch) / PER_TURN - band / 2, start, end: start + step - 0.06 };
+}
+
+function tilePattern(ctx, entry) {
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = 48;
+  if (entry.who === "user") {
+    renderTile(tile, entry.signal.color, entry.signal.texture, entry.signal.seed);
+  } else {
+    const texture = textureFor(entry.scores.hs);
+    renderTile(tile, colorFor(entry.scores, texture), texture, 12345); // 채팅 말풍선의 외계인 타일과 같은 seed
+  }
+  return ctx.createPattern(tile, "repeat");
+}
+
+function drawRecord(highlight = -1) {
+  const ctx = recordCanvas.getContext("2d");
+  const { S, band } = recordGeometry();
+  ctx.clearRect(0, 0, S, S);
+  history.forEach((entry, i) => {
+    const { r, start, end } = arcOf(i);
+    entry.pattern ??= tilePattern(ctx, entry);
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, r, start, end);
+    ctx.lineWidth = band + 3;
+    ctx.strokeStyle = i === highlight ? "#fff" : "rgb(0 0 0 / 45%)";
+    ctx.stroke();
+    ctx.lineWidth = band;
+    ctx.strokeStyle = entry.pattern;
+    ctx.stroke();
+  });
+}
+
+function hitRecord(event) {
+  const rect = recordCanvas.getBoundingClientRect();
+  const { S, band } = recordGeometry();
+  const x = ((event.clientX - rect.left) * S) / rect.width - S / 2;
+  const y = ((event.clientY - rect.top) * S) / rect.height - S / 2;
+  const r = Math.hypot(x, y);
+  const angle = Math.atan2(y, x);
+  return history.findIndex((_, i) => {
+    const arc = arcOf(i);
+    const d = (((angle - arc.start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    return d <= arc.end - arc.start && Math.abs(r - arc.r) <= band / 2 + 2;
+  });
+}
+
+function showTip(event, i) {
+  const entry = history[i];
+  const title = document.createElement("strong");
+  title.textContent = `${i + 1}. ${entry.who === "user" ? "지구인" : "외계인"} · ${stageNames[entry.stage] || entry.stage}`;
+  const item = interpretations?.[i];
+  const line = document.createElement("q");
+  line.textContent = item?.line || "";
+  line.hidden = !item?.line;
+  const basis = document.createElement("small");
+  basis.textContent = item?.basis ?? (interpretations === null ? "해석을 만드는 중…" : describe(entry.scores));
+  basis.hidden = Boolean(item?.line); // 대사가 있으면 대화만 보여 준다
+  recordTip.replaceChildren(title, line, basis);
+  recordTip.hidden = false;
+
+  const box = recordTip.parentElement.getBoundingClientRect();
+  const px = event.clientX - box.left;
+  const py = event.clientY - box.top;
+  // 커서 반대쪽에 띄워 레코드 밖으로 넘치지 않게
+  recordTip.style.left = `${px < box.width / 2 ? px + 14 : px - recordTip.offsetWidth - 14}px`;
+  recordTip.style.top = `${py < box.height / 2 ? py + 14 : py - recordTip.offsetHeight - 14}px`;
+}
+
+recordCanvas?.addEventListener("mousemove", (event) => {
+  const i = hitRecord(event);
+  if (i < 0) {
+    recordTip.hidden = true;
+    recordCanvas.style.cursor = "";
+  } else {
+    showTip(event, i);
+    recordCanvas.style.cursor = "help";
+  }
+  drawRecord(i);
+});
+
+recordCanvas?.addEventListener("mouseleave", () => {
+  recordTip.hidden = true;
+  drawRecord();
+});
+
+const RECORD_NOTES = {
+  no_key: "OpenAI 키가 없어 공식 계산으로 해석했어요.",
+  openai_failed: "OpenAI 응답이 실패해 공식 계산으로 해석했어요.",
+};
+
+function showRecord() {
+  if (!recordCanvas) return;
+  recordTip.hidden = true;
+  drawRecord();
+  if (history.length) loadInterpretations();
+}
+
+async function loadInterpretations() {
+  const token = ++recordToken;
+  interpretations = null;
+  recordCaption.textContent = "해석을 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
+  try {
+    const response = await fetch("/api/interpret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dish: currentDishId,
+        entries: history.map(({ who, stage, message, signal, scores }) =>
+          who === "user" ? { who, stage, message, signal } : { who, stage, message, scores }),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "해석을 받지 못했습니다.");
+    if (token !== recordToken) return; // 그 사이 다시 시작함
+    interpretations = data.interpretations;
+    recordCaption.textContent = "홈 위에 마우스를 올리면 그 신호의 해석이 보여요.";
+    const [source, reason] = data.source.split(":");
+    if (RECORD_NOTES[source]) recordCaption.textContent += ` (${RECORD_NOTES[source]}${reason ? ` 오류: ${reason}` : ""})`;
+    if (source === "openai_failed") recordCaption.append(retryButton());
+  } catch (error) {
+    if (token !== recordToken) return;
+    interpretations = [];
+    // "Failed to fetch" = 서버와 연결이 끊김(서버 종료·재시작 등)
+    recordCaption.textContent = `서버에 연결하지 못해 신호 이름만 보여요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
+    recordCaption.append(retryButton());
+  }
+}
+
+function retryButton() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "reseed-button";
+  button.textContent = "다시 시도";
+  button.addEventListener("click", loadInterpretations);
+  return button;
+}
 
 // 페이지 시작 시 요리 시작 API 호출
 if (shell) {

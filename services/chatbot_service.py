@@ -369,6 +369,11 @@ class ChatbotService:
             "result": None,
         }
 
+    def interpret_record(self, character: dict, dish_id: str, entries: list[dict]) -> dict:
+        """대화가 끝난 뒤 레코드에 새긴 타일마다 해석을 붙인다. entries는 app.parse_record()가 검증한 값."""
+        interpretations, source = self.generator.interpret_record(entries, self.dishes_of(character)[dish_id], describe)
+        return {"interpretations": interpretations, "source": source}
+
     def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict) -> dict:
         """사용자 타일 한 장을 받아 확신을 갱신하고, 외계인의 다음 타일·표정을 돌려준다.
 

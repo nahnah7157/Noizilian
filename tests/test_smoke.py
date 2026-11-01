@@ -39,7 +39,7 @@ class SmokeTest(unittest.TestCase):
 
         chat_page = self.client.get("/chat").get_data(as_text=True)
         self.assertIn("/assets/js/chatbot.js", chat_page)
-        self.assertIn("/assets/images/hateslop-logo.png", self.client.get("/").get_data(as_text=True))
+        self.assertIn("/assets/images/alien/alien_cute_a.png", self.client.get("/").get_data(as_text=True))
         for path in (
             "/assets/js/chatbot.js",
             "/assets/css/style.css",
@@ -393,6 +393,39 @@ class CookingFlowTest(unittest.TestCase):
 
 
 STAGES_ORDER = [s["id"] for s in CONFIG["stages"]]
+
+
+class RecordInterpretTest(unittest.TestCase):
+    """대화가 끝난 뒤 레코드 해석 API. OpenAI 키가 없으면 공식 계산 설명으로 대신한다."""
+
+    def setUp(self):
+        self.client = app.test_client()
+
+    def interpret(self, entries):
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            return self.client.post("/api/interpret", json={"dish": "ramen", "entries": entries})
+
+    def test_formula_fallback_one_per_tile(self):
+        alien = {"who": "alien", "stage": "ingredient", "message": "이거…?", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "ingredient", "message": "따뜻하게", "signal": TILE}
+        response = self.interpret([alien, user])
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["source"], "no_key")
+        self.assertEqual(len(data["interpretations"]), 2)
+        self.assertIn("재료 준비", data["interpretations"][1]["basis"])
+
+    def test_user_scores_are_recomputed(self):
+        # 브라우저가 보낸 점수는 무시하고 색·질감으로 다시 계산한다
+        fake = {"who": "user", "stage": "prep", "signal": TILE, "scores": {a: 1.0 for a in AXES}}
+        expected = parse_signal(TILE)["description"]
+        self.assertIn(expected, self.interpret([fake]).get_json()["interpretations"][0]["basis"])
+
+    def test_rejects_bad_entries(self):
+        for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
+                        [{"who": "user", "stage": "nope", "signal": TILE}]):
+            with self.subTest(entries=entries):
+                self.assertEqual(self.interpret(entries).status_code, 400)
 
 
 if __name__ == "__main__":
