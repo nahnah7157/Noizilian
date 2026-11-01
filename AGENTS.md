@@ -41,8 +41,8 @@
   - alien = {scores, word, expression, reading}, state = {dish, stage_index, exchange_count, confidence, alien_scores, finals, done}
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-10-31)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직, 화면 연결(chatbot.js, chat.html, style.css). 테스트 35개
+## 현재 진행 상황 (2026-11-01)
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직, 화면 연결(chatbot.js, chat.html, style.css). 와이어프레임 기반 레이아웃 3단계 완료(1/3: HTML/CSS, 2/3: 색상 선택 UI + 질감 슬라이더, 3/3: 타일 기록 갱신). 테스트 38개
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
   1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
