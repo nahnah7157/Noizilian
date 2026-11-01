@@ -232,71 +232,149 @@ function renderTile(canvas, color, tex, seed) {
 
 // ── 5. 학종이 작성기 ────────────────────────────────────────
 (() => {
-// 학종이 작성기: 감각 막대 4개 → 색·질감 → 타일.
-// chat.html의 #signal-composer 안에 그린다. 아래 채팅 코드는 window.noizilian.getSignal()로 현재 신호를 읽는다.
+// 색상 선택기(2D + 1D) + 질감 슬라이더(크기·밀도)로 타일을 만든다.
+// 색상 선택: X=채도(C*), Y=밝기(L*), 슬라이더=색상각(h). 서버는 이 L/C/h값을 받는다.
+// 질감: freq(크기)와 밀도(0~1)를 슬라이더로 선택. 밀도는 oct/pers/lac를 선형 변환한다 [앱 설정].
 
+let seed = 42;
+let current = null;
+let currentL = 50, currentC = 50, currentH = 0;
+let currentDensity = 0.5;
 
-const root = document.getElementById("signal-composer");
-if (root) {
-  const canvas = root.querySelector("canvas");
-  const sliders = {};
-  let seed = 42;
-  let current = null;
-  let frame = 0;
+const tileCanvas = document.querySelector(".signal-left canvas");
+const colorCanvas = document.getElementById("color-canvas");
+const hueSlider = document.getElementById("hue-slider");
+const undoBtn = document.getElementById("undo-btn");
+const reseedBtn = document.querySelector("[data-reseed]");
+const tileRecord = document.getElementById("tile-record");
 
-  // 막대 하나: 손잡이 = 원하는 점수, 검은 점 = 실제로 만들어진 타일의 점수
-  for (const axis of AXES) {
-    const [left, right] = AXIS_WORDS[axis];
-    const row = root.querySelector(`[data-axis="${axis}"]`);
-    row.innerHTML = `
-      <span class="sense-word">${left}</span>
-      <div class="sense-bar">
-        <input id="sense-${axis}" type="range" min="-100" max="100" value="0" aria-label="${left}–${right}">
-        <i class="sense-actual" aria-hidden="true"></i>
-      </div>
-      <span class="sense-word right">${right}</span>`;
-    const input = row.querySelector("input");
-    input.addEventListener("input", schedule);
-    // 휠 위 = 오른쪽. passive: false여야 페이지 스크롤을 막을 수 있음
-    input.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      input.value = Number(input.value) + (event.deltaY < 0 ? 5 : -5);
-      schedule();
-    }, { passive: false });
-    sliders[axis] = { input, dot: row.querySelector(".sense-actual") };
-  }
-
-  root.querySelector("[data-reseed]")?.addEventListener("click", () => {
-    seed = Math.floor(Math.random() * 100000);
-    schedule();
+if (tileCanvas && colorCanvas && hueSlider) {
+  // 색상 캔버스 클릭으로 L, C 값 선택
+  colorCanvas.addEventListener("click", (e) => {
+    const rect = colorCanvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width; // 0~1
+    const y = (e.clientY - rect.top) / rect.height; // 0~1
+    currentC = x * 150; // C 범위: 0~150
+    currentL = 100 - y * 100; // L 범위: 0~100 (y 역순)
+    update();
   });
 
-  function value(axis) {
-    return Number(sliders[axis].input.value) / 100;
+  // Hue 슬라이더
+  hueSlider.addEventListener("input", () => {
+    currentH = Number(hueSlider.value);
+    renderColorCanvas();
+    update();
+  });
+
+  // 크기·밀도 슬라이더
+  for (const axis of ["freq", "density"]) {
+    const row = document.querySelector(`[data-axis="${axis}"]`);
+    if (row) {
+      const [min, max] = axis === "freq" ? [0.9, 0.4] : [0, 1];
+      const label = axis === "freq" ? "크기" : "밀도";
+      row.innerHTML = `
+        <span class="sense-word">${axis === "freq" ? "작은" : "조밀"}</span>
+        <div class="sense-bar">
+          <input id="sense-${axis}" type="range" min="${Math.min(min, max) * 100}" max="${Math.max(min, max) * 100}" value="${axis === "freq" ? 65 : 50}" aria-label="${label}">
+          <i class="sense-actual" aria-hidden="true"></i>
+        </div>
+        <span class="sense-word right">${axis === "freq" ? "큰" : "흩어진"}</span>`;
+      const input = row.querySelector("input");
+      input.addEventListener("input", () => {
+        if (axis === "density") currentDensity = Number(input.value) / 100;
+        update();
+      });
+    }
   }
 
-  function schedule() {
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(update);
+  // 패턴 바꾸기
+  reseedBtn?.addEventListener("click", () => {
+    seed = Math.floor(Math.random() * 100000);
+    update();
+  });
+
+  // 되돌리기
+  let prevSignal = null;
+  undoBtn.addEventListener("click", () => {
+    if (prevSignal) {
+      currentL = prevSignal.color.L;
+      currentC = prevSignal.color.C;
+      currentH = prevSignal.color.h;
+      currentDensity = prevSignal.density;
+      hueSlider.value = currentH;
+      document.getElementById("sense-density").value = currentDensity * 100;
+      renderColorCanvas();
+      update();
+    }
+  });
+
+  // 색상 캔버스 배경: 현재 Hue에 해당하는 2D 그래디언트
+  function renderColorCanvas() {
+    const ctx = colorCanvas.getContext("2d");
+    const W = colorCanvas.width;
+    const H = colorCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const imgData = ctx.createImageData(W, H);
+    const d = imgData.data;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const C = (x / W) * 150;
+        const L = 100 - (y / H) * 100;
+        const color = { L, C, h: currentH };
+
+        if (inGamut(color)) {
+          const [r, g, b] = lchToRgb(color);
+          const i = (y * W + x) * 4;
+          d[i] = r;
+          d[i + 1] = g;
+          d[i + 2] = b;
+          d[i + 3] = 255;
+        } else {
+          const i = (y * W + x) * 4;
+          d[i] = d[i + 1] = d[i + 2] = 200;
+          d[i + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // 선택한 점 표시
+    const selectX = (currentC / 150) * W;
+    const selectY = (1 - currentL / 100) * H;
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(selectX, selectY, 8, 0, 2 * Math.PI);
+    ctx.stroke();
   }
 
   function update() {
-    const texture = textureFor(value("hs")); // 질감: 단단함–부드러움 막대만으로
-    const color = colorFor({ wc: value("wc"), mf: value("mf"), hl: value("hl") }, texture); // 색: 나머지 3축
-    renderTile(canvas, color, texture, seed);
+    prevSignal = current;
+    const texture = densityToTexture(currentDensity);
+    const color = { L: currentL, C: currentC, h: currentH };
+    renderTile(tileCanvas, color, texture, seed);
     const scores = scoresOf(color, texture);
-    AXES.forEach((a) => (sliders[a].dot.style.left = `${((scores[a] + 1) / 2) * 100}%`));
-    current = { color, texture, seed, scores, description: describe(scores) };
+    current = { color, texture, seed, scores, density: currentDensity, description: describe(scores) };
   }
 
   window.noizilian = {
-    /** 지금 학종이의 색·질감·점수. 서버로 보낼 때 쓴다. */
     getSignal: () => current && structuredClone(current),
-    /** 채팅 말풍선에 붙일 타일 이미지 */
-    tileImage: () => canvas.toDataURL("image/png"),
+    tileImage: () => tileCanvas.toDataURL("image/png"),
   };
 
+  renderColorCanvas();
   update();
+}
+
+// 밀도(0~1)를 질감 파라미터(oct/pers/lac)로 변환 [앱 설정]
+function densityToTexture(density) {
+  return {
+    oct: 1 + density * 11,
+    freq: 0.65, // 고정
+    pers: 0.4 + density * 0.4,
+    lac: 1.8 + density * 1.4,
+  };
 }
 })();
 
@@ -325,6 +403,40 @@ let history = [];
 
 const STAGE_NAMES = ["재료 준비", "손질", "조리", "플레이팅"];
 
+function renderTileRecord() {
+  const record = tileRecord || document.getElementById("tile-record");
+  if (!record) return;
+
+  record.innerHTML = "";
+  for (let stageIdx = 0; stageIdx < 4; stageIdx++) {
+    const stageId = ["ingredient", "prep", "cook", "plating"][stageIdx];
+    const alienEntry = history.find(e => e.who === "alien" && e.stage === stageId);
+    const userEntry = history.find(e => e.who === "user" && e.stage === stageId);
+
+    // 윗줄: 외계인
+    const alienCell = document.createElement("canvas");
+    alienCell.width = 60;
+    alienCell.height = 60;
+    if (alienEntry) {
+      const texture = textureFor(alienEntry.scores.hs);
+      const color = colorFor({ wc: alienEntry.scores.wc, mf: alienEntry.scores.mf, hl: alienEntry.scores.hl }, texture);
+      renderTile(alienCell, color, texture, 12345);
+    }
+    record.append(alienCell);
+
+    // 아랫줄: 사용자
+    const userCell = document.createElement("canvas");
+    userCell.width = 60;
+    userCell.height = 60;
+    if (userEntry && userEntry.signal && userEntry.signal.color) {
+      const color = userEntry.signal.color;
+      const texture = userEntry.signal.texture;
+      renderTile(userCell, color, texture, 54321);
+    }
+    record.style.gridAutoRows = "repeat(2, 1fr)";
+  }
+}
+
 function addMessage(sender, text, image = null, imageClass = "", alienScores = null) {
   const item = document.createElement("div");
   item.className = `message ${sender}`;
@@ -352,6 +464,9 @@ function addMessage(sender, text, image = null, imageClass = "", alienScores = n
 
   const body = document.createElement("p");
   body.textContent = text;
+  if (sender === "bot") {
+    body.style.display = "none"; // 외계인 말풍선 화면에 안 보임 (화면에만 숨김, 완전 제거는 나중에)
+  }
   item.append(body);
 
   log.append(item);
