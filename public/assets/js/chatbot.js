@@ -433,7 +433,7 @@ function renderTileRecord() {
       const texture = userEntry.signal.texture;
       renderTile(userCell, color, texture, 54321);
     }
-    record.style.gridAutoRows = "repeat(2, 1fr)";
+    record.append(userCell);
   }
 }
 
@@ -504,6 +504,7 @@ function updateGameState(data) {
 
     if (data.stage.advanced) {
       addMessage("bot notice", `✨ 다음 단계(${data.stage.name})로 넘어갔습니다!`);
+      renderTileRecord();
     }
   }
 

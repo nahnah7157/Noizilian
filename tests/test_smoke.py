@@ -175,7 +175,9 @@ class SignalApiTest(unittest.TestCase):
 
     def test_chat_page_includes_composer(self):
         page = self.client.get("/chat").get_data(as_text=True)
-        self.assertIn('id="signal-composer"', page)
+        self.assertIn('id="signal-left"', page)
+        self.assertIn('id="signal-center"', page)
+        self.assertIn('id="signal-right"', page)
         response = self.client.get("/assets/js/chatbot.js")
         self.assertEqual(response.status_code, 200)
         response.close()
