@@ -32,16 +32,18 @@
           <div id="tile-record" class="tile-record"></div>
           <div class="signal-buttons">
             <button type="button" id="undo-btn" class="button-undo">↶ 되돌리기</button>
+            <button type="submit" id="send-btn" form="chat-form">신호 보내기</button>
           </div>
         </section>
         <section id="signal-center" class="signal-center" aria-label="대화 창">
-          <div id="chat-log" role="log" aria-live="polite" aria-label="대화 내용">
-            <div class="message bot"><p>{{ bot.greeting }}</p></div>
+          <div id="alien-stage" class="alien-stage">
+            <img id="alien-expression" class="alien-expression" alt="외계인" hidden>
+            <canvas id="alien-tile" class="alien-tile" width="160" height="160" aria-label="외계인이 내민 타일"></canvas>
+            <p id="chat-status" class="chat-status" role="status" aria-live="polite">{{ bot.greeting }}</p>
           </div>
           <form id="chat-form" class="chat-input-area">
             <label class="visually-hidden" for="user-message">메시지</label>
             <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
-            <button id="send-btn" class="send-button" type="submit">신호 보내기</button>
           </form>
         </section>
         <section id="signal-right" class="signal-right" aria-label="색상 선택">

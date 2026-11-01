@@ -146,56 +146,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   gap: 20px;
   padding: 20px;
 }
-.signal-left {
-  flex: 0 0 250px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-.signal-left .signal-tile {
-  min-height: 0;
-}
-.signal-left canvas {
-  display: block;
-  margin: 0 auto;
-}
-#tile-record {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 8px;
-  background: rgb(255 255 255 / 82%);
-  padding: 12px;
-  border-radius: 8px;
-  min-height: 120px;
-  flex: 1;
-}
-#tile-record canvas {
-  border-radius: 4px;
-  background: #f5f5f5;
-}
-.signal-buttons {
-  display: flex;
-  gap: 8px;
-}
-.signal-buttons button {
-  flex: 1;
-  padding: 10px;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-#undo-btn { color: #666; }
-#undo-btn:hover { background: #f5f5f5; }
-
-.signal-center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
 #chat-log {
   min-height: 0;
   flex: 1;
@@ -446,6 +396,23 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   flex-direction: column;
   min-height: 0;
 }
+/* 가운데: 외계인 이미지·타일·상태 한 줄을 그 자리에 고정 (쌓지 않는다) */
+.alien-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+.alien-expression { max-width: 60%; max-height: 40%; object-fit: contain; }
+.alien-tile { border-radius: 8px; background: #f5f5f5; }
+.chat-status { margin: 0; min-height: 1.2em; color: #666; font-size: .9rem; }
+.chat-status.error { color: #8a3028; }
+.signal-buttons button:disabled { opacity: .55; cursor: wait; }
 
 .signal-right {
   flex: 0 0 280px;

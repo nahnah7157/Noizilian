@@ -240,6 +240,7 @@ let seed = 42;
 let current = null;
 let currentL = 50, currentC = 50, currentH = 0;
 let currentDensity = 0.5;
+let currentFreq = 0.65;
 
 const tileCanvas = document.querySelector(".signal-left canvas");
 const colorCanvas = document.getElementById("color-canvas");
@@ -249,15 +250,24 @@ const reseedBtn = document.querySelector("[data-reseed]");
 const tileRecord = document.getElementById("tile-record");
 
 if (tileCanvas && colorCanvas && hueSlider) {
-  // 색상 캔버스 클릭으로 L, C 값 선택
-  colorCanvas.addEventListener("click", (e) => {
+  // 색상 캔버스 클릭·드래그로 L, C 값 선택. 범위 밖(회색)이면 가장 가까운 범위 안 색으로 스냅
+  function pickColor(e) {
     const rect = colorCanvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width; // 0~1
-    const y = (e.clientY - rect.top) / rect.height; // 0~1
-    currentC = x * 150; // C 범위: 0~150
-    currentL = 100 - y * 100; // L 범위: 0~100 (y 역순)
+    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    let C = x * 150; // C 범위: 0~150
+    const L = 100 - y * 100; // L 범위: 0~100 (y 역순)
+    while (C > 0 && !inGamut({ L, C, h: currentH })) C -= 2; // 같은 L·h에서 C를 줄여 안쪽으로
+    if (!inGamut({ L, C: Math.max(0, C), h: currentH })) return; // 그래도 밖이면 무시
+    currentC = Math.max(0, C);
+    currentL = L;
     update();
-  });
+    renderColorCanvas();
+  }
+  let dragging = false;
+  colorCanvas.addEventListener("mousedown", (e) => { dragging = true; pickColor(e); });
+  colorCanvas.addEventListener("mousemove", (e) => { if (dragging) pickColor(e); });
+  window.addEventListener("mouseup", () => { dragging = false; });
 
   // Hue 슬라이더
   hueSlider.addEventListener("input", () => {
@@ -273,15 +283,16 @@ if (tileCanvas && colorCanvas && hueSlider) {
       const [min, max] = axis === "freq" ? [0.9, 0.4] : [0, 1];
       const label = axis === "freq" ? "크기" : "밀도";
       row.innerHTML = `
-        <span class="sense-word">${axis === "freq" ? "작은" : "조밀"}</span>
+        <span class="sense-word">${axis === "freq" ? "작은" : "흩어진"}</span>
         <div class="sense-bar">
           <input id="sense-${axis}" type="range" min="${Math.min(min, max) * 100}" max="${Math.max(min, max) * 100}" value="${axis === "freq" ? 65 : 50}" aria-label="${label}">
           <i class="sense-actual" aria-hidden="true"></i>
         </div>
-        <span class="sense-word right">${axis === "freq" ? "큰" : "흩어진"}</span>`;
+        <span class="sense-word right">${axis === "freq" ? "큰" : "조밀"}</span>`;
       const input = row.querySelector("input");
       input.addEventListener("input", () => {
         if (axis === "density") currentDensity = Number(input.value) / 100;
+        else currentFreq = (130 - Number(input.value)) / 100; // 왼쪽=작은(0.9)·오른쪽=큰(0.4)
         update();
       });
     }
@@ -293,19 +304,20 @@ if (tileCanvas && colorCanvas && hueSlider) {
     update();
   });
 
-  // 되돌리기
-  let prevSignal = null;
+  // 되돌리기: 마지막으로 보낸 신호로 되돌린다
+  let sentSignal = null;
   undoBtn.addEventListener("click", () => {
-    if (prevSignal) {
-      currentL = prevSignal.color.L;
-      currentC = prevSignal.color.C;
-      currentH = prevSignal.color.h;
-      currentDensity = prevSignal.density;
-      hueSlider.value = currentH;
-      document.getElementById("sense-density").value = currentDensity * 100;
-      renderColorCanvas();
-      update();
-    }
+    if (!sentSignal) return;
+    currentL = sentSignal.color.L;
+    currentC = sentSignal.color.C;
+    currentH = sentSignal.color.h;
+    currentDensity = sentSignal.density;
+    currentFreq = sentSignal.texture.freq;
+    hueSlider.value = currentH;
+    document.getElementById("sense-density").value = currentDensity * 100;
+    document.getElementById("sense-freq").value = 130 - currentFreq * 100;
+    renderColorCanvas();
+    update();
   });
 
   // 색상 캔버스 배경: 현재 Hue에 해당하는 2D 그래디언트
@@ -350,7 +362,6 @@ if (tileCanvas && colorCanvas && hueSlider) {
   }
 
   function update() {
-    prevSignal = current;
     const texture = densityToTexture(currentDensity);
     const color = { L: currentL, C: currentC, h: currentH };
     renderTile(tileCanvas, color, texture, seed);
@@ -361,6 +372,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
   window.noizilian = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
+    markSent: () => { sentSignal = current; },
   };
 
   renderColorCanvas();
@@ -371,7 +383,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
 function densityToTexture(density) {
   return {
     oct: 1 + density * 11,
-    freq: 0.65, // 고정
+    freq: currentFreq, // 크기 막대 [앱 설정]
     pers: 0.4 + density * 0.4,
     lac: 1.8 + density * 1.4,
   };
@@ -382,8 +394,10 @@ function densityToTexture(density) {
 const shell = document.querySelector(".chat-area");
 const form = document.getElementById("chat-form");
 const input = document.getElementById("user-message");
-const log = document.getElementById("chat-log");
 const sendButton = document.getElementById("send-btn");
+const alienExpr = document.getElementById("alien-expression");
+const alienTile = document.getElementById("alien-tile");
+const statusEl = document.getElementById("chat-status");
 
 const dishNameEl = document.getElementById("dish-name");
 const stageStepsEl = document.getElementById("stage-steps");
@@ -407,71 +421,37 @@ function renderTileRecord() {
   const record = tileRecord || document.getElementById("tile-record");
   if (!record) return;
 
+  const stageIds = ["ingredient", "prep", "cook", "plating"];
   record.innerHTML = "";
-  for (let stageIdx = 0; stageIdx < 4; stageIdx++) {
-    const stageId = ["ingredient", "prep", "cook", "plating"][stageIdx];
-    const alienEntry = history.find(e => e.who === "alien" && e.stage === stageId);
-    const userEntry = history.find(e => e.who === "user" && e.stage === stageId);
-
-    // 윗줄: 외계인
-    const alienCell = document.createElement("canvas");
-    alienCell.width = 60;
-    alienCell.height = 60;
-    if (alienEntry) {
-      const texture = textureFor(alienEntry.scores.hs);
-      const color = colorFor({ wc: alienEntry.scores.wc, mf: alienEntry.scores.mf, hl: alienEntry.scores.hl }, texture);
-      renderTile(alienCell, color, texture, 12345);
+  // 윗줄: 외계인 4칸, 아랫줄: 나 4칸. 각 칸은 그 단계의 마지막 타일
+  for (const who of ["alien", "user"])
+    for (const stageId of stageIds) {
+      const entry = history.findLast(e => e.who === who && e.stage === stageId);
+      const cell = document.createElement("canvas");
+      cell.width = cell.height = 60;
+      if (who === "alien" && entry) {
+        const texture = textureFor(entry.scores.hs);
+        renderTile(cell, colorFor(entry.scores, texture), texture, 12345);
+      } else if (entry && entry.signal?.color) {
+        renderTile(cell, entry.signal.color, entry.signal.texture, 54321);
+      }
+      record.append(cell);
     }
-    record.append(alienCell);
+}
 
-    // 아랫줄: 사용자
-    const userCell = document.createElement("canvas");
-    userCell.width = 60;
-    userCell.height = 60;
-    if (userEntry && userEntry.signal && userEntry.signal.color) {
-      const color = userEntry.signal.color;
-      const texture = userEntry.signal.texture;
-      renderTile(userCell, color, texture, 54321);
-    }
-    record.append(userCell);
+// 외계인 표정 이미지와 타일을 가운데에서 그 자리에 교체한다 (쌓지 않는다)
+function showAlien(data) {
+  if (data.image) { alienExpr.src = data.image; alienExpr.hidden = false; }
+  if (data.alien?.scores) {
+    const texture = textureFor(data.alien.scores.hs);
+    renderTile(alienTile, colorFor(data.alien.scores, texture), texture, 12345);
   }
 }
 
-function addMessage(sender, text, image = null, imageClass = "", alienScores = null) {
-  const item = document.createElement("div");
-  item.className = `message ${sender}`;
-
-  if (image) {
-    const img = document.createElement("img");
-    img.src = image;
-    img.alt = imageClass ? "내가 보낸 학종이" : "외계인 표정/요리 이미지";
-    if (imageClass) img.className = imageClass;
-    item.append(img);
-  }
-
-  if (alienScores) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 100;
-    canvas.height = 100;
-    canvas.style.display = "block";
-    canvas.style.marginBottom = "8px";
-    canvas.style.borderRadius = "6px";
-    const texture = textureFor(alienScores.hs);
-    const color = colorFor({ wc: alienScores.wc, mf: alienScores.mf, hl: alienScores.hl }, texture);
-    renderTile(canvas, color, texture, 12345);
-    item.append(canvas);
-  }
-
-  const body = document.createElement("p");
-  body.textContent = text;
-  if (sender === "bot") {
-    body.style.display = "none"; // 외계인 말풍선 화면에 안 보임 (화면에만 숨김, 완전 제거는 나중에)
-  }
-  item.append(body);
-
-  log.append(item);
-  log.scrollTop = log.scrollHeight;
-  return item;
+// 대기·오류만 한 줄로 보여 준다
+function setStatus(text, isError = false) {
+  statusEl.textContent = text || "";
+  statusEl.classList.toggle("error", isError);
 }
 
 function updateGameState(data) {
@@ -503,8 +483,7 @@ function updateGameState(data) {
     }
 
     if (data.stage.advanced) {
-      addMessage("bot notice", `✨ 다음 단계(${data.stage.name})로 넘어갔습니다!`);
-      renderTileRecord();
+      renderTileRecord(); // 단계 안내는 stage-hint에만, 알림은 쌓지 않는다
     }
   }
 
@@ -532,13 +511,11 @@ function addAlienToHistory(data) {
 }
 
 async function startCooking() {
-  log.innerHTML = "";
   history = [];
   if (resultOverlayEl) resultOverlayEl.hidden = true;
   input.disabled = false;
   sendButton.disabled = false;
-
-  const pending = addMessage("bot pending", "요리를 준비하는 중…");
+  setStatus("요리를 준비하는 중…");
 
   try {
     const response = await fetch("/api/start", {
@@ -550,13 +527,12 @@ async function startCooking() {
     if (!response.ok) {
       throw new Error(data.error?.message || "요리를 시작하지 못했습니다.");
     }
-    pending.remove();
-    addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    setStatus("");
+    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
-    pending.remove();
-    addMessage("bot error", error.message || "오류가 발생했습니다.");
+    setStatus(error.message || "오류가 발생했습니다.", true);
     input.disabled = true;
     sendButton.disabled = true;
   }
@@ -572,11 +548,11 @@ form.addEventListener("submit", async (event) => {
   const message = input.value.trim() || signal?.description || "";
   if (!message || sendButton.disabled) return;
 
-  addMessage("user", message, signal ? window.noizilian.tileImage() : null, signal ? "signal-image" : "");
+  if (signal) window.noizilian.markSent(); // 되돌리기 기준: 방금 보낸 신호
   const sentStage = currentStageId;
   input.value = "";
   sendButton.disabled = true;
-  const pending = addMessage("bot pending", "답변을 기다리는 중…");
+  setStatus("답변을 기다리는 중…");
 
   try {
     const response = await fetch("/api/chat", {
@@ -596,19 +572,18 @@ form.addEventListener("submit", async (event) => {
     if (typeof data.reply !== "string") {
       throw new Error("서버 응답 형식이 올바르지 않습니다.");
     }
-    pending.remove();
     if (signal && sentStage) {
       history.push({
         who: "user", stage: sentStage, message,
         signal: { color: signal.color, texture: signal.texture, seed: signal.seed }, scores: signal.scores,
       });
     }
-    addMessage("bot", data.reply, data.image, "", data.alien?.scores);
+    setStatus("");
+    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
-    pending.remove();
-    addMessage("bot error", error.message || "오류가 발생했습니다.");
+    setStatus(error.message || "오류가 발생했습니다.", true);
   } finally {
     if (!currentState?.done) {
       sendButton.disabled = false;
