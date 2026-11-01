@@ -23,27 +23,36 @@
           <span class="confidence-text">외계인의 확신</span>
         </div>
       </header>
-      <div id="chat-log" role="log" aria-live="polite" aria-label="대화 내용">
-        <div class="message bot"><p>{{ bot.greeting }}</p></div>
-      </div>
-      <section id="signal-composer" class="signal-composer" aria-label="학종이 작성기">
-        <div class="signal-tile">
-          <canvas width="120" height="120" aria-label="보낼 학종이 미리보기"></canvas>
-          <button type="button" class="reseed-button" data-reseed>패턴 바꾸기</button>
-        </div>
-        <div class="signal-sliders">
-          <div class="sense-row" data-axis="wc"></div>
-          <div class="sense-row" data-axis="hl"></div>
-          <div class="sense-row" data-axis="mf"></div>
-          <div class="sense-row" data-axis="hs"></div>
-          <p class="sense-legend">막대 손잡이는 원하는 값, 검은 점은 실제 타일의 값입니다. 위 세 막대는 색을, 단단함–부드러움은 질감만 바꿉니다.</p>
-        </div>
+      <section class="layout-row">
+        <section id="signal-left" class="signal-left" aria-label="학종이 작성기 왼쪽">
+          <div class="signal-tile">
+            <canvas width="120" height="120" aria-label="보낼 학종이 미리보기"></canvas>
+            <button type="button" class="reseed-button" data-reseed>패턴 바꾸기</button>
+          </div>
+          <div id="tile-record" class="tile-record"></div>
+          <div class="signal-buttons">
+            <button type="button" id="undo-btn" class="button-undo">↶ 되돌리기</button>
+          </div>
+        </section>
+        <section id="signal-center" class="signal-center" aria-label="대화 창">
+          <div id="chat-log" role="log" aria-live="polite" aria-label="대화 내용">
+            <div class="message bot"><p>{{ bot.greeting }}</p></div>
+          </div>
+          <form id="chat-form" class="chat-input-area">
+            <label class="visually-hidden" for="user-message">메시지</label>
+            <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
+            <button id="send-btn" class="send-button" type="submit">신호 보내기</button>
+          </form>
+        </section>
+        <section id="signal-right" class="signal-right" aria-label="색상 선택">
+          <div id="color-picker" class="color-picker">
+            <canvas id="color-canvas" width="200" height="200" aria-label="색상 선택기"></canvas>
+            <input id="hue-slider" type="range" min="0" max="360" value="0" class="hue-slider" aria-label="색상각">
+          </div>
+          <div class="sense-row" data-axis="freq"></div>
+          <div class="sense-row" data-axis="density"></div>
+        </section>
       </section>
-      <form id="chat-form" class="chat-input-area">
-        <label class="visually-hidden" for="user-message">메시지</label>
-        <input id="user-message" type="text" maxlength="2000" placeholder="덧붙일 말 (선택)" autocomplete="off">
-        <button id="send-btn" class="send-button" type="submit">신호 보내기</button>
-      </form>
       <div id="result-overlay" class="result-overlay" hidden>
         <div class="result-content">
           <div class="result-dish">
