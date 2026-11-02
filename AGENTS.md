@@ -41,7 +41,7 @@
   - alien = {scores, word, expression, reading}, state = {dish, stage_index, exchange_count, confidence, alien_scores, finals, done}
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-11-02)
+## 현재 진행 상황 (2026-11-03)
 - 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 39개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
@@ -61,12 +61,20 @@
   - 반응형: 시도했다가 전부 되돌림. 레이아웃은 main 원본(고정 절대배치: 패널 230/236px, 가운데 left 270/right 276, 외계인 max-height 78vh) 그대로. (별도 반응형 없음)
   - 결과 대기 단축: showRecord가 /api/record를 단계별로 병렬 호출하고 도착한 단계부터 기호에 붙임. 계약에 선택 필드 wrong(그 묶음에 넣을 엉뚱한 방법 대사 수) 추가 — 성공=첫 단계 1, 실패=앞 세 단계 1씩(총 3). wrong 없으면 기존 success 규칙(하위호환)
 - 완료: 되돌리기(↺) = 보낸 타일 취소 (chatbot.js, tests — app.py 안 고침). 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, ↺면 마지막 스냅샷으로 복원(history에서 빼고 확신·단계 이전 값, 선택기는 취소한 타일 값으로). 여러 번 누르면 이번 단계 보낸 타일을 하나씩 취소. 단계가 바뀌면(advanced/done) 스냅샷 비워 이전 단계로는 안 감. 되돌릴 게 없거나 응답 대기 중이거나 done이면 버튼 비활성. state는 브라우저가 들고 있어 이전 state로 다시 보냄(테스트: 같은 state 재전송 정상). 테스트 41개
+- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 fallback_lines, 임베딩 그림 선택은 동작 안 함(그림을 차례로 붙임). 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
-  1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
-  2. 검색: retriever.py가 현재 단계의 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김
-  3. 디자인 토큰(tokens.css), 배포
-- 팀 확정 필요: 부엌 전용 배경 이미지(지금은 background_basic.png 유지), config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 이미지, 레코드 소리 대응·대체 대사(fallback_lines)
+  1. GPT 연결 (과제 핵심): generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체. 대사 없이 타일 점수·표정만, 반환 형식 유지 (docs/MODEL_SETUP.md 참고)
+  2. RAG: retriever.py(지금 빈 틀)가 현재 단계 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김. 넣기 전·후 비교 수치 기록
+  3. 확신 기준·최대 횟수·요리 목표 점수 조정 (지금은 대부분 4번 채워서 넘어감). GPT 연결 뒤에
+  4. 반응형 다시 하기 (아래 요구사항). 한 번에 CSS만, 1920×1080·1280×720·390×844에서 화면 확인 후 커밋
+  5. 그림 받으면: 표정 5종 → config.expressions, 요리 재료 이미지 → 단계별 화면 연결, 레코드 그림 후보 → config.record.line_images(경로+설명, 5~10장 이상)
+  6. 대체 대사(fallback_lines) 말투 다듬기(외계인은 요리를 모름), 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+- 반응형 요구사항 (11/2 시도는 실패해서 되돌림)
+  - 가로 화면(16:9): 지금 배치 그대로. 단 외계인·패널이 화면 크기에 비례해 같이 커지고 작아짐(큰 모니터에선 더 크게, 작은 화면에선 훨씬 작게). 외계인만 줄어들면 안 됨
+  - 세로 화면(9:16 정도): 외계인 위, 패널 아래(왼쪽·오른쪽 패널 나란히). 외계인 영역과 패널 영역 크기가 비슷하게
+  - 어느 크기에서도 스크롤 없이 한 화면. 색 네모 클릭 좌표가 크기 바뀌어도 맞아야 함
+- 팀 확정 필요: 부엌 전용 배경 이미지(지금은 background_basic.png 유지), config의 "초안: 팀 확정 필요" 값, 표정·재료 이미지 일정, 레코드 그림 후보, 레코드 소리 대응, 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
 - 색, 간격, 폰트는 public/assets/css/tokens.css의 변수만 사용. 새 색상 하드코딩 금지 (tokens.css는 레퍼런스 확정 후 작성 예정)
