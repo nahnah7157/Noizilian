@@ -55,6 +55,11 @@
   - 대화 순서: 12시에서 시작해 시계방향, 한 바퀴(12타일)마다 안쪽 홈으로 이어짐
   - 논문 근거 문장과 결과 화면 외계인 대사(result-line)는 표시 안 함
 - 완료: 외계인 대사 제거. config의 greeting·stages[].alien_line·result.success_line/fail_line 삭제, persona.speaking_style을 "말하지 않음"으로. generator.py의 "…지직" 대사 삭제 → alien.word는 항상 ""(형식 유지), reply는 괄호 지문만(화면에 안 보임). judge_dish 결과의 line 삭제
+- 완료: 네 가지 다듬기 (chat.html, style.css, chatbot.js, app.py, generator.py, chatbot_service.py, tests) — 테스트 40개
+  - 결과 안내 문구: 레코드 대사 만드는 동안 "외계인이 신호를 보내는 중이에요", 다 만들면 figcaption 비움. "기호에 마우스를…"·"OpenAI 키…" 문구 삭제(RECORD_NOTES 제거)
+  - 타일 기록칸 = 4단계(윗줄 외계인·아랫줄 나), 단계가 끝날 때만 그 칸을 채운다(renderTileRecord의 stageFinished). 진행 중엔 외계인 타일을 숨기고 외계인 머리 위 "…" 말풍선(#alien-think, 글자 없음)만 띄우며 확신(state.confidence)이 오를수록 커지고 빨라진다(CSS 변수 --think). 단계 종료(advanced/done) 시 그 단계 마지막 외계인 타일(history.findLast(alien, 끝난단계))이 외계인 앞에 1.2초 떴다가 윗줄 칸으로 날아가(fly-tile) 고정되고, 그 뒤 다음 포즈로 교체. 다음 단계 첫 추측은 화면에 안 보임. prefers-reduced-motion이면 날아가기 생략
+  - 반응형: 절대배치 → flexbox + 유동(clamp/vw). 패널 폭 clamp(160px,16vw,230px)라 창이 줄면 패널(기록칸·미리보기·버튼·색 네모·막대 모두)도 비례 축소. ≤1000px 외계인 위+두 패널 아래 나란히, ≤600px 세로. 가로 스크롤 없음(색 네모 클릭 좌표는 rect 기준이라 크기 바뀌어도 정확)
+  - 결과 대기 단축: showRecord가 /api/record를 단계별로 병렬 호출하고 도착한 단계부터 기호에 붙임. 계약에 선택 필드 wrong(그 묶음에 넣을 엉뚱한 방법 대사 수) 추가 — 성공=첫 단계 1, 실패=앞 세 단계 1씩(총 3). wrong 없으면 기존 success 규칙(하위호환)
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
   1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)

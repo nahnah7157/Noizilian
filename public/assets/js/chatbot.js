@@ -394,6 +394,9 @@ const alienExpr = document.getElementById("alien-expression");
 const resultOverlayEl = document.getElementById("result-overlay");
 const resultImageEl = document.getElementById("result-image");
 const restartBtn = document.getElementById("restart-btn");
+const signalCenter = document.getElementById("signal-center");
+const thinkEl = document.getElementById("alien-think");
+const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 let currentState = null;
 let currentStageId = null;
@@ -406,9 +409,11 @@ let history = [];
 
 const STAGE_IDS = ["ingredient", "prep", "cook", "plating"];
 
-// 윗줄 외계인(머리 아이콘 + 4단계) / 아랫줄 나(머리 아이콘 + 4단계).
-// 현재 단계 칸은 교환마다 갱신, 지난 단계는 마지막 타일로 자동 고정(findLast)
-function renderTileRecord(stageIndex = currentStageIndex) {
+// 윗줄 외계인 4칸 / 아랫줄 나 4칸 = 4단계. 단계가 "끝났을 때만" 그 칸을 채운다(진행 중엔 빈칸).
+function stageFinished(i) {
+  return !!(currentState?.done || i < currentStageIndex);
+}
+function renderTileRecord() {
   const record = document.getElementById("tile-record");
   if (!record) return;
   record.innerHTML = "";
@@ -418,10 +423,10 @@ function renderTileRecord(stageIndex = currentStageIndex) {
     if (who === "alien") icon.src = "/assets/images/alien/alien_cute_a.png";
     record.append(icon);
     STAGE_IDS.forEach((stageId, i) => {
-      const entry = history.findLast(e => e.who === who && e.stage === stageId);
       const cell = document.createElement("canvas");
       cell.width = cell.height = 60;
-      cell.className = "record-cell" + (i === stageIndex ? " current" : "");
+      cell.className = "record-cell";
+      const entry = stageFinished(i) ? history.findLast(e => e.who === who && e.stage === stageId) : null;
       if (who === "alien" && entry) {
         const texture = textureFor(entry.scores.hs);
         renderTile(cell, colorFor(entry.scores, texture), texture, 12345);
@@ -438,7 +443,51 @@ function showAlien(data) {
   if (data.image) alienExpr.src = data.image;
 }
 
+// 진행 중 외계인 머리 위 "…" 말풍선. 확신(state.confidence)이 오를수록 커지고 빨라진다. 글자 없음
+function updateThink() {
+  if (!thinkEl) return;
+  const show = !!(currentState && !currentState.done);
+  thinkEl.hidden = !show;
+  if (show) signalCenter?.style.setProperty("--think", Math.max(0, Math.min(1, currentState.confidence || 0)).toFixed(3));
+}
+function hideThink() {
+  if (thinkEl) thinkEl.hidden = true;
+}
+
+// 단계가 끝나면 그 단계 마지막 외계인 타일이 외계인 앞에 잠깐 떴다가 윗줄 그 칸으로 날아가 고정된다
+function playOffer(finishedIndex, afterFill) {
+  const stageId = STAGE_IDS[finishedIndex];
+  const entry = history.findLast(e => e.who === "alien" && e.stage === stageId);
+  const target = document.querySelectorAll("#tile-record .record-cell")[finishedIndex]; // 윗줄(외계인) 4칸이 앞쪽
+  hideThink();
+  if (!entry || !target || reduceMotion) { afterFill(); return; }
+
+  const fly = document.createElement("canvas");
+  fly.width = fly.height = 80;
+  const texture = textureFor(entry.scores.hs);
+  renderTile(fly, colorFor(entry.scores, texture), texture, 12345);
+  fly.className = "fly-tile";
+  const a = alienExpr.getBoundingClientRect();
+  const startX = a.left + a.width / 2, startY = a.top + a.height * 0.6;
+  const t0 = target.getBoundingClientRect(); // 칸 위치는 미리 잡는다(그 사이 다시 그려도 안전)
+  fly.style.left = `${startX - 40}px`;
+  fly.style.top = `${startY - 40}px`;
+  document.body.append(fly);
+
+  let settled = false;
+  const finish = () => { if (settled) return; settled = true; fly.remove(); afterFill(); };
+  fly.addEventListener("transitionend", finish, { once: true });
+  // 외계인 앞에 1.2초 보여 준 뒤 그 칸으로 이동
+  setTimeout(() => {
+    const dx = (t0.left + t0.width / 2) - startX;
+    const dy = (t0.top + t0.height / 2) - startY;
+    fly.style.transform = `translate(${dx}px, ${dy}px) scale(${t0.width / 80})`;
+    setTimeout(finish, 900); // transitionend가 안 오면 안전장치
+  }, 1200);
+}
+
 function updateGameState(data) {
+  const prevIndex = currentStageIndex;
   if (data.state) currentState = data.state;
   if (data.stage) {
     currentStageId = data.stage.id;
@@ -447,16 +496,33 @@ function updateGameState(data) {
   }
   if (data.dish) currentDishId = data.dish.id;
 
-  renderTileRecord(currentStageIndex); // 교환마다 현재 단계 칸 갱신
+  // 단계 종료 판정: done = 마지막 단계가 끝 / advanced = 직전 단계가 끝
+  let finishedIndex = -1;
+  if (currentState?.done) finishedIndex = currentStageIndex;
+  else if (data.stage?.advanced) finishedIndex = prevIndex;
 
-  if (currentState && currentState.done) {
-    if (data.result && resultOverlayEl) {
-      if (resultImageEl) resultImageEl.src = data.result.image;
-      resultSuccess = data.result.success;
-      resultOverlayEl.hidden = false;
-      showRecord();
-    }
-    sendButton.disabled = true;
+  if (finishedIndex >= 0) {
+    // 끝난 단계 타일을 내밀고(날아가고) 나서야 그 칸을 채우고 다음 포즈로 바꾼다
+    playOffer(finishedIndex, () => {
+      renderTileRecord();
+      if (currentState?.done) {
+        if (data.result && resultOverlayEl) {
+          if (resultImageEl) resultImageEl.src = data.result.image;
+          resultSuccess = data.result.success;
+          resultOverlayEl.hidden = false;
+          showRecord();
+        }
+        sendButton.disabled = true;
+        hideThink();
+      } else {
+        showAlien(data); // 그다음 다음 단계 포즈 (첫 추측 타일은 화면에 안 보임)
+        updateThink();   // 새 단계 진행 중 → 말풍선 다시
+      }
+    });
+  } else {
+    showAlien(data);
+    renderTileRecord();
+    updateThink();
   }
 }
 
@@ -481,7 +547,6 @@ async function startCooking() {
     if (!response.ok) {
       throw new Error(data.error?.message || "요리를 시작하지 못했습니다.");
     }
-    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
@@ -523,7 +588,6 @@ sendButton.addEventListener("click", async () => {
         signal: { color: signal.color, texture: signal.texture, seed: signal.seed }, scores: signal.scores,
       });
     }
-    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
@@ -693,7 +757,7 @@ function playTile(scores, motif) {
 function showTip(event, tile) {
   const item = lines?.[tile];
   const line = document.createElement("q");
-  line.textContent = item?.text ?? (lines === null ? "대사를 만드는 중…" : "…");
+  line.textContent = item?.text ?? "대사를 만드는 중…"; // 아직 안 온 타일
   const img = document.createElement("img");
   img.alt = "";
   img.hidden = !item?.image;
@@ -733,11 +797,7 @@ recordCanvas?.addEventListener("pointerleave", () => {
   drawRecord();
 });
 
-const RECORD_NOTES = {
-  no_key: "OpenAI 키가 없어 준비된 대사를 보여 줘요.",
-  openai_failed: "OpenAI 응답이 실패해 준비된 대사를 보여 줘요.",
-};
-
+// 단계별로 /api/record를 병렬 호출하고, 먼저 온 단계부터 기호에 붙인다(체감 대기 단축).
 async function showRecord() {
   if (!recordCanvas) return;
   const token = ++recordToken;
@@ -746,32 +806,47 @@ async function showRecord() {
   lines = null;
   buildSymbols();
   drawRecord();
-  if (!history.length) return;
-  recordCaption.textContent = "대사를 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
-  try {
-    const response = await fetch("/api/record", {
+  if (!history.length) { recordCaption.textContent = ""; return; }
+
+  lines = Array(history.length).fill(null); // 도착한 단계부터 채운다
+  recordCaption.textContent = "외계인이 신호를 보내는 중이에요";
+
+  // 단계별로 그룹화(전역 인덱스 추적). 단계는 끝나야 다음으로 가므로 연속 블록
+  const groups = STAGE_IDS.map(() => []);
+  history.forEach((entry, i) => {
+    const s = STAGE_IDS.indexOf(entry.stage);
+    if (s >= 0) groups[s].push({ entry, index: i });
+  });
+  // 엉뚱한 방법: 성공이면 첫 단계 1번, 실패면 앞 세 단계 1번씩(총 3 = "2~3번"). 서버가 그 수만큼 주입
+  const wrongFor = (s) => (resultSuccess ? (s === 0 ? 1 : 0) : (s < 3 ? 1 : 0));
+
+  const calls = groups.map((group, s) => {
+    if (!group.length) return Promise.resolve();
+    const entries = group.map(({ entry: { who, stage, message, signal, scores } }) =>
+      who === "user" ? { who, stage, message, signal } : { who, stage, message, scores });
+    return fetch("/api/record", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dish: currentDishId,
-        success: resultSuccess,
-        entries: history.map(({ who, stage, message, signal, scores }) =>
-          who === "user" ? { who, stage, message, signal } : { who, stage, message, scores }),
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
-    if (token !== recordToken) return; // 그 사이 다시 시작함
-    lines = data.lines;
-    recordCaption.textContent = "기호에 마우스를 올리면 그때 나눈 대화가 들려요.";
-    const [source, reason] = data.source.split(":");
-    if (RECORD_NOTES[source]) recordCaption.textContent += ` (${RECORD_NOTES[source]}${reason ? ` 오류: ${reason}` : ""})`;
-  } catch (error) {
-    if (token !== recordToken) return;
-    lines = [];
-    // "Failed to fetch" = 서버와 연결이 끊김(서버 종료·재시작 등)
-    recordCaption.textContent = `대사를 불러오지 못했어요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
-  }
+      body: JSON.stringify({ dish: currentDishId, success: resultSuccess, wrong: wrongFor(s), entries }),
+    })
+      .then((r) => r.json().then((data) => {
+        if (!r.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
+        return data;
+      }))
+      .then((data) => {
+        if (token !== recordToken) return;
+        data.lines.forEach((ln, j) => { lines[group[j].index] = ln; }); // 도착순으로 채움
+      })
+      .catch((err) => {
+        if (token !== recordToken) return;
+        console.error(err);
+        group.forEach(({ index }) => { if (lines[index] === null) lines[index] = { text: "…", image: null }; });
+      });
+  });
+
+  await Promise.allSettled(calls);
+  if (token !== recordToken) return;
+  recordCaption.textContent = ""; // 다 만들면 비움
 }
 
 // 페이지 시작 시 요리 시작 API 호출

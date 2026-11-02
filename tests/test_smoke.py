@@ -442,6 +442,18 @@ class RecordDialogueTest(unittest.TestCase):
         self.assertEqual(counts[True], 1)
         self.assertGreater(counts[False], 1)
 
+    def test_wrong_count_controls_injected_methods(self):
+        # 단계별 병렬 호출: wrong=N이면 그 묶음에 엉뚱한 방법 대사를 정확히 N개 넣는다
+        alien = {"who": "alien", "stage": "cook", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "cook", "message": "타일", "signal": TILE}
+        wrong_set = set(CONFIG["record"]["fallback_lines"]["wrong"])
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            for n in (0, 2):
+                lines = self.client.post("/api/record", json={
+                    "dish": "ramen", "entries": [alien, user] * 3, "success": True, "wrong": n,
+                }).get_json()["lines"]
+                self.assertEqual(sum(l["text"] in wrong_set for l in lines), n)
+
     def test_rejects_bad_entries(self):
         for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
                         [{"who": "user", "stage": "nope", "signal": TILE}]):
