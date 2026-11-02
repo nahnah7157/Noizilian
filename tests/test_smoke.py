@@ -346,6 +346,17 @@ class CookingFlowTest(unittest.TestCase):
         self.assertIn(data["alien"]["expression"], CONFIG["expressions"])
         self.assertIsNone(data["result"])
 
+    def test_resend_after_undo_uses_previous_state(self):
+        # 되돌리기 = 이전 state로 복원. 같은(이전) state로 다시 보내도 서버가 정상 응답한다
+        s0 = self.start()["state"]
+        first = self.send(s0).get_json()  # s0 -> s1
+        self.assertEqual(first["state"]["exchange_count"], 1)
+        again = self.send(s0)  # 되돌린 뒤 같은 s0로 다시 보냄
+        self.assertEqual(again.status_code, 200)
+        data = again.get_json()
+        self.assertIsInstance(data["reply"], str)
+        self.assertEqual(data["state"]["exchange_count"], 1)  # s0 기준이라 다시 1
+
     def test_stage_advances_within_max_exchanges(self):
         # 같은 타일만 보내도 최대 4번 안에는 다음 단계로 넘어간다 (exchange.max_exchanges)
         state = self.start()["state"]
