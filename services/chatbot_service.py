@@ -370,11 +370,12 @@ class ChatbotService:
             "result": None,
         }
 
-    def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool) -> dict:
+    def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool,
+                        wrong: int | None = None) -> dict:
         """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
-        entries는 app.parse_record()가 검증한 값."""
+        entries는 app.parse_record()가 검증한 값. wrong은 단계별 호출 시 넣을 엉뚱한 방법 대사 수."""
         fallback = (character.get("record") or {}).get("fallback_lines") or {}
-        lines, source = self.generator.record_lines(entries, self.dishes_of(character)[dish_id], fallback, success)
+        lines, source = self.generator.record_lines(entries, self.dishes_of(character)[dish_id], fallback, success, wrong)
         alien = [i for i, e in enumerate(entries) if e["who"] == "alien"]
         images, image_source = pick_line_images([lines[i] for i in alien], character)
         image_of = dict(zip(alien, images))

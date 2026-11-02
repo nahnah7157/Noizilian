@@ -271,7 +271,6 @@ let currentFreq = 0.65;
 const tileCanvas = document.getElementById("preview-tile");
 const colorCanvas = document.getElementById("color-canvas");
 const hueSlider = document.getElementById("hue-slider");
-const undoBtn = document.getElementById("undo-btn");
 
 if (tileCanvas && colorCanvas && hueSlider) {
   // 색 네모 클릭·드래그: 가로=채도(S), 세로=명도(V)
@@ -315,21 +314,20 @@ if (tileCanvas && colorCanvas && hueSlider) {
     }
   }
 
-  // 되돌리기: 마지막으로 보낸 신호(색·크기·밀도)로 되돌린다
-  let sentSignal = null;
-  undoBtn.addEventListener("click", () => {
-    if (!sentSignal) return;
-    currentHue = sentSignal.hsv.h;
-    currentSat = sentSignal.hsv.s;
-    currentVal = sentSignal.hsv.v;
-    currentDensity = sentSignal.density;
-    currentFreq = sentSignal.texture.freq;
+  // 취소한 타일 값(색·크기·밀도)으로 선택기를 돌려놓는다 (section 6 되돌리기에서 호출)
+  function restore(sig) {
+    if (!sig) return;
+    currentHue = sig.hsv.h;
+    currentSat = sig.hsv.s;
+    currentVal = sig.hsv.v;
+    currentDensity = sig.density;
+    currentFreq = sig.texture.freq;
     hueSlider.value = currentHue;
     document.getElementById("sense-density").value = currentDensity * 100;
     document.getElementById("sense-freq").value = 130 - currentFreq * 100;
     renderColorCanvas();
     update();
-  });
+  }
 
   // 색 네모 배경: 현재 hue의 채도(가로)×명도(세로) 그래디언트
   function renderColorCanvas() {
@@ -369,7 +367,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
   window.noizilian = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
-    markSent: () => { sentSignal = current; },
+    restore,
   };
 
   renderColorCanvas();
@@ -394,6 +392,11 @@ const alienExpr = document.getElementById("alien-expression");
 const resultOverlayEl = document.getElementById("result-overlay");
 const resultImageEl = document.getElementById("result-image");
 const restartBtn = document.getElementById("restart-btn");
+const signalCenter = document.getElementById("signal-center");
+const thinkEl = document.getElementById("alien-think");
+const thinkTile = thinkEl?.querySelector(".think-tile");
+const thinkDots = thinkEl?.querySelector(".think-dots");
+const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 let currentState = null;
 let currentStageId = null;
@@ -404,11 +407,17 @@ const stageNames = {};
 // 레코드에 새길 대화: 지구인 {who, stage, message, signal, scores} / 외계인 {who, stage, message, scores}
 let history = [];
 
+const undoBtn = document.getElementById("undo-btn");
+let undoStack = []; // 이번 단계에서 보낸 타일마다의 스냅샷 (되돌리기 = 보낸 타일 취소)
+let awaiting = false; // 서버 응답 대기 중
+
 const STAGE_IDS = ["ingredient", "prep", "cook", "plating"];
 
-// 윗줄 외계인(머리 아이콘 + 4단계) / 아랫줄 나(머리 아이콘 + 4단계).
-// 현재 단계 칸은 교환마다 갱신, 지난 단계는 마지막 타일로 자동 고정(findLast)
-function renderTileRecord(stageIndex = currentStageIndex) {
+// 윗줄 외계인 4칸 / 아랫줄 나 4칸 = 4단계. 단계가 "끝났을 때만" 그 칸을 채운다(진행 중엔 빈칸).
+function stageFinished(i) {
+  return !!(currentState?.done || i < currentStageIndex);
+}
+function renderTileRecord() {
   const record = document.getElementById("tile-record");
   if (!record) return;
   record.innerHTML = "";
@@ -418,10 +427,10 @@ function renderTileRecord(stageIndex = currentStageIndex) {
     if (who === "alien") icon.src = "/assets/images/alien/alien_cute_a.png";
     record.append(icon);
     STAGE_IDS.forEach((stageId, i) => {
-      const entry = history.findLast(e => e.who === who && e.stage === stageId);
       const cell = document.createElement("canvas");
       cell.width = cell.height = 60;
-      cell.className = "record-cell" + (i === stageIndex ? " current" : "");
+      cell.className = "record-cell";
+      const entry = stageFinished(i) ? history.findLast(e => e.who === who && e.stage === stageId) : null;
       if (who === "alien" && entry) {
         const texture = textureFor(entry.scores.hs);
         renderTile(cell, colorFor(entry.scores, texture), texture, 12345);
@@ -438,7 +447,82 @@ function showAlien(data) {
   if (data.image) alienExpr.src = data.image;
 }
 
+// 진행 중 외계인 머리 위 말풍선: 내가 방금 보낸 타일(없으면 "…")을 띄우고 깜박인다(속도 = 확신)
+function updateThink() {
+  if (!thinkEl) return;
+  const show = !!(currentState && !currentState.done);
+  thinkEl.hidden = !show;
+  if (!show) return;
+  signalCenter?.style.setProperty("--think", Math.max(0, Math.min(1, currentState.confidence || 0)).toFixed(3));
+  const mine = history.findLast(e => e.who === "user" && e.stage === currentStageId);
+  if (mine?.signal?.color && thinkTile) {
+    renderTile(thinkTile, mine.signal.color, mine.signal.texture, 54321);
+    thinkTile.hidden = false;
+    if (thinkDots) thinkDots.hidden = true;
+  } else {
+    if (thinkTile) thinkTile.hidden = true;
+    if (thinkDots) thinkDots.hidden = false;
+  }
+}
+function hideThink() {
+  if (thinkEl) thinkEl.hidden = true;
+}
+
+// 되돌릴 게 없거나 응답 대기 중이거나 요리가 끝났으면 비활성
+function refreshUndo() {
+  if (undoBtn) undoBtn.disabled = !undoStack.length || awaiting || !!currentState?.done;
+}
+
+// 한 타일을 (startX,startY)에서 칸으로 날려 보낸다. draw(canvas)로 타일을 그린다. 끝나면 resolve
+function flyTile(draw, startX, startY, cell) {
+  return new Promise((resolve) => {
+    const fly = document.createElement("canvas");
+    fly.width = fly.height = 80;
+    draw(fly);
+    fly.className = "fly-tile";
+    const t0 = cell.getBoundingClientRect(); // 칸 위치 미리 잡기(그 사이 다시 그려도 안전)
+    fly.style.left = `${startX - 40}px`;
+    fly.style.top = `${startY - 40}px`;
+    document.body.append(fly);
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; fly.remove(); resolve(); };
+    fly.addEventListener("transitionend", finish, { once: true });
+    setTimeout(() => {
+      const dx = (t0.left + t0.width / 2) - startX;
+      const dy = (t0.top + t0.height / 2) - startY;
+      fly.style.transform = `translate(${dx}px, ${dy}px) scale(${t0.width / 80})`;
+      setTimeout(finish, 900); // transitionend가 안 오면 안전장치
+    }, 1200);
+  });
+}
+
+// 단계 끝: 내 타일(말풍선)→아랫줄 칸, 외계인 타일(외계인 앞)→윗줄 칸으로 같이 날아가 고정
+function playOffer(finishedIndex, afterFill) {
+  const stageId = STAGE_IDS[finishedIndex];
+  const alienE = history.findLast(e => e.who === "alien" && e.stage === stageId);
+  const userE = history.findLast(e => e.who === "user" && e.stage === stageId);
+  const cells = document.querySelectorAll("#tile-record .record-cell");
+  const topCell = cells[finishedIndex], botCell = cells[4 + finishedIndex]; // 윗줄 0~3, 아랫줄 4~7
+  const a = alienExpr.getBoundingClientRect();
+  const b = (thinkEl && !thinkEl.hidden) ? thinkEl.getBoundingClientRect() : a; // 말풍선 위치(숨겨졌으면 외계인)
+  hideThink();
+  if (reduceMotion || !topCell || !botCell) { afterFill(); return; }
+
+  const jobs = [];
+  if (alienE) jobs.push(flyTile((c) => {
+    const tx = textureFor(alienE.scores.hs);
+    renderTile(c, colorFor(alienE.scores, tx), tx, 12345);
+  }, a.left + a.width / 2, a.top + a.height * 0.6, topCell));
+  if (userE?.signal?.color) jobs.push(flyTile((c) =>
+    renderTile(c, userE.signal.color, userE.signal.texture, 54321),
+    b.left + b.width / 2, b.top + b.height / 2, botCell));
+
+  if (!jobs.length) { afterFill(); return; }
+  Promise.all(jobs).then(afterFill);
+}
+
 function updateGameState(data) {
+  const prevIndex = currentStageIndex;
   if (data.state) currentState = data.state;
   if (data.stage) {
     currentStageId = data.stage.id;
@@ -447,16 +531,35 @@ function updateGameState(data) {
   }
   if (data.dish) currentDishId = data.dish.id;
 
-  renderTileRecord(currentStageIndex); // 교환마다 현재 단계 칸 갱신
+  // 단계 종료 판정: done = 마지막 단계가 끝 / advanced = 직전 단계가 끝
+  let finishedIndex = -1;
+  if (currentState?.done) finishedIndex = currentStageIndex;
+  else if (data.stage?.advanced) finishedIndex = prevIndex;
+  if (finishedIndex >= 0) undoStack = []; // 단계가 바뀌면 되돌리기 스냅샷 비움(이전 단계로 안 감)
+  refreshUndo();
 
-  if (currentState && currentState.done) {
-    if (data.result && resultOverlayEl) {
-      if (resultImageEl) resultImageEl.src = data.result.image;
-      resultSuccess = data.result.success;
-      resultOverlayEl.hidden = false;
-      showRecord();
-    }
-    sendButton.disabled = true;
+  if (finishedIndex >= 0) {
+    // 끝난 단계 타일을 내밀고(날아가고) 나서야 그 칸을 채우고 다음 포즈로 바꾼다
+    playOffer(finishedIndex, () => {
+      renderTileRecord();
+      if (currentState?.done) {
+        if (data.result && resultOverlayEl) {
+          if (resultImageEl) resultImageEl.src = data.result.image;
+          resultSuccess = data.result.success;
+          resultOverlayEl.hidden = false;
+          showRecord();
+        }
+        sendButton.disabled = true;
+        hideThink();
+      } else {
+        showAlien(data); // 그다음 다음 단계 포즈 (첫 추측 타일은 화면에 안 보임)
+        updateThink();   // 새 단계 진행 중 → 말풍선 다시
+      }
+    });
+  } else {
+    showAlien(data);
+    renderTileRecord();
+    updateThink();
   }
 }
 
@@ -468,6 +571,9 @@ function addAlienToHistory(data) {
 
 async function startCooking() {
   history = [];
+  undoStack = [];
+  awaiting = false;
+  refreshUndo();
   if (resultOverlayEl) resultOverlayEl.hidden = true;
   sendButton.disabled = false;
 
@@ -481,7 +587,6 @@ async function startCooking() {
     if (!response.ok) {
       throw new Error(data.error?.message || "요리를 시작하지 못했습니다.");
     }
-    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
@@ -499,9 +604,18 @@ sendButton.addEventListener("click", async () => {
   const signal = window.noizilian?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
 
-  window.noizilian.markSent(); // 되돌리기 기준: 방금 보낸 신호
+  // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
+  undoStack.push({
+    state: currentState ? structuredClone(currentState) : null,
+    stageId: currentStageId,
+    stageIndex: currentStageIndex,
+    historyLen: history.length,
+    signal: structuredClone(signal),
+  });
   const sentStage = currentStageId;
+  awaiting = true;
   sendButton.disabled = true;
+  refreshUndo();
 
   try {
     const response = await fetch("/api/chat", {
@@ -523,14 +637,30 @@ sendButton.addEventListener("click", async () => {
         signal: { color: signal.color, texture: signal.texture, seed: signal.seed }, scores: signal.scores,
       });
     }
-    showAlien(data);
     addAlienToHistory(data);
     updateGameState(data);
   } catch (error) {
     console.error(error);
+    undoStack.pop(); // 교환이 일어나지 않았으니 방금 스냅샷 취소
   } finally {
+    awaiting = false;
     if (!currentState?.done) sendButton.disabled = false;
+    refreshUndo();
   }
+});
+
+// 되돌리기(↺): 방금 보낸 타일을 취소 — history에서 빼고 확신·단계를 그 전으로, 선택기는 그 타일 값으로
+undoBtn?.addEventListener("click", () => {
+  if (!undoStack.length || awaiting || currentState?.done) return;
+  const snap = undoStack.pop();
+  currentState = snap.state;
+  currentStageId = snap.stageId;
+  currentStageIndex = snap.stageIndex;
+  history.length = snap.historyLen; // 방금 보낸 내 타일 + 외계인 응답 제거
+  window.noizilian?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
+  renderTileRecord();
+  updateThink();
+  refreshUndo();
 });
 
 // ── 7. 골든 레코드 ──────────────────────────────────────────
@@ -693,7 +823,7 @@ function playTile(scores, motif) {
 function showTip(event, tile) {
   const item = lines?.[tile];
   const line = document.createElement("q");
-  line.textContent = item?.text ?? (lines === null ? "대사를 만드는 중…" : "…");
+  line.textContent = item?.text ?? "대사를 만드는 중…"; // 아직 안 온 타일
   const img = document.createElement("img");
   img.alt = "";
   img.hidden = !item?.image;
@@ -733,11 +863,7 @@ recordCanvas?.addEventListener("pointerleave", () => {
   drawRecord();
 });
 
-const RECORD_NOTES = {
-  no_key: "OpenAI 키가 없어 준비된 대사를 보여 줘요.",
-  openai_failed: "OpenAI 응답이 실패해 준비된 대사를 보여 줘요.",
-};
-
+// 단계별로 /api/record를 병렬 호출하고, 먼저 온 단계부터 기호에 붙인다(체감 대기 단축).
 async function showRecord() {
   if (!recordCanvas) return;
   const token = ++recordToken;
@@ -746,32 +872,47 @@ async function showRecord() {
   lines = null;
   buildSymbols();
   drawRecord();
-  if (!history.length) return;
-  recordCaption.textContent = "대사를 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
-  try {
-    const response = await fetch("/api/record", {
+  if (!history.length) { recordCaption.textContent = ""; return; }
+
+  lines = Array(history.length).fill(null); // 도착한 단계부터 채운다
+  recordCaption.textContent = "외계인이 신호를 보내는 중이에요";
+
+  // 단계별로 그룹화(전역 인덱스 추적). 단계는 끝나야 다음으로 가므로 연속 블록
+  const groups = STAGE_IDS.map(() => []);
+  history.forEach((entry, i) => {
+    const s = STAGE_IDS.indexOf(entry.stage);
+    if (s >= 0) groups[s].push({ entry, index: i });
+  });
+  // 엉뚱한 방법: 성공이면 첫 단계 1번, 실패면 앞 세 단계 1번씩(총 3 = "2~3번"). 서버가 그 수만큼 주입
+  const wrongFor = (s) => (resultSuccess ? (s === 0 ? 1 : 0) : (s < 3 ? 1 : 0));
+
+  const calls = groups.map((group, s) => {
+    if (!group.length) return Promise.resolve();
+    const entries = group.map(({ entry: { who, stage, message, signal, scores } }) =>
+      who === "user" ? { who, stage, message, signal } : { who, stage, message, scores });
+    return fetch("/api/record", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dish: currentDishId,
-        success: resultSuccess,
-        entries: history.map(({ who, stage, message, signal, scores }) =>
-          who === "user" ? { who, stage, message, signal } : { who, stage, message, scores }),
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
-    if (token !== recordToken) return; // 그 사이 다시 시작함
-    lines = data.lines;
-    recordCaption.textContent = "기호에 마우스를 올리면 그때 나눈 대화가 들려요.";
-    const [source, reason] = data.source.split(":");
-    if (RECORD_NOTES[source]) recordCaption.textContent += ` (${RECORD_NOTES[source]}${reason ? ` 오류: ${reason}` : ""})`;
-  } catch (error) {
-    if (token !== recordToken) return;
-    lines = [];
-    // "Failed to fetch" = 서버와 연결이 끊김(서버 종료·재시작 등)
-    recordCaption.textContent = `대사를 불러오지 못했어요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
-  }
+      body: JSON.stringify({ dish: currentDishId, success: resultSuccess, wrong: wrongFor(s), entries }),
+    })
+      .then((r) => r.json().then((data) => {
+        if (!r.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
+        return data;
+      }))
+      .then((data) => {
+        if (token !== recordToken) return;
+        data.lines.forEach((ln, j) => { lines[group[j].index] = ln; }); // 도착순으로 채움
+      })
+      .catch((err) => {
+        if (token !== recordToken) return;
+        console.error(err);
+        group.forEach(({ index }) => { if (lines[index] === null) lines[index] = { text: "…", image: null }; });
+      });
+  });
+
+  await Promise.allSettled(calls);
+  if (token !== recordToken) return;
+  recordCaption.textContent = ""; // 다 만들면 비움
 }
 
 // 페이지 시작 시 요리 시작 API 호출
