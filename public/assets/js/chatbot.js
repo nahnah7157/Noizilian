@@ -393,13 +393,13 @@ const sendButton = document.getElementById("send-btn");
 const alienExpr = document.getElementById("alien-expression");
 const resultOverlayEl = document.getElementById("result-overlay");
 const resultImageEl = document.getElementById("result-image");
-const resultLineEl = document.getElementById("result-line");
 const restartBtn = document.getElementById("restart-btn");
 
 let currentState = null;
 let currentStageId = null;
 let currentStageIndex = 0;
 let currentDishId = null;
+let resultSuccess = true;
 const stageNames = {};
 // 레코드에 새길 대화: 지구인 {who, stage, message, signal, scores} / 외계인 {who, stage, message, scores}
 let history = [];
@@ -452,7 +452,7 @@ function updateGameState(data) {
   if (currentState && currentState.done) {
     if (data.result && resultOverlayEl) {
       if (resultImageEl) resultImageEl.src = data.result.image;
-      if (resultLineEl) resultLineEl.textContent = data.result.line;
+      resultSuccess = data.result.success;
       resultOverlayEl.hidden = false;
       showRecord();
     }
@@ -534,14 +534,21 @@ sendButton.addEventListener("click", async () => {
 });
 
 // ── 7. 골든 레코드 ──────────────────────────────────────────
-// 주고받은 타일을 바깥에서 안쪽으로 도는 나선 홈에 순서대로 새긴다. 홈 위에 마우스를 올리면 해석이 뜬다.
+// 주고받은 타일마다 무작위 기호 3개(한 묶음)를 바깥에서 안쪽으로 도는 나선 홈을 따라 새긴다.
+// 묶음에 마우스를 올리면 ① 그 타일 값으로 만든 무작위 3음 소리 ② 타일을 말로 옮긴 대사(OpenAI)
+// ③ 외계인 대사면 대사와 가장 비슷한 외계인 그림(서버가 임베딩으로 고름)
 
 const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
 const recordCaption = document.getElementById("record-caption");
-const PER_TURN = 12; // 한 바퀴에 새기는 타일 수
-let interpretations = null;
+const PER_TURN = 12; // 한 바퀴에 들어가는 타일 수
+const SYMBOLS_PER_TILE = 3;
+let symbols = []; // {x, y, size, angle, glyph, tile}
+let motifs = []; // 타일마다 무작위 3음 패턴
+let lines = null; // 타일마다 {text, image} — null이면 아직 만드는 중
+let hovered = -1; // 마우스가 올라간 타일 번호
 let recordToken = 0;
+let audio = null;
 
 function recordGeometry() {
   const S = recordCanvas.width;
@@ -554,62 +561,144 @@ function arcOf(i) {
   return { r: outer - (i * pitch) / PER_TURN - band / 2, start, end: start + step - 0.06 };
 }
 
-function tilePattern(ctx, entry) {
-  const tile = document.createElement("canvas");
-  tile.width = tile.height = 48;
-  if (entry.who === "user") {
-    renderTile(tile, entry.signal.color, entry.signal.texture, entry.signal.seed);
-  } else {
-    const texture = textureFor(entry.scores.hs);
-    renderTile(tile, colorFor(entry.scores, texture), texture, 12345); // 채팅 말풍선의 외계인 타일과 같은 seed
-  }
-  return ctx.createPattern(tile, "repeat");
-}
-
-function drawRecord(highlight = -1) {
-  const ctx = recordCanvas.getContext("2d");
-  const { S, band } = recordGeometry();
-  ctx.clearRect(0, 0, S, S);
-  history.forEach((entry, i) => {
-    const { r, start, end } = arcOf(i);
-    entry.pattern ??= tilePattern(ctx, entry);
-    ctx.beginPath();
-    ctx.arc(S / 2, S / 2, r, start, end);
-    ctx.lineWidth = band + 3;
-    ctx.strokeStyle = i === highlight ? "#fff" : "rgb(0 0 0 / 45%)";
-    ctx.stroke();
-    ctx.lineWidth = band;
-    ctx.strokeStyle = entry.pattern;
-    ctx.stroke();
+/** 무작위 기호: 고리·막대·지그재그·점·반원 중 2~3개를 겹친다 (단위 좌표 -1~1) */
+function randomGlyph(rand) {
+  const kinds = ["ring", "bar", "zigzag", "dot", "half"];
+  return Array.from({ length: 2 + Math.floor(rand() * 2) }, () => {
+    const kind = kinds[Math.floor(rand() * kinds.length)];
+    const a = rand() * Math.PI * 2;
+    if (kind === "ring") return { kind, r: 0.4 + rand() * 0.6 };
+    if (kind === "dot") return { kind, x: Math.cos(a) * 0.6, y: Math.sin(a) * 0.6 };
+    if (kind === "half") return { kind, r: 0.5 + rand() * 0.4, a };
+    if (kind === "bar") return { kind, a };
+    const n = 3 + Math.floor(rand() * 2);
+    return { kind, points: Array.from({ length: n }, (_, j) => [-1 + (2 * j) / (n - 1), rand() * 2 - 1]) };
   });
 }
 
-function hitRecord(event) {
+/** 무작위 3음 패턴: 음계 안의 음·옥타브 뛰기·간격·길이를 매번 다르게 */
+function randomMotif() {
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  let at = 0;
+  return Array.from({ length: SYMBOLS_PER_TILE }, () => {
+    const note = { degree: Math.floor(Math.random() * 5), octave: pick([0, 0, 0, 1, -1]), at, length: 0.25 + Math.random() * 0.45 };
+    at += pick([0.12, 0.18, 0.25, 0.35]);
+    return note;
+  });
+}
+
+function buildSymbols() {
+  const { S, band } = recordGeometry();
+  symbols = [];
+  motifs = history.map(randomMotif);
+  history.forEach((entry, i) => {
+    const arc = arcOf(i);
+    for (let k = 0; k < SYMBOLS_PER_TILE; k++) {
+      const angle = arc.start + ((k + 0.5) * (arc.end - arc.start)) / SYMBOLS_PER_TILE;
+      symbols.push({
+        x: S / 2 + arc.r * Math.cos(angle),
+        y: S / 2 + arc.r * Math.sin(angle),
+        size: band * 0.5,
+        angle,
+        glyph: randomGlyph(mulberry32(Math.floor(Math.random() * 2 ** 31))),
+        tile: i,
+      });
+    }
+  });
+}
+
+function drawGlyph(ctx, glyph) {
+  ctx.beginPath();
+  for (const part of glyph) {
+    if (part.kind === "ring") {
+      ctx.moveTo(part.r, 0);
+      ctx.arc(0, 0, part.r, 0, Math.PI * 2);
+    } else if (part.kind === "half") {
+      ctx.moveTo(part.r * Math.cos(part.a), part.r * Math.sin(part.a));
+      ctx.arc(0, 0, part.r, part.a, part.a + Math.PI);
+    } else if (part.kind === "bar") {
+      ctx.moveTo(-Math.cos(part.a), -Math.sin(part.a));
+      ctx.lineTo(Math.cos(part.a), Math.sin(part.a));
+    } else if (part.kind === "dot") {
+      ctx.moveTo(part.x + 0.12, part.y);
+      ctx.arc(part.x, part.y, 0.12, 0, Math.PI * 2);
+    } else {
+      part.points.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    }
+  }
+  ctx.stroke();
+}
+
+function drawRecord() {
+  const ctx = recordCanvas.getContext("2d");
+  const { S } = recordGeometry();
+  ctx.clearRect(0, 0, S, S);
+  ctx.lineCap = ctx.lineJoin = "round";
+  symbols.forEach((sym) => {
+    ctx.save();
+    ctx.translate(sym.x, sym.y);
+    ctx.rotate(sym.angle + Math.PI / 2); // 홈 방향으로 눕혀 새긴 느낌
+    ctx.scale(sym.size, sym.size);
+    ctx.lineWidth = 2.2 / sym.size;
+    ctx.shadowColor = "rgb(0 0 0 / 60%)";
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = sym.tile === hovered ? "#fff" : "rgb(255 236 170 / 90%)"; // 원본 레코드의 새긴 선 색
+    drawGlyph(ctx, sym.glyph);
+    ctx.restore();
+  });
+}
+
+/** 커서가 있는 묶음(타일) 번호, 없으면 -1. 기호 3개가 놓인 홈 구간 전체를 한 히트박스로 본다 */
+function hitTile(event) {
   const rect = recordCanvas.getBoundingClientRect();
   const { S, band } = recordGeometry();
   const x = ((event.clientX - rect.left) * S) / rect.width - S / 2;
   const y = ((event.clientY - rect.top) * S) / rect.height - S / 2;
   const r = Math.hypot(x, y);
   const angle = Math.atan2(y, x);
+  const reach = band * 0.7; // 기호 반지름(band × 0.5)보다 조금 넉넉하게
   return history.findIndex((_, i) => {
     const arc = arcOf(i);
     const d = (((angle - arc.start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-    return d <= arc.end - arc.start && Math.abs(r - arc.r) <= band / 2 + 2;
+    return d <= arc.end - arc.start && Math.abs(r - arc.r) <= reach;
   });
 }
 
-function showTip(event, i) {
-  const entry = history[i];
-  const title = document.createElement("strong");
-  title.textContent = `${i + 1}. ${entry.who === "user" ? "지구인" : "외계인"} · ${stageNames[entry.stage] || entry.stage}`;
-  const item = interpretations?.[i];
+/** 타일 점수 + 무작위 패턴으로 3음을 낸다. [앱 설정] 소리 대응은 논문이 아니라 우리가 정한 것:
+ *  무거움–가벼움 → 음높이, 따뜻함–차가움 → 장·단조 음계와 음색 밝기, 단단함–부드러움 → 파형과 시작 속도. */
+function playTile(scores, motif) {
+  audio ??= new AudioContext();
+  audio.resume();
+  const scale = scores.wc < 0 ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]; // 따뜻함 = 장조 5음, 차가움 = 단조 5음
+  const root = 262 * 2 ** scores.hl;
+  const attack = scores.hs > 0 ? 0.08 : 0.01; // 부드러울수록 천천히 시작
+  for (const note of motif) {
+    const start = audio.currentTime + note.at;
+    const osc = audio.createOscillator();
+    osc.type = scores.hs < -0.33 ? "square" : scores.hs > 0.33 ? "sine" : "triangle";
+    osc.frequency.value = root * 2 ** (note.octave + scale[note.degree] / 12);
+    const filter = audio.createBiquadFilter();
+    filter.frequency.value = 1800 * 2 ** -scores.wc; // 따뜻할수록(음수) 밝게
+    const gain = audio.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.15, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + note.length);
+    osc.connect(filter).connect(gain).connect(audio.destination);
+    osc.start(start);
+    osc.stop(start + note.length + 0.05);
+  }
+}
+
+// 대사는 타일 단위. 외계인 대사에만 그림
+function showTip(event, tile) {
+  const item = lines?.[tile];
   const line = document.createElement("q");
-  line.textContent = item?.line || "";
-  line.hidden = !item?.line;
-  const basis = document.createElement("small");
-  basis.textContent = item?.basis ?? (interpretations === null ? "해석을 만드는 중…" : describe(entry.scores));
-  basis.hidden = Boolean(item?.line); // 대사가 있으면 대화만 보여 준다
-  recordTip.replaceChildren(title, line, basis);
+  line.textContent = item?.text ?? (lines === null ? "대사를 만드는 중…" : "…");
+  const img = document.createElement("img");
+  img.alt = "";
+  img.hidden = !item?.image;
+  if (item?.image) img.src = item.image;
+  recordTip.replaceChildren(line, img);
   recordTip.hidden = false;
 
   const box = recordTip.parentElement.getBoundingClientRect();
@@ -620,73 +709,69 @@ function showTip(event, i) {
   recordTip.style.top = `${py < box.height / 2 ? py + 14 : py - recordTip.offsetHeight - 14}px`;
 }
 
-recordCanvas?.addEventListener("mousemove", (event) => {
-  const i = hitRecord(event);
-  if (i < 0) {
+// pointer = 마우스·펜·터치. 터치는 누를 때 한 번
+function onRecordPointer(event) {
+  const tile = hitTile(event);
+  if (tile < 0) {
     recordTip.hidden = true;
     recordCanvas.style.cursor = "";
   } else {
-    showTip(event, i);
-    recordCanvas.style.cursor = "help";
+    showTip(event, tile);
+    recordCanvas.style.cursor = "pointer";
+    if (tile !== hovered) playTile(history[tile].scores, motifs[tile]);
   }
-  drawRecord(i);
-});
-
-recordCanvas?.addEventListener("mouseleave", () => {
+  if (tile !== hovered) {
+    hovered = tile;
+    drawRecord();
+  }
+}
+recordCanvas?.addEventListener("pointermove", onRecordPointer);
+recordCanvas?.addEventListener("pointerdown", onRecordPointer);
+recordCanvas?.addEventListener("pointerleave", () => {
   recordTip.hidden = true;
+  hovered = -1;
   drawRecord();
 });
 
 const RECORD_NOTES = {
-  no_key: "OpenAI 키가 없어 공식 계산으로 해석했어요.",
-  openai_failed: "OpenAI 응답이 실패해 공식 계산으로 해석했어요.",
+  no_key: "OpenAI 키가 없어 준비된 대사를 보여 줘요.",
+  openai_failed: "OpenAI 응답이 실패해 준비된 대사를 보여 줘요.",
 };
 
-function showRecord() {
+async function showRecord() {
   if (!recordCanvas) return;
-  recordTip.hidden = true;
-  drawRecord();
-  if (history.length) loadInterpretations();
-}
-
-async function loadInterpretations() {
   const token = ++recordToken;
-  interpretations = null;
-  recordCaption.textContent = "해석을 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
+  recordTip.hidden = true;
+  hovered = -1;
+  lines = null;
+  buildSymbols();
+  drawRecord();
+  if (!history.length) return;
+  recordCaption.textContent = "대사를 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
   try {
-    const response = await fetch("/api/interpret", {
+    const response = await fetch("/api/record", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         dish: currentDishId,
+        success: resultSuccess,
         entries: history.map(({ who, stage, message, signal, scores }) =>
           who === "user" ? { who, stage, message, signal } : { who, stage, message, scores }),
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "해석을 받지 못했습니다.");
+    if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
     if (token !== recordToken) return; // 그 사이 다시 시작함
-    interpretations = data.interpretations;
-    recordCaption.textContent = "홈 위에 마우스를 올리면 그 신호의 해석이 보여요.";
+    lines = data.lines;
+    recordCaption.textContent = "기호에 마우스를 올리면 그때 나눈 대화가 들려요.";
     const [source, reason] = data.source.split(":");
     if (RECORD_NOTES[source]) recordCaption.textContent += ` (${RECORD_NOTES[source]}${reason ? ` 오류: ${reason}` : ""})`;
-    if (source === "openai_failed") recordCaption.append(retryButton());
   } catch (error) {
     if (token !== recordToken) return;
-    interpretations = [];
+    lines = [];
     // "Failed to fetch" = 서버와 연결이 끊김(서버 종료·재시작 등)
-    recordCaption.textContent = `서버에 연결하지 못해 신호 이름만 보여요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
-    recordCaption.append(retryButton());
+    recordCaption.textContent = `대사를 불러오지 못했어요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
   }
-}
-
-function retryButton() {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "reseed-button";
-  button.textContent = "다시 시도";
-  button.addEventListener("click", loadInterpretations);
-  return button;
 }
 
 // 페이지 시작 시 요리 시작 API 호출

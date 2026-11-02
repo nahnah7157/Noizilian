@@ -14,7 +14,7 @@ import math
 import random
 
 from .generator import DemoGenerator
-from .image_selector import DemoImageSelector
+from .image_selector import DemoImageSelector, pick_line_images
 from .retriever import DemoRetriever
 
 
@@ -288,7 +288,6 @@ def judge_dish(final_scores: dict, dish: dict, result: dict | None = None) -> di
         "distance": round(distance, 4),
         "per_stage": per_stage,
         "image": _url(dish["images"]["success" if success else "fail"]),
-        "line": result.get("success_line" if success else "fail_line", ""),
     }
 
 
@@ -371,10 +370,16 @@ class ChatbotService:
             "result": None,
         }
 
-    def interpret_record(self, character: dict, dish_id: str, entries: list[dict]) -> dict:
-        """대화가 끝난 뒤 레코드에 새긴 타일마다 해석을 붙인다. entries는 app.parse_record()가 검증한 값."""
-        interpretations, source = self.generator.interpret_record(entries, self.dishes_of(character)[dish_id], describe)
-        return {"interpretations": interpretations, "source": source}
+    def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool) -> dict:
+        """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
+        entries는 app.parse_record()가 검증한 값."""
+        fallback = (character.get("record") or {}).get("fallback_lines") or {}
+        lines, source = self.generator.record_lines(entries, self.dishes_of(character)[dish_id], fallback, success)
+        alien = [i for i, e in enumerate(entries) if e["who"] == "alien"]
+        images, image_source = pick_line_images([lines[i] for i in alien], character)
+        image_of = dict(zip(alien, images))
+        return {"lines": [{"text": line, "image": image_of.get(i)} for i, line in enumerate(lines)],
+                "source": source, "image_source": image_source}
 
     def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict) -> dict:
         """사용자 타일 한 장을 받아 확신을 갱신하고, 외계인의 다음 타일·표정을 돌려준다.

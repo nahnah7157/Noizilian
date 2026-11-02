@@ -51,7 +51,6 @@ def bot_view(config: dict) -> dict:
         "name": config["name"],
         "description": config.get("description", ""),
         "tags": config.get("tags", []),
-        "greeting": config.get("greeting", "안녕하세요!"),
         "image": asset_url(thumbnail),
     }
 
@@ -228,19 +227,23 @@ def api_start():
         return error_response("start_failed", "시작하지 못했습니다. 다시 시도해주세요.", 500)
 
 
-@app.post("/api/interpret")
-def api_interpret():
-    """대화가 끝난 뒤 레코드에 새긴 타일마다 논문 기준 해석을 돌려줍니다."""
+@app.post("/api/record")
+def api_record():
+    """대화가 끝난 뒤 레코드의 타일마다 대사(외계인 대사엔 임베딩으로 고른 그림)를 돌려줍니다."""
     config = load_config()
     try:
-        dish, entries = parse_record(request.get_json(silent=True), config)
+        payload = request.get_json(silent=True)
+        dish, entries = parse_record(payload, config)
+        success = payload.get("success")
+        if not isinstance(success, bool):
+            raise ValueError("success는 true 또는 false여야 합니다.")
     except ValueError as error:
         return error_response("invalid_record", str(error), 400)
     try:
-        return jsonify(chatbot.interpret_record(config, dish, entries))
+        return jsonify(chatbot.record_dialogue(config, dish, entries, success))
     except Exception:
-        app.logger.exception("레코드 해석 실패")
-        return error_response("interpret_failed", "해석을 만들지 못했습니다.", 500)
+        app.logger.exception("레코드 대사 생성 실패")
+        return error_response("record_failed", "레코드 대사를 만들지 못했습니다.", 500)
 
 
 @app.get("/health")
