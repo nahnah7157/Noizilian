@@ -398,37 +398,57 @@ class CookingFlowTest(unittest.TestCase):
 STAGES_ORDER = [s["id"] for s in CONFIG["stages"]]
 
 
-class RecordInterpretTest(unittest.TestCase):
-    """대화가 끝난 뒤 레코드 해석 API. OpenAI 키가 없으면 공식 계산 설명으로 대신한다."""
+class RecordDialogueTest(unittest.TestCase):
+    """레코드 대사: 타일마다 대사 한 문장, 외계인 대사에만 임베딩으로 고른 그림."""
 
     def setUp(self):
         self.client = app.test_client()
 
-    def interpret(self, entries):
+    def record(self, entries, success=True):
         with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
-            return self.client.post("/api/interpret", json={"dish": "ramen", "entries": entries})
+            return self.client.post("/api/record", json={"dish": "ramen", "entries": entries, "success": success})
 
-    def test_formula_fallback_one_per_tile(self):
+    def test_picks_most_similar_image(self):
+        from services.image_selector import match_images
+
+        vectors = {"썰자": [1, 0], "굽자": [0, 1], "칼 그림": [0.9, 0.1], "팬 그림": [0.1, 0.9]}
+        images = {"assets/knife.png": "칼 그림", "assets/pan.png": "팬 그림"}
+        self.assertEqual(match_images(["썰자", "굽자"], images, lambda texts: [vectors[t] for t in texts]),
+                         ["/assets/knife.png", "/assets/pan.png"])
+
+    def test_without_key_uses_fallback_lines_and_alien_images(self):
         alien = {"who": "alien", "stage": "ingredient", "message": "이거…?", "scores": {a: 0.0 for a in AXES}}
-        user = {"who": "user", "stage": "ingredient", "message": "따뜻하게", "signal": TILE}
-        response = self.interpret([alien, user])
+        user = {"who": "user", "stage": "ingredient", "message": "타일", "signal": TILE}
+        response = self.record([alien, user, alien])
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(data["source"], "no_key")
-        self.assertEqual(len(data["interpretations"]), 2)
-        self.assertIn("재료 준비", data["interpretations"][1]["basis"])
+        fallback = CONFIG["record"]["fallback_lines"]
+        # 성공이어도 가운데 외계인 대사 하나는 엉뚱한 요리 방법
+        self.assertEqual([l["text"] for l in data["lines"]],
+                         [fallback["alien"][0], fallback["user"][0], fallback["wrong"][0]])
+        self.assertIsNone(data["lines"][1]["image"])
+        for line in (data["lines"][0], data["lines"][2]):
+            self.assertTrue((Path("public") / line["image"].lstrip("/")).is_file(), line["image"])
 
-    def test_user_scores_are_recomputed(self):
-        # 브라우저가 보낸 점수는 무시하고 색·질감으로 다시 계산한다
-        fake = {"who": "user", "stage": "prep", "signal": TILE, "scores": {a: 1.0 for a in AXES}}
-        expected = parse_signal(TILE)["description"]
-        self.assertIn(expected, self.interpret([fake]).get_json()["interpretations"][0]["basis"])
+    def test_fail_has_more_wrong_methods_than_success(self):
+        alien = {"who": "alien", "stage": "cook", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "cook", "message": "타일", "signal": TILE}
+        wrong = set(CONFIG["record"]["fallback_lines"]["wrong"])
+        counts = {}
+        for success in (True, False):
+            lines = self.record([alien, user] * 9, success).get_json()["lines"]
+            counts[success] = sum(l["text"] in wrong for l in lines)
+        self.assertEqual(counts[True], 1)
+        self.assertGreater(counts[False], 1)
 
     def test_rejects_bad_entries(self):
         for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
                         [{"who": "user", "stage": "nope", "signal": TILE}]):
             with self.subTest(entries=entries):
-                self.assertEqual(self.interpret(entries).status_code, 400)
+                self.assertEqual(self.record(entries).status_code, 400)
+        alien = {"who": "alien", "stage": "prep", "scores": {a: 0.0 for a in AXES}}
+        self.assertEqual(self.record([alien], success="yes").status_code, 400)
 
 
 if __name__ == "__main__":

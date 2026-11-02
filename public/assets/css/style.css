@@ -272,15 +272,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border-radius: 12px;
   object-fit: contain;
 }
-#result-line { margin: 0 0 24px; font-size: 1.1rem; font-weight: 600; line-height: 1.5; }
 .result-dish { flex: 1 1 260px; }
 .record { flex: 1.4 1 320px; margin: 0; }
 .record-disc { position: relative; aspect-ratio: 1; }
-.record-disc img, .record-disc canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.record-disc > img, .record-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .record-tip {
   position: absolute;
   z-index: 1;
-  width: min(280px, 80%);
+  width: min(180px, 60%);
   padding: 10px 12px;
   border-radius: 10px;
   background: rgb(255 255 255 / 95%);
@@ -290,12 +289,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   text-align: left;
   pointer-events: none;
 }
-.record-tip strong { display: block; margin-bottom: 4px; color: #764ba2; }
-.record-tip q { display: block; margin-bottom: 6px; font-size: .95rem; font-weight: 600; }
-.record-tip [hidden] { display: none; }
-.record-tip small { display: block; color: #666; }
+.record-tip img { display: block; width: 96px; height: auto; margin: 6px auto 0; }
+.record-tip img[hidden] { display: none; }
+.record-tip q { display: block; font-size: 1rem; font-weight: 600; text-align: center; }
 .record figcaption { margin-top: 10px; color: #777; font-size: .8rem; }
-.record figcaption button { margin-left: 6px; }
 
 @media (max-width: 600px) {
   .landing-title { font-size: 1.6rem; }
