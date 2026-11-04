@@ -415,7 +415,7 @@ let awaiting = false; // 서버 응답 대기 중
 
 const STAGE_IDS = ["ingredient", "prep", "cook", "plating"];
 
-// 윗줄 외계인 4칸 / 아랫줄 나 4칸 = 4단계. 단계가 "끝났을 때만" 그 칸을 채운다(진행 중엔 빈칸).
+// 윗줄 나 4칸 / 아랫줄 외계인 4칸 = 4단계. 단계가 "끝났을 때만" 그 칸을 채운다(진행 중엔 빈칸).
 function stageFinished(i) {
   return !!(currentState?.done || i < currentStageIndex);
 }
@@ -423,7 +423,7 @@ function renderTileRecord() {
   const record = document.getElementById("tile-record");
   if (!record) return;
   record.innerHTML = "";
-  for (const who of ["alien", "user"]) {
+  for (const who of ["user", "alien"]) {
     const icon = document.createElement("img");
     icon.className = `record-row-icon ${who}`;
     // 나 = 이름 정하기 화면에서 고른 플레이어 (app.py가 male/female만 넘김)
@@ -500,26 +500,26 @@ function flyTile(draw, startX, startY, cell) {
   });
 }
 
-// 단계 끝: 내 타일(말풍선)→아랫줄 칸, 외계인 타일(외계인 앞)→윗줄 칸으로 같이 날아가 고정
+// 단계 끝: 내 타일(말풍선)→윗줄 칸, 외계인 타일(외계인 앞)→아랫줄 칸으로 같이 날아가 고정
 function playOffer(finishedIndex, afterFill) {
   const stageId = STAGE_IDS[finishedIndex];
   const alienE = history.findLast(e => e.who === "alien" && e.stage === stageId);
   const userE = history.findLast(e => e.who === "user" && e.stage === stageId);
   const cells = document.querySelectorAll("#tile-record .record-cell");
-  const topCell = cells[finishedIndex], botCell = cells[4 + finishedIndex]; // 윗줄 0~3, 아랫줄 4~7
+  const userCell = cells[finishedIndex], alienCell = cells[4 + finishedIndex]; // 윗줄(나) 0~3, 아랫줄(외계인) 4~7
   const a = alienExpr.getBoundingClientRect();
   const b = (thinkEl && !thinkEl.hidden) ? thinkEl.getBoundingClientRect() : a; // 말풍선 위치(숨겨졌으면 외계인)
   hideThink();
-  if (reduceMotion || !topCell || !botCell) { afterFill(); return; }
+  if (reduceMotion || !userCell || !alienCell) { afterFill(); return; }
 
   const jobs = [];
   if (alienE) jobs.push(flyTile((c) => {
     const tx = textureFor(alienE.scores.hs);
     renderTile(c, colorFor(alienE.scores, tx), tx, 12345);
-  }, a.left + a.width / 2, a.top + a.height * 0.6, topCell));
+  }, a.left + a.width / 2, a.top + a.height * 0.6, alienCell));
   if (userE?.signal?.color) jobs.push(flyTile((c) =>
     renderTile(c, userE.signal.color, userE.signal.texture, 54321),
-    b.left + b.width / 2, b.top + b.height / 2, botCell));
+    b.left + b.width / 2, b.top + b.height / 2, userCell));
 
   if (!jobs.length) { afterFill(); return; }
   Promise.all(jobs).then(afterFill);
