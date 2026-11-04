@@ -238,10 +238,13 @@ def api_record():
         success = payload.get("success")
         if not isinstance(success, bool):
             raise ValueError("success는 true 또는 false여야 합니다.")
+        wrong = payload.get("wrong")
+        if wrong is not None and (not isinstance(wrong, int) or isinstance(wrong, bool) or wrong < 0):
+            raise ValueError("wrong은 0 이상의 정수여야 합니다.")
     except ValueError as error:
         return error_response("invalid_record", str(error), 400)
     try:
-        return jsonify(chatbot.record_dialogue(config, dish, entries, success))
+        return jsonify(chatbot.record_dialogue(config, dish, entries, success, wrong))
     except Exception:
         app.logger.exception("레코드 대사 생성 실패")
         return error_response("record_failed", "레코드 대사를 만들지 못했습니다.", 500)

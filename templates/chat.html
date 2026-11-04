@@ -14,6 +14,7 @@
         <div id="tile-record" class="tile-record" aria-label="주고받은 타일 기록"></div>
         <section id="signal-center" class="signal-center" aria-label="외계인">
           <img id="alien-expression" class="alien-expression" alt="외계인" src="{{ asset_url('assets/images/alien/alien_default.png') }}">
+          <div id="alien-think" class="alien-think" aria-hidden="true" hidden><canvas class="think-tile" width="128" height="128" hidden></canvas><span class="think-dots">…</span></div>
         </section>
         <!-- 가운데 아래 패널 하나: 색·질감 선택 → 미리보기·보내기 -->
         <div class="signal-dock">
@@ -30,6 +31,7 @@
               <canvas id="preview-tile" width="200" height="200" aria-label="지금 고르는 타일"></canvas>
             </div>
             <div class="signal-buttons">
+              <button type="button" id="undo-btn" class="button-undo" aria-label="보낸 타일 취소" disabled>↺</button>
               <button type="button" id="send-btn" class="button-send" aria-label="보내기">✓</button>
             </div>
           </section>

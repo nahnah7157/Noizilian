@@ -42,7 +42,7 @@
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-11-04)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 41개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 43개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
@@ -61,20 +61,26 @@
   - 결과 화면: 요리 이미지는 bg_result 책상 위(fixed), 레코드 자리는 그대로, 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
   - 이름 정하기 화면(detail.html): bg_default 전체 배경, 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
-  - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 되돌리기 버튼·기능 삭제. 오른쪽 색 선택과 왼쪽 미리보기(50px)·보내기(✓)를 가운데 아래 패널 하나(.signal-dock)로 합침: [색 네모 | 색상·크기·밀도 막대] [미리보기·✓]
+  - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기(50px)·보내기(✓)를 가운데 아래 패널 하나(.signal-dock)로 합침: [색 네모 | 색상·크기·밀도 막대] [미리보기·↺·✓]
   - 반응형 게임 화면 (chat.html, style.css, chatbot.js 8번): 전환 기준은 orientation 하나(CSS @media·JS matchMedia 같음)
     - 가로: main.stage(1920×1080)를 scale=min(창너비/1920, 창높이/1080)로 가운데 확대·축소, 남는 곳은 --letterbox 여백. 배경은 body의 --bg를 스테이지가 그림
-    - 세로: 외계인은 가로와 같은 비율로 배경 창 안(위 86/1080·높이 607/1080 dvh)에 고정. 기록 박스(칸 32px)는 왼쪽 위 구석, 패널은 내용 높이(최대 --portrait-panel 35dvh, 외계인 발밑 아래)로 [색 네모 | 막대들] + [미리보기·✓]. 터치 요소 --touch(44px) 이상, 넘치면 패널만 스크롤
+    - 세로: 외계인은 가로와 같은 비율로 배경 창 안(위 86/1080·높이 607/1080 dvh)에 고정. 기록 박스(칸 32px)는 왼쪽 위 구석, 패널은 내용 높이(최대 --portrait-panel 35dvh, 외계인 발밑 아래)로 [색 네모 | 막대들] + [미리보기·↺·✓]. 터치 요소 --touch(44px) 이상, 넘치면 패널만 스크롤
     - 캔버스 실제 픽셀 = 보이는 크기 × 배율 × devicePixelRatio (색 네모 최대 1024, 미리보기 256, 레코드 1600). 레코드는 기준 좌표 600 고정(RECORD_SIZE)
     - 결과 화면 오버레이는 스테이지 밖(배율 없음)
     - 기록 박스(칸 120px·아이콘 120px, 제목 "Noizilian" 없애고 그 자리=왼쪽 위)와 아래 패널(색 네모 280px·미리보기 100px)을 약 2배로 키우고 외계인은 2/3 크기로 줄임.
   - 레코드 대사 지시문(generator._lines_with_openai)에 외계인 감정 6가지와 흐름을 넣어, 외계인 대사가 질문만 되지 않게 함
+- 완료 (팀원 feat/turn-flow에서 가져옴): 되돌리기(↺) = 보낸 타일 취소, 말풍선·타일 날아가기 연출 (chatbot.js, style.css, chat.html)
+  - ↺: 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, 누르면 마지막 스냅샷으로 복원(선택기는 취소한 타일 값으로). 단계가 바뀌면 비움. 되돌릴 게 없거나 응답 대기 중이거나 done이면 비활성. app.py 안 고침(이전 state 재전송)
+  - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 방금 보낸 타일(없으면 "…"), 확신이 오를수록 빨리 깜박임(--think). 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile). 세로 화면 말풍선은 오른쪽 위
+  - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
+- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 fallback_lines, 그림은 문장부호 규칙으로만 고름. 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
-  1. GPT 연결: generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체 (docs/MODEL_SETUP.md 참고)
-  2. 검색: retriever.py가 현재 단계의 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김
-  3. 디자인 토큰(tokens.css), 배포
-- 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 소리 대응·대체 대사(fallback_lines)
+  1. GPT 연결 (과제 핵심): generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체. 대사 없이 타일 점수·표정만, 반환 형식 유지 (docs/MODEL_SETUP.md 참고)
+  2. RAG: retriever.py(지금 빈 틀)가 현재 단계 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김. 넣기 전·후 비교 수치 기록
+  3. 확신 기준·최대 횟수·요리 목표 점수 조정 (지금은 대부분 4번 채워서 넘어감). GPT 연결 뒤에
+  4. 요리 재료 이미지 → 단계별 화면 연결, 대체 대사(fallback_lines) 말투 다듬기, 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+- 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 소리 대응·대체 대사(fallback_lines), 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
 - 색, 간격, 폰트는 public/assets/css/tokens.css의 변수만 사용. 새 색상 하드코딩 금지 (tokens.css는 레퍼런스 확정 후 작성 예정)

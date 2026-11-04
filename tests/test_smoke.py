@@ -362,6 +362,17 @@ class CookingFlowTest(unittest.TestCase):
         self.assertIn(data["alien"]["expression"], CONFIG["expressions"])
         self.assertIsNone(data["result"])
 
+    def test_resend_after_undo_uses_previous_state(self):
+        # 되돌리기 = 이전 state로 복원. 같은(이전) state로 다시 보내도 서버가 정상 응답한다
+        s0 = self.start()["state"]
+        first = self.send(s0).get_json()  # s0 -> s1
+        self.assertEqual(first["state"]["exchange_count"], 1)
+        again = self.send(s0)  # 되돌린 뒤 같은 s0로 다시 보냄
+        self.assertEqual(again.status_code, 200)
+        data = again.get_json()
+        self.assertIsInstance(data["reply"], str)
+        self.assertEqual(data["state"]["exchange_count"], 1)  # s0 기준이라 다시 1
+
     def test_stage_advances_within_max_exchanges(self):
         # 같은 타일만 보내도 최대 4번 안에는 다음 단계로 넘어간다 (exchange.max_exchanges)
         state = self.start()["state"]
@@ -475,6 +486,18 @@ class RecordDialogueTest(unittest.TestCase):
             counts[success] = sum(l["text"] in wrong for l in lines)
         self.assertEqual(counts[True], 1)
         self.assertGreater(counts[False], 1)
+
+    def test_wrong_count_controls_injected_methods(self):
+        # 단계별 병렬 호출: wrong=N이면 그 묶음에 엉뚱한 방법 대사를 정확히 N개 넣는다
+        alien = {"who": "alien", "stage": "cook", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "cook", "message": "타일", "signal": TILE}
+        wrong_set = set(CONFIG["record"]["fallback_lines"]["wrong"])
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            for n in (0, 2):
+                lines = self.client.post("/api/record", json={
+                    "dish": "ramen", "entries": [alien, user] * 3, "success": True, "wrong": n,
+                }).get_json()["lines"]
+                self.assertEqual(sum(l["text"] in wrong_set for l in lines), n)
 
     def test_rejects_bad_entries(self):
         for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
