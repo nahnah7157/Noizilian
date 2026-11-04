@@ -48,7 +48,7 @@
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
   - 왼쪽: 기록 2줄(윗줄 외계인+머리 아이콘·4단계 / 아랫줄 나+흰 원·4단계), 현재 단계 칸 하이라이트·교환마다 갱신(단계 끝나면 마지막 타일 고정). 큰 미리보기. 되돌리기(↺ 파랑)·보내기(✓ 초록) 아이콘 버튼. "패턴 바꾸기" 제거
 - 완료: 결과 화면 골든 레코드 교체 (chat.html, style.css, chatbot.js 7번, image_selector.py, app.py)
-  - golden_record_cut.png를 원본 기호를 지운 깨끗한 원판으로 교체 (원본 golden_record.png는 그대로)
+  - golden_record_cut.png를 원본 기호를 지운 깨끗한 원판으로 교체
   - 주고받은 타일을 나선 홈에 순서대로 새김(타일 무늬). 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사 ② 외계인 대사면 그림. (한때 넣었던 무작위 기호·3음 소리는 11/4에 뺌)
   - POST /api/record: OpenAI가 paper_rules.md 기준으로 타일마다 재료·손질·조리·플레이팅 대사를 만들고(generator.record_lines), 외계인 대사는 config.record.line_images 설명과 OpenAI 임베딩(text-embedding-3-small)으로 비교해 외계인 3장 중 그림을 고름(image_selector.pick_line_images). 키 없으면 config.record.fallback_lines
   - 요리 결과(success)를 /api/record에 함께 보내, 실패면 엉뚱한 요리 방법 대화를 여러 번, 성공이어도 한 번 넣음 (키 없으면 fallback_lines.wrong)
