@@ -753,12 +753,18 @@ function showTip(event, tile) {
   recordTip.replaceChildren(line, img);
   recordTip.hidden = false;
 
+  // 화면 좌표를 스테이지 좌표로 바꾼다(배율로 나눔). 레코드 기준 위치에 놓는다
   const box = recordTip.parentElement.getBoundingClientRect();
-  const px = event.clientX - box.left;
-  const py = event.clientY - box.top;
-  // 커서 반대쪽에 띄워 레코드 밖으로 넘치지 않게
-  recordTip.style.left = `${px < box.width / 2 ? px + 14 : px - recordTip.offsetWidth - 14}px`;
-  recordTip.style.top = `${py < box.height / 2 ? py + 14 : py - recordTip.offsetHeight - 14}px`;
+  const stage = recordTip.closest(".stage").getBoundingClientRect();
+  const px = (event.clientX - box.left) / stageScale;
+  const py = (event.clientY - box.top) / stageScale;
+  const w = recordTip.offsetWidth, h = recordTip.offsetHeight;
+  const within = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  // 커서 반대쪽에 띄우고, 스테이지 밖으로는 나가지 않게
+  recordTip.style.left = `${within(px < box.width / 2 / stageScale ? px + 14 : px - w - 14,
+    (stage.left - box.left) / stageScale + 8, (stage.right - box.left) / stageScale - w - 8)}px`;
+  recordTip.style.top = `${within(py < box.height / 2 / stageScale ? py + 14 : py - h - 14,
+    (stage.top - box.top) / stageScale + 8, (stage.bottom - box.top) / stageScale - h - 8)}px`;
 }
 
 // pointer = 마우스·펜·터치. 터치는 누를 때 한 번
@@ -828,7 +834,7 @@ function fitStage() {
   const w = parseFloat(css.getPropertyValue("--stage-w"));
   const h = parseFloat(css.getPropertyValue("--stage-h"));
   stageScale = portrait.matches ? 1 : Math.min(window.innerWidth / w, window.innerHeight / h);
-  stageEl.style.setProperty("--stage-scale", stageScale);
+  document.querySelectorAll(".stage").forEach((el) => el.style.setProperty("--stage-scale", stageScale)); // 게임·결과 화면
   fitCanvases();
 }
 
@@ -848,8 +854,8 @@ function fitCanvases() {
   const color = fitCanvas(document.getElementById("color-canvas"), stageScale, 1024);
   const tile = fitCanvas(document.getElementById("preview-tile"), stageScale, 256);
   if (color || tile) window.noizilian?.redraw();
-  if (recordCanvas && !resultOverlayEl?.hidden) { // 결과 화면은 스테이지 밖이라 배율 1
-    fitCanvas(recordCanvas, 1, 1600);
+  if (recordCanvas && !resultOverlayEl?.hidden) {
+    fitCanvas(recordCanvas, stageScale, 1600);
     drawRecord();
   }
 }
