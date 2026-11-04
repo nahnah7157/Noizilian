@@ -271,7 +271,6 @@ let currentFreq = 0.65;
 const tileCanvas = document.getElementById("preview-tile");
 const colorCanvas = document.getElementById("color-canvas");
 const hueSlider = document.getElementById("hue-slider");
-const undoBtn = document.getElementById("undo-btn");
 
 if (tileCanvas && colorCanvas && hueSlider) {
   // 색 네모 클릭·드래그: 가로=채도(S), 세로=명도(V)
@@ -315,22 +314,6 @@ if (tileCanvas && colorCanvas && hueSlider) {
     }
   }
 
-  // 되돌리기: 마지막으로 보낸 신호(색·크기·밀도)로 되돌린다
-  let sentSignal = null;
-  undoBtn.addEventListener("click", () => {
-    if (!sentSignal) return;
-    currentHue = sentSignal.hsv.h;
-    currentSat = sentSignal.hsv.s;
-    currentVal = sentSignal.hsv.v;
-    currentDensity = sentSignal.density;
-    currentFreq = sentSignal.texture.freq;
-    hueSlider.value = currentHue;
-    document.getElementById("sense-density").value = currentDensity * 100;
-    document.getElementById("sense-freq").value = 130 - currentFreq * 100;
-    renderColorCanvas();
-    update();
-  });
-
   // 색 네모 배경: 현재 hue의 채도(가로)×명도(세로) 그래디언트
   function renderColorCanvas() {
     const ctx = colorCanvas.getContext("2d");
@@ -346,13 +329,14 @@ if (tileCanvas && colorCanvas && hueSlider) {
       }
     ctx.putImageData(imgData, 0, 0);
 
-    // 선택한 점 표시 (밝은 바탕엔 어둡게, 어두운 바탕엔 밝게)
+    // 선택한 점 표시 (밝은 바탕엔 어둡게, 어두운 바탕엔 밝게). k = 캔버스 픽셀 / CSS 픽셀 (해상도가 바뀌어도 같은 크기)
+    const k = W / (colorCanvas.clientWidth || W);
     const selectX = currentSat * W;
     const selectY = (1 - currentVal) * H;
     ctx.strokeStyle = currentVal > 0.5 ? "#333" : "#fff";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * k;
     ctx.beginPath();
-    ctx.arc(selectX, selectY, 7, 0, 2 * Math.PI);
+    ctx.arc(selectX, selectY, 7 * k, 0, 2 * Math.PI);
     ctx.stroke();
   }
 
@@ -369,7 +353,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
   window.noizilian = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
-    markSent: () => { sentSignal = current; },
+    redraw: () => { renderColorCanvas(); update(); }, // 캔버스 해상도를 바꾼 뒤 다시 그리기 (8번)
   };
 
   renderColorCanvas();
@@ -413,14 +397,16 @@ function renderTileRecord(stageIndex = currentStageIndex) {
   if (!record) return;
   record.innerHTML = "";
   for (const who of ["alien", "user"]) {
-    const icon = document.createElement(who === "alien" ? "img" : "span");
+    const icon = document.createElement("img");
     icon.className = `record-row-icon ${who}`;
-    if (who === "alien") icon.src = "/assets/images/alien/alien_cute_a.png";
+    // 나 = 이름 정하기 화면에서 고른 플레이어 (app.py가 male/female만 넘김)
+    icon.src = who === "alien" ? "/assets/images/alien/alien_default.png"
+      : `/assets/images/alien/player_${shell?.dataset.player || "male"}.png`;
     record.append(icon);
     STAGE_IDS.forEach((stageId, i) => {
       const entry = history.findLast(e => e.who === who && e.stage === stageId);
       const cell = document.createElement("canvas");
-      cell.width = cell.height = 60;
+      cell.width = cell.height = 120; // style.css #tile-record 칸 크기와 같게 (흐려지지 않게)
       cell.className = "record-cell" + (i === stageIndex ? " current" : "");
       if (who === "alien" && entry) {
         const texture = textureFor(entry.scores.hs);
@@ -433,7 +419,7 @@ function renderTileRecord(stageIndex = currentStageIndex) {
   }
 }
 
-// 가운데 외계인 이미지만 단계별 포즈로 교체 (게임 화면엔 글자 없음)
+// 가운데 외계인 이미지만 표정으로 교체 (게임 화면엔 글자 없음)
 function showAlien(data) {
   if (data.image) alienExpr.src = data.image;
 }
@@ -443,6 +429,7 @@ function updateGameState(data) {
   if (data.stage) {
     currentStageId = data.stage.id;
     currentStageIndex = data.stage.index;
+    document.body.dataset.stage = data.stage.id; // 단계별 배경 (style.css)
     stageNames[data.stage.id] = data.stage.name;
   }
   if (data.dish) currentDishId = data.dish.id;
@@ -499,7 +486,6 @@ sendButton.addEventListener("click", async () => {
   const signal = window.noizilian?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
 
-  window.noizilian.markSent(); // 되돌리기 기준: 방금 보낸 신호
   const sentStage = currentStageId;
   sendButton.disabled = true;
 
@@ -540,7 +526,6 @@ sendButton.addEventListener("click", async () => {
 
 const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
-const recordCaption = document.getElementById("record-caption");
 const PER_TURN = 12; // 한 바퀴에 들어가는 타일 수
 const SYMBOLS_PER_TILE = 3;
 let symbols = []; // {x, y, size, angle, glyph, tile}
@@ -550,8 +535,10 @@ let hovered = -1; // 마우스가 올라간 타일 번호
 let recordToken = 0;
 let audio = null;
 
+const RECORD_SIZE = 600; // 레코드 기준 좌표. 실제 캔버스 픽셀은 fitCanvases가 화면에 맞추고 drawRecord가 늘려 그린다
+
 function recordGeometry() {
-  const S = recordCanvas.width;
+  const S = RECORD_SIZE;
   return { S, band: S * 0.035, pitch: S * 0.045, outer: S * 0.44, step: (2 * Math.PI) / PER_TURN };
 }
 
@@ -632,6 +619,7 @@ function drawGlyph(ctx, glyph) {
 function drawRecord() {
   const ctx = recordCanvas.getContext("2d");
   const { S } = recordGeometry();
+  ctx.setTransform(recordCanvas.width / S, 0, 0, recordCanvas.width / S, 0, 0);
   ctx.clearRect(0, 0, S, S);
   ctx.lineCap = ctx.lineJoin = "round";
   symbols.forEach((sym) => {
@@ -733,11 +721,6 @@ recordCanvas?.addEventListener("pointerleave", () => {
   drawRecord();
 });
 
-const RECORD_NOTES = {
-  no_key: "OpenAI 키가 없어 준비된 대사를 보여 줘요.",
-  openai_failed: "OpenAI 응답이 실패해 준비된 대사를 보여 줘요.",
-};
-
 async function showRecord() {
   if (!recordCanvas) return;
   const token = ++recordToken;
@@ -745,9 +728,8 @@ async function showRecord() {
   hovered = -1;
   lines = null;
   buildSymbols();
-  drawRecord();
+  fitCanvases(); // 결과 화면이 막 보여서 레코드 크기를 이제 알 수 있다 (drawRecord 포함)
   if (!history.length) return;
-  recordCaption.textContent = "대사를 만드는 중이에요. 대화가 길면 30초쯤 걸려요.";
   try {
     const response = await fetch("/api/record", {
       method: "POST",
@@ -763,16 +745,63 @@ async function showRecord() {
     if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
     if (token !== recordToken) return; // 그 사이 다시 시작함
     lines = data.lines;
-    recordCaption.textContent = "기호에 마우스를 올리면 그때 나눈 대화가 들려요.";
-    const [source, reason] = data.source.split(":");
-    if (RECORD_NOTES[source]) recordCaption.textContent += ` (${RECORD_NOTES[source]}${reason ? ` 오류: ${reason}` : ""})`;
+    if (data.source !== "openai") console.warn("레코드 대사: 준비된 대사 사용", data.source); // 화면엔 안 보임
   } catch (error) {
     if (token !== recordToken) return;
     lines = [];
-    // "Failed to fetch" = 서버와 연결이 끊김(서버 종료·재시작 등)
-    recordCaption.textContent = `대사를 불러오지 못했어요. 서버가 켜져 있는지 확인해 주세요. (${error.message})`;
+    console.warn("레코드 대사를 불러오지 못함", error); // "Failed to fetch" = 서버와 연결이 끊김
   }
 }
+
+// ── 8. 반응형 화면 ──────────────────────────────────────────
+// 기준은 CSS와 같은 orientation 하나. 가로 = 고정 스테이지를 배율로 맞춤(남는 곳은 여백), 세로 = CSS가 위아래로 쌓음(배율 1).
+// 클릭 좌표(색 네모·레코드)는 getBoundingClientRect 비율로 계산하므로 배율이 바뀌어도 맞는다.
+const stageEl = document.querySelector(".stage");
+const portrait = window.matchMedia("(orientation: portrait)");
+let stageScale = 1;
+
+function fitStage() {
+  if (!stageEl) return;
+  const css = getComputedStyle(stageEl);
+  const w = parseFloat(css.getPropertyValue("--stage-w"));
+  const h = parseFloat(css.getPropertyValue("--stage-h"));
+  stageScale = portrait.matches ? 1 : Math.min(window.innerWidth / w, window.innerHeight / h);
+  stageEl.style.setProperty("--stage-scale", stageScale);
+  fitCanvases();
+}
+
+/** 캔버스 실제 픽셀 = 보이는 크기(CSS px) × 스테이지 배율 × devicePixelRatio (흐려지지 않게). 바뀌었으면 true */
+function fitCanvas(canvas, scale, maxWidth) {
+  if (!canvas?.clientWidth) return false; // 안 보이는 중
+  const w = Math.min(maxWidth, Math.round(canvas.clientWidth * scale * window.devicePixelRatio));
+  const h = Math.round((w * canvas.clientHeight) / canvas.clientWidth);
+  if (canvas.width === w && canvas.height === h) return false;
+  canvas.width = w;
+  canvas.height = h;
+  return true;
+}
+
+function fitCanvases() {
+  // shortcut: 색 네모·미리보기는 픽셀마다 다시 계산하므로 너비 1024·256px에서 멈춘다. 끌 때 느리지 않으면 더 키워도 된다
+  const color = fitCanvas(document.getElementById("color-canvas"), stageScale, 1024);
+  const tile = fitCanvas(document.getElementById("preview-tile"), stageScale, 256);
+  if (color || tile) window.noizilian?.redraw();
+  if (recordCanvas && !resultOverlayEl?.hidden) { // 결과 화면은 스테이지 밖이라 배율 1
+    fitCanvas(recordCanvas, 1, 1600);
+    drawRecord();
+  }
+}
+
+let fitQueued = false;
+function queueFit() { // 창 크기 변경·회전이 몰려도 한 프레임에 한 번만
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => { fitQueued = false; fitStage(); });
+}
+window.addEventListener("resize", queueFit);
+window.addEventListener("orientationchange", queueFit);
+portrait.addEventListener("change", queueFit);
+fitStage();
 
 // 페이지 시작 시 요리 시작 API 호출
 if (shell) {

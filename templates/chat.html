@@ -8,47 +8,49 @@
     <script src="{{ asset_url('assets/js/chatbot.js') }}" defer></script>
   </head>
   <body class="chat-page">
-    <main class="chat-area" data-username="{{ username }}">
-      <div id="title" class="title">Noizilian</div>
+    <!-- 게임 화면 = 1920×1080 스테이지. 가로 화면은 chatbot.js가 배율(--stage-scale)을 맞추고, 세로 화면은 style.css가 위아래로 쌓는다 -->
+    <main class="chat-area stage" data-username="{{ username }}" data-player="{{ player }}">
       <section class="layout-row">
-        <section id="signal-left" class="signal-left" aria-label="타일 작성기">
-          <div id="tile-record" class="tile-record"></div>
-          <div class="signal-tile">
-            <canvas id="preview-tile" width="200" height="200" aria-label="지금 고르는 타일"></canvas>
-          </div>
-          <div class="signal-buttons">
-            <button type="button" id="undo-btn" class="button-undo" aria-label="되돌리기">↺</button>
-            <button type="button" id="send-btn" class="button-send" aria-label="보내기">✓</button>
-          </div>
-        </section>
+        <div id="tile-record" class="tile-record" aria-label="주고받은 타일 기록"></div>
         <section id="signal-center" class="signal-center" aria-label="외계인">
-          <img id="alien-expression" class="alien-expression" alt="외계인" src="{{ asset_url('assets/images/alien/alien_cute_a.png') }}">
+          <img id="alien-expression" class="alien-expression" alt="외계인" src="{{ asset_url('assets/images/alien/alien_default.png') }}">
         </section>
-        <section id="signal-right" class="signal-right" aria-label="색 선택">
-          <div id="color-picker" class="color-picker">
-            <canvas id="color-canvas" width="220" height="176" aria-label="채도·명도 선택"></canvas>
-            <input id="hue-slider" type="range" min="0" max="360" value="0" class="hue-slider" aria-label="색상">
-          </div>
-          <div class="sense-row" data-axis="freq"></div>
-          <div class="sense-row" data-axis="density"></div>
-        </section>
-      </section>
-      <div id="result-overlay" class="result-overlay" hidden>
-        <div class="result-content">
-          <div class="result-dish">
-            <img id="result-image" src="" alt="요리 결과">
-            <button id="restart-btn" class="start-button">다시 하기</button>
-          </div>
-          <figure class="record">
-            <div class="record-disc">
-              <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
-              <canvas id="record-canvas" width="600" height="600" aria-label="주고받은 타일이 새겨진 골든 레코드"></canvas>
-              <div id="record-tip" class="record-tip" hidden></div>
+        <!-- 가운데 아래 패널 하나: 색·질감 선택 → 미리보기·보내기 -->
+        <div class="signal-dock">
+          <section id="signal-right" class="signal-right" aria-label="색 선택">
+            <div id="color-picker" class="color-picker">
+              <canvas id="color-canvas" width="220" height="176" aria-label="채도·명도 선택"></canvas>
+              <input id="hue-slider" type="range" min="0" max="360" value="0" class="hue-slider" aria-label="색상">
             </div>
-            <figcaption id="record-caption">기호에 마우스를 올리면 그때 나눈 대화가 들려요.</figcaption>
-          </figure>
+            <div class="sense-row" data-axis="freq"></div>
+            <div class="sense-row" data-axis="density"></div>
+          </section>
+          <section id="signal-left" class="signal-left" aria-label="타일 작성기">
+            <div class="signal-tile">
+              <canvas id="preview-tile" width="200" height="200" aria-label="지금 고르는 타일"></canvas>
+            </div>
+            <div class="signal-buttons">
+              <button type="button" id="send-btn" class="button-send" aria-label="보내기">✓</button>
+            </div>
+          </section>
         </div>
-      </div>
+      </section>
     </main>
+    <!-- 결과 화면은 스테이지 밖: 배율 없이 화면 전체를 쓴다 -->
+    <div id="result-overlay" class="result-overlay" hidden>
+      <div class="result-content">
+        <div class="result-dish">
+          <img id="result-image" src="" alt="요리 결과">
+          <button id="restart-btn" class="start-button">다시 하기</button>
+        </div>
+        <figure class="record">
+          <div class="record-disc">
+            <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
+            <canvas id="record-canvas" width="600" height="600" aria-label="주고받은 타일이 새겨진 골든 레코드"></canvas>
+            <div id="record-tip" class="record-tip" hidden></div>
+          </div>
+        </figure>
+      </div>
+    </div>
   </body>
 </html>

@@ -7,8 +7,8 @@
     "#골든레코드",
     "#외계요리"
   ],
-  "thumbnail": "assets/images/alien/alien_cute_a.png",
-  "background": "assets/images/background_basic.png",
+  "thumbnail": "assets/images/alien/alien_default.png",
+  "background": "assets/images/background/bg_default.png",
   "persona": {
     "personality": "골든 레코드에 담긴 지구 요리를 보고 따라 만들려다 실패한 외눈박이 외계인 요리사. 초록빛 말랑한 몸에 요리사 모자와 앞치마를 둘렀다. 귀엽고 서툴지만 요리에는 진지하다. 지구인이 보낸 타일을 열심히 따라 해 보고, 확신이 서야 다음 단계로 넘어간다.",
     "speaking_style": "말하지 않는다. 생각과 감정은 타일(색·질감)과 표정으로만 보여 준다. 결과 화면 레코드의 회상 대화에서만 지구인 말을 흉내 낸 깨진 한국어 단어와 말줄임(…)을 쓴다.",
@@ -40,26 +40,30 @@
     "word": "깨진 한국어 1~2단어 (선택)"
   },
   "expressions": {
-    "_note": "표정 이미지는 아직 받지 못함. 받기 전에는 단계별 포즈 이미지를 대신 쓴다. 표정 종류와 파일명은 프로듀서와 확정 필요",
-    "confused": {
-      "meaning": "신호를 잘 모르겠음 (확신 낮음)",
-      "image": null
+    "_note": "표정 키 = 이미지 이름. 고르는 규칙은 services/generator.py (초안: 팀 확정 필요)",
+    "default": {
+      "meaning": "기본 상태. 요리를 처음 시작할 때",
+      "image": "assets/images/alien/alien_default.png"
     },
-    "curious": {
-      "meaning": "따라 해 보는 중 (확신 중간)",
-      "image": null
+    "doubt": {
+      "meaning": "사용자의 대답에 확신이 없음 (이게 맞나?)",
+      "image": "assets/images/alien/alien_doubt.png"
     },
-    "sure": {
-      "meaning": "이거다! (확신 높음, 다음 단계로)",
-      "image": null
+    "convinced": {
+      "meaning": "사용자의 대답에 확신함 (아, 이렇게 하라는 거군!)",
+      "image": "assets/images/alien/alien_convinced.png"
     },
-    "happy": {
-      "meaning": "요리 성공",
-      "image": null
+    "surprised": {
+      "meaning": "사용자의 대답이 예상과 확연히 다름 (뭐? 진짜 이렇게?)",
+      "image": "assets/images/alien/alien_surprised.png"
     },
-    "sad": {
-      "meaning": "요리 실패",
-      "image": null
+    "thinking": {
+      "meaning": "점점 더 확신이 없어짐 (이제 진짜 더 모르겠어...)",
+      "image": "assets/images/alien/alien_thinking.png"
+    },
+    "joy": {
+      "meaning": "완전히 확신해서 다음 단계로 넘어감 (이제 알겠다!)",
+      "image": "assets/images/alien/alien_joy.png"
     }
   },
   "exchange": {
@@ -95,8 +99,7 @@
         "R8",
         "R9"
       ],
-      "reading": "따뜻함–차가움은 재료의 빛깔(붉고 따뜻한 재료 ↔ 푸르고 차가운 재료), 강렬함–섬세함은 재료의 존재감이 된다",
-      "pose_image": "assets/images/alien/alien_cute_a.png"
+      "reading": "따뜻함–차가움은 재료의 빛깔(붉고 따뜻한 재료 ↔ 푸르고 차가운 재료), 강렬함–섬세함은 재료의 존재감이 된다"
     },
     {
       "order": 2,
@@ -111,8 +114,7 @@
         "R3",
         "R10"
       ],
-      "reading": "단단함–부드러움은 손질한 식감(굵고 단단하게 ↔ 곱고 부드럽게)이 된다. 논문상 이 축은 질감만으로 결정되므로 색은 판단에 쓰지 않는다",
-      "pose_image": "assets/images/alien/alien_cute_b.png"
+      "reading": "단단함–부드러움은 손질한 식감(굵고 단단하게 ↔ 곱고 부드럽게)이 된다. 논문상 이 축은 질감만으로 결정되므로 색은 판단에 쓰지 않는다"
     },
     {
       "order": 3,
@@ -129,8 +131,7 @@
         "R6",
         "R11"
       ],
-      "reading": "따뜻함–차가움은 불 세기(센 불 ↔ 약한 불), 무거움–가벼움은 익힘과 맛의 진하기(오래·진하게 ↔ 살짝·담백하게)가 된다",
-      "pose_image": "assets/images/alien/alien_cute_c.png"
+      "reading": "따뜻함–차가움은 불 세기(센 불 ↔ 약한 불), 무거움–가벼움은 익힘과 맛의 진하기(오래·진하게 ↔ 살짝·담백하게)가 된다"
     },
     {
       "order": 4,
@@ -147,9 +148,7 @@
         "R9",
         "R12"
       ],
-      "reading": "강렬함–섬세함은 담음새의 인상, 무거움–가벼움은 양과 풍성함(풍성하게 ↔ 가볍게)이 된다",
-      "pose_image": "assets/images/alien/alien_cute_a.png",
-      "_pose_note": "플레이팅 전용 포즈가 없어 기본 이미지를 임시로 씀"
+      "reading": "강렬함–섬세함은 담음새의 인상, 무거움–가벼움은 양과 풍성함(풍성하게 ↔ 가볍게)이 된다"
     }
   ],
   "dish_selection": {
@@ -286,10 +285,54 @@
       ]
     },
     "line_images": {
-      "_note": "외계인 대사와 설명의 임베딩 유사도로 그림을 고른다 (services/image_selector.py)",
-      "assets/images/alien/alien_cute_a.png": "빈손으로 서서 고개를 갸웃하는 외계인. 재료를 고르거나 접시에 담으며 이게 맞는지 묻고 헷갈려하는 모습",
-      "assets/images/alien/alien_cute_b.png": "칼을 든 외계인. 재료를 썰고 다지고 손질하며 진지하게 칼질하는 모습",
-      "assets/images/alien/alien_cute_c.png": "프라이팬을 든 외계인. 불 위에서 굽고 볶고 끓이며 신나게 조리하는 모습"
+      "_note": "표정마다 [그림 설명, 외계인 말투 예시 대사…]. 대사와 가장 비슷한 예시의 임베딩 유사도로 표정을 고르고, 그림은 expressions의 image를 쓴다 (services/image_selector.py)",
+      "default": [
+        "평소처럼 담담한 외계인. 감정 없이 지금 하는 일을 말하는 모습",
+        "이거… 재료…",
+        "다음… 타일…",
+        "지구… 요리… 시작…"
+      ],
+      "doubt": [
+        "이게 맞나 하고 확신 없이 되묻는 외계인. 지구인 말을 따라 하며 맞는지 확인하는 질문",
+        "이거… 맞아…?",
+        "노랑… 넣어…?",
+        "썰어…? 이렇게…?",
+        "물… 많이…? 조금…?",
+        "이 색… 이거…?",
+        "고기… 구워…? 냄비에…?",
+        "밥… 차갑게… 볶아…?"
+      ],
+      "convinced": [
+        "아, 이렇게 하라는 거구나 하고 알아들은 외계인. 고개를 끄덕이며 차분히 따라 하는 모습",
+        "아… 그렇구나… 알았어",
+        "응… 얇게… 썰어…",
+        "아하… 약한 불… 천천히…",
+        "오래… 끓여… 응",
+        "이렇게… 하라는… 거구나"
+      ],
+      "surprised": [
+        "뭐? 진짜 이렇게? 하고 깜짝 놀란 외계인. 예상과 너무 달라서 당황한 감탄",
+        "뭐…?! 진짜…?!",
+        "엥…?! 이렇게나…?!",
+        "헉…! 이건… 생각… 이랑… 달라…!",
+        "에엑…?! 그렇게… 많이…?!"
+      ],
+      "thinking": [
+        "이제 진짜 모르겠다며 골똘히 고민하는 외계인. 점점 헷갈리고 막막해하는 혼잣말",
+        "음… 모르겠어…",
+        "머리… 복잡해…",
+        "더… 헷갈려…",
+        "어떡하지… 잘… 모르겠…",
+        "흠… 뭐가… 맞지…"
+      ],
+      "joy": [
+        "이제 알겠다! 하고 기뻐하는 외계인. 신나서 다음 단계로 넘어가거나 요리를 완성한 환호",
+        "알겠다…! 다음…!",
+        "됐다…! 신나…!",
+        "좋아…! 다음… 가자…!",
+        "완성…! 맛있어…!",
+        "야호…! 이제… 알아…!"
+      ]
     }
   },
   "sense_rules": {
