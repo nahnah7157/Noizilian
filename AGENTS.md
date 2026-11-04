@@ -58,7 +58,7 @@
 - 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
   - 표정: 시작 default / 단계 확신 통과·요리 성공 joy / 횟수 차서 통과·요리 실패 thinking / 교환 중엔 아주 다르면 surprised, 확신이 내려가면 thinking, 오르면 확신 0.4 이상 convinced 아니면 doubt. 단계별 포즈(alien_cute_a/b/c) 제거
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
-  - 결과 화면: 요리 이미지는 bg_result 테이블 위. 배경 cover 크기(--bg-w·--bg-h) 기준 좌표로 놓아 배경이 잘려도 붙어 있음(접시 아래 끝 = 배경 높이 74%, 음식별 투명 여백은 --foot). 세로 화면은 레코드를 위쪽 벽면으로 올림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
+  - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것), 레코드는 x 1330·아래 끝 y 860·지름 560. 세로 화면은 배경을 115%로 키워 테이블을 내리고 레코드는 창 쪽, 음식은 테이블 가운데. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
   - 이름 정하기 화면(detail.html): bg_default 전체 배경, 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
   - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기·보내기(✓)를 패널 하나(.signal-dock)로 합침
@@ -70,7 +70,7 @@
     - 세로: 위에서부터 기록칸 → 외계인(패널 바로 위, 높이 최대 124vw) → 패널(내용 높이, 390×844에서 약 26%, 스크롤 없음). 패널은 [색 네모 | 색상·크기·밀도 막대] + [미리보기·↺·✓]. 터치 요소 --touch(44px) 이상
     - 기록칸은 윗줄 나, 아랫줄 외계인
     - 캔버스 실제 픽셀 = 보이는 크기 × 배율 × devicePixelRatio (색 네모 최대 1024, 미리보기 256, 레코드 1600). 레코드는 기준 좌표 600 고정(RECORD_SIZE)
-    - 결과 화면 오버레이는 스테이지 밖(배율 없음)
+    - 결과 화면도 같은 --stage-scale을 씀. record-tip 위치는 showTip이 화면 좌표를 배율로 나눠 계산하고 스테이지 안으로 제한
     - 기록 박스는 칸 90px·아이콘 90px, 제목 "Noizilian" 없애고 그 자리=왼쪽 위
   - 레코드 대사 지시문(generator._lines_with_openai)에 외계인 감정 6가지와 흐름을 넣어, 외계인 대사가 질문만 되지 않게 함
 - 완료 (팀원 feat/turn-flow에서 가져옴): 되돌리기(↺) = 보낸 타일 취소, 말풍선·타일 날아가기 연출 (chatbot.js, style.css, chat.html)

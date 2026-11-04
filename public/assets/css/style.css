@@ -246,69 +246,54 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .confidence-text { font-size: 0.75rem; color: #777; white-space: nowrap; }
 
+/* 결과 화면도 게임 화면처럼 1920×1080 스테이지: 배경·음식·레코드가 같은 좌표를 쓴다. 남는 곳은 --letterbox 여백 */
 .result-overlay {
-  /* cover로 그려진 배경의 실제 크기(bg_result 1671×941). 음식을 이 크기 기준 좌표에 놓아 배경이 잘려도 테이블에 붙어 있게 한다 */
-  --bg-w: max(100vw, 100dvh * 1671 / 941);
-  --bg-h: max(100dvh, 100vw * 941 / 1671);
-  --dish-x: .25; /* 접시 가운데: 배경 폭 비율 */
-  --dish-y: .74; /* 접시 아래 끝: 배경 높이 비율. 테이블 윗면은 .54~.84 */
-  --dish-w: min(var(--bg-w) * .36, 100vw - var(--bg-w) * .5); /* 배경 좌우가 잘리는 화면에서도 왼쪽이 안 잘리게 */
+  --dish-h: 380px; /* 눈에 보이는 음식 높이 */
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
-  place-items: center;
-  background: #f7f7f7 url("../images/background/bg_result.png") center / cover no-repeat;
-  padding: 20px;
-  overflow: hidden; /* 첫 화면처럼 스크롤 없음 */
+  background: var(--letterbox);
+  overflow: hidden;
 }
 .result-overlay[hidden] { display: none; }
-.result-content {
-  width: min(960px, 100%);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 30px;
-  align-items: center;
-  padding: 30px;
-  text-align: center;
-}
-/* 요리는 bg_result 책상 위에 올린다. .result-dish는 레코드 자리를 그대로 두는 빈 칸 */
+.result-content { background: #f7f7f7 url("../images/background/bg_result.png") center / cover no-repeat; }
+/* 테이블 윗면은 y 590~910. 접시 아래 끝을 y 840에 놓는다 */
 #result-image {
-  position: fixed;
-  left: calc(50vw + (var(--dish-x) - .5) * var(--bg-w));
-  top: calc(50dvh + (var(--dish-y) - .5) * var(--bg-h));
-  width: var(--dish-w);
+  position: absolute;
+  left: 600px;
+  top: 840px;
+  height: calc(var(--dish-h) / var(--fill, 1));
   transform: translate(-50%, calc(-100% + var(--foot, 0%)));
+  filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%));
 }
-/* 음식 그림마다 아래 투명 여백이 달라서, 그만큼 내려 접시 아래 끝을 맞춘다 */
-#result-image[src*="hamburger"] { --foot: 7.7%; }
-#result-image[src*="omurice"] { --foot: 8.2%; }
-#result-image[src*="pizza"] { --foot: .2%; }
-#result-image[src*="ramen"] { --foot: 2.2%; }
-.result-dish { flex: 1 1 260px; }
-.result-overlay .start-button { position: fixed; right: 24px; bottom: 24px; margin: 0; }
-.record { flex: 1.4 1 320px; margin: 0; }
-.record-disc { position: relative; aspect-ratio: 1; max-width: 85dvh; margin: 0 auto; }
+/* 음식 그림마다 투명 여백이 달라서 --fill(보이는 높이 비율)로 크기를, --foot(아래 여백)으로 접시 끝을 맞춘다 */
+#result-image[src*="hamburger"] { --fill: .70; --foot: 7.7%; }
+#result-image[src*="omurice"] { --fill: .717; --foot: 8.2%; }
+#result-image[src*="pizza"] { --fill: .954; --foot: .2%; }
+#result-image[src*="ramen"] { --fill: .916; --foot: 2.2%; }
+.result-overlay .start-button { position: absolute; right: 40px; bottom: 30px; margin: 0; }
+.record { margin: 0; }
+.record-disc { position: absolute; left: 1050px; top: 300px; width: 560px; height: 560px; }
 .record-disc > img, .record-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.record-disc > img { filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%)); }
 .record-tip {
   position: absolute;
   z-index: 1;
-  width: min(180px, 60%);
-  padding: 10px 12px;
-  border-radius: 10px;
+  width: 300px;
+  padding: 14px 16px;
+  border-radius: 14px;
   background: rgb(255 255 255 / 95%);
   box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
-  font-size: .85rem;
+  font-size: 1.2rem;
   line-height: 1.5;
   text-align: left;
   pointer-events: none;
 }
-.record-tip img { display: block; width: 96px; height: auto; margin: 6px auto 0; }
+.record-tip img { display: block; width: 150px; height: auto; margin: 8px auto 0; }
 .record-tip img[hidden] { display: none; }
-.record-tip q { display: block; font-size: 1rem; font-weight: 600; text-align: center; }
+.record-tip q { display: block; font-size: 1.4rem; font-weight: 600; text-align: center; }
 
 @media (max-width: 600px) {
-  .result-dish { display: contents; } /* 좁은 화면에선 빈 칸 없이 레코드만 가운데 */
   .landing-title { font-size: 1.6rem; }
   .detail-page .start-button { bottom: 150px; } /* 좁은 화면에선 이름 칸 위로 */
   #chat-log { padding: 14px; }
@@ -553,12 +538,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .sense-icon.freq-max, .sense-icon.density-max { width: 22px; height: 22px; }
 .sense-bar input { height: 28px; }
 
-/* 세로 화면 결과: 레코드는 테이블 위쪽 벽면, 음식은 화면 가운데 테이블 위 */
+/* 세로 화면 결과: 배경을 키워 테이블을 아래로 내리고, 음식은 테이블 가운데, 레코드는 위쪽 창 앞 */
 @media (orientation: portrait) {
-  .result-overlay { --dish-x: .5; --dish-w: min(80vw, 36dvh); place-items: start center; }
-  .result-content { justify-content: center; padding: 0; }
-  .result-dish { display: contents; }
-  .record { flex: 0 0 auto; width: min(88vw, 44dvh); }
+  .result-overlay { --dish-h: min(22dvh, 62vw); }
+  .result-content { background-size: auto 115%; background-position: center top; }
+  #result-image { left: 50%; top: 88dvh; }
+  .result-overlay .start-button { right: 24px; bottom: 24px; }
+  .record-disc { left: 50%; top: 4dvh; width: min(30dvh, 80vw); height: min(30dvh, 80vw); transform: translateX(-50%); }
+  .record-tip { width: min(220px, 70vw); padding: 10px 12px; border-radius: 10px; font-size: .85rem; }
+  .record-tip img { width: 96px; margin-top: 6px; }
+  .record-tip q { font-size: 1rem; }
 }
 
 /* 세로 화면(모바일 9:16 등): 배율 없이 위에서부터 기록칸 → 외계인(바닥 쪽) → 타일 패널. 스크롤 없이 한 화면 */

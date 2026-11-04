@@ -38,13 +38,11 @@
         </div>
       </section>
     </main>
-    <!-- 결과 화면은 스테이지 밖: 배율 없이 화면 전체를 쓴다 -->
+    <!-- 결과 화면도 같은 스테이지 방식: 배경·음식·레코드가 같은 좌표를 쓴다 -->
     <div id="result-overlay" class="result-overlay" hidden>
-      <div class="result-content">
-        <div class="result-dish">
-          <img id="result-image" src="" alt="요리 결과">
-          <button id="restart-btn" class="start-button">다시 하기</button>
-        </div>
+      <div class="result-content stage">
+        <img id="result-image" src="" alt="요리 결과">
+        <button id="restart-btn" class="start-button">다시 하기</button>
         <figure class="record">
           <div class="record-disc">
             <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
