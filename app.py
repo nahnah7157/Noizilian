@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, url_for
 
 from services import ChatbotService
-from services.chatbot_service import AXES, parse_signal
+from services.chatbot_service import AXES, GAME_METRICS, GAME_RESPONSE_KEYS, VERDICTS, parse_signal
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -85,17 +85,45 @@ def parse_state(data, config: dict) -> dict:
     finals = data.get("finals", {})
     if not isinstance(finals, dict) or not set(finals) <= stage_ids:
         raise ValueError("finals가 올바르지 않습니다.")
+
+    # 요리 게임 규칙(config.game) 상태: 메뉴, 끝난 단계 판정, 이번 단계에서 보낸 타일 판정값
+    def metrics(value, name):
+        if not isinstance(value, dict) or set(value) != set(GAME_METRICS):
+            raise ValueError(f"{name}에는 {', '.join(GAME_METRICS)} 값이 모두 필요합니다.")
+        return {k: number(value[k], 0, 360 if k == "hue" else 100, f"{name}.{k}") for k in GAME_METRICS}
+
+    menu = data.get("menu")
+    if menu is None and index > 0:
+        menu = data["dish"]  # 메뉴 필드가 생기기 전 state
+    if menu is not None and menu not in dishes:
+        raise ValueError("알 수 없는 메뉴입니다.")
+    verdicts = data.get("verdicts", {})
+    if not isinstance(verdicts, dict) or not set(verdicts) <= stage_ids:
+        raise ValueError("verdicts가 올바르지 않습니다.")
+    clean_verdicts = {}
+    for k, v in verdicts.items():
+        if not isinstance(v, dict) or v.get("verdict") not in VERDICTS or not isinstance(v.get("abnormal", False), bool):
+            raise ValueError(f"verdicts.{k}가 올바르지 않습니다.")
+        clean_verdicts[k] = {"verdict": v["verdict"], "metrics": metrics(v.get("metrics"), f"verdicts.{k}.metrics"),
+                             **({"abnormal": v["abnormal"]} if "abnormal" in v else {})}
+    stage_metrics = data.get("stage_metrics", [])
+    if not isinstance(stage_metrics, list) or len(stage_metrics) > MAX_STAGE_ATTEMPTS:
+        raise ValueError("stage_metrics가 올바르지 않습니다.")
     return {
         "dish": data["dish"],
+        "menu": menu,
         "stage_index": index,
         "exchange_count": count,
         "confidence": number(data.get("confidence"), 0, 1, "confidence"),
         "alien_scores": scores(data.get("alien_scores"), "alien_scores"),
         "finals": {k: scores(v, f"finals.{k}") for k, v in finals.items()},
+        "verdicts": clean_verdicts,
+        "stage_metrics": [metrics(m, "stage_metrics") for m in stage_metrics],
         "done": False,
     }
 
 
+MAX_STAGE_ATTEMPTS = 20  # config.game.max_attempts보다 넉넉하게 (state 크기 제한)
 MAX_RECORD_ENTRIES = 60  # 4단계 × 최대 주고받기 × 2명보다 넉넉하게
 
 
@@ -148,7 +176,10 @@ def detail():
 def chat():
     username = (request.args.get("username") or "사용자").strip()[:50] or "사용자"
     player = request.args.get("player") if request.args.get("player") in ("male", "female") else "male"
-    return render_template("chat.html", bot=bot_view(load_config()), username=username, player=player)
+    config = load_config()
+    # 왼쪽 아래 ? 도움말: 만들 수 있는 요리들의 성공 그림 (어떤 요리를 만드는 중인지는 알려 주지 않음)
+    dishes = [{"name": d["name"], "image": asset_url(d["images"]["success"])} for d in chatbot.dishes_of(config).values()]
+    return render_template("chat.html", bot=bot_view(config), username=username, player=player, dishes=dishes)
 
 
 @app.post("/api/chat")
@@ -202,7 +233,7 @@ def api_chat():
         if not isinstance(sources, list) or not all(isinstance(source, str) for source in sources):
             raise TypeError("sources는 출처 이름 문자열의 목록이어야 합니다.")
         body = {"reply": response["reply"], "image": image, "sources": sources}
-        for key in ("alien", "state", "stage", "dish", "result"):
+        for key in ("alien", "state", "stage", "dish", "result", *GAME_RESPONSE_KEYS):
             if key in response:
                 body[key] = response[key]
         return jsonify(body)

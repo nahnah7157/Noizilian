@@ -23,7 +23,7 @@
 | --- | --- |
 | 캐릭터·단계·요리·주고받기 설정 | config/chatbot_config.json |
 | 논문 기준 등 챗봇이 참고할 자료 | data/knowledge/ |
-| 자료 검색 | services/retriever.py |
+| 자료 검색 (cooking_rules.md를 "## 메뉴 · 단계" 제목으로) | services/retriever.py |
 | 외계인 응답 생성 (다음 추측 타일·표정·말). GPT 연결 자리 | services/generator.py |
 | 이미지 선택 | services/image_selector.py, public/assets/images/ |
 | 타일 → 감각 점수(1부), 확신·단계·요리 판정(2부), 응답 조립(3부) | services/chatbot_service.py |
@@ -38,11 +38,13 @@
 - API 계약 (바꾸면 app.py, chatbot.js, 테스트를 같이 고친다)
   - POST /api/start {dish?} → {reply, image, sources, alien, state, stage, dish, result}
   - POST /api/chat {message, username, signal, state?} → 위와 같음. state가 없으면 기존 대화 흐름
-  - alien = {scores, word, expression, reading}, state = {dish, stage_index, exchange_count, confidence, alien_scores, finals, done}
+  - alien = {scores, word, expression, reading}, state = {dish, menu, stage_index, exchange_count, confidence, alien_scores, finals, verdicts, stage_metrics, done}
+  - 요리 게임 필드(추가만, 기존 필드 유지): menu, menu_image, stage_number(1~4), stage_name(select/prep/cook/plate), verdict(success/under/over/unstable), confidence, retry, attempts_left, alien_message, plating{hue, abnormal, hue_shift}, metrics(개발 확인용). stage_number·stage_name·verdict는 "방금 판정한 단계", stage 객체는 "지금 진행할 단계". result에 menu·verdicts·plating 추가
+  - 단계 id(ingredient/prep/cook/plating)는 화면 배경·기록칸·레코드가 쓰므로 바꾸지 않는다. 화면용 이름은 config.game.stage_names
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-11-04)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 43개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 59개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
@@ -74,6 +76,13 @@
   - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 방금 보낸 타일(없으면 "…"), 확신이 오를수록 빨리 깜박임(--think). 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile). 세로 화면 말풍선은 오른쪽 위
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 fallback_lines, 그림은 문장부호 규칙으로만 고름. 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
+- 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
+  - 1단계 첫 타일 = 메뉴 결정(따뜻·차가움 × 노이즈 높음·낮음 → pizza/hamburger/ramen/omurice), 조리 판정에는 안 씀. 바로 손질로
+  - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4), hue=HSV 색상(서버가 LCh→sRGB로 되찾음). 손질=size·roughness, 조리=heat·noise, 플레이팅=hue(원형 범위, 벗어나면 abnormal)
+  - 확신 = 근접도(closeness) + bluff 흔들림(seed로 재현), 두 번째 시도부터 memory로 이전 확신 반영. 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 확정(finalize last/average)
+  - 왼쪽 아래 ? (세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
+  - 외계인 표정 = verdict_expressions, 행동 묘사 alien_message = config.game.messages (llm_messages=true면 OpenAI가 cooking_rules.md 검색 자료로 생성. 타일마다 3~6초 걸려 11/4에 꺼 둠). 화면에 글로는 안 보임
+  - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색·재요청 ↻+남은 시도 점. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
   1. GPT 연결 (과제 핵심): generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체. 대사 없이 타일 점수·표정만, 반환 형식 유지 (docs/MODEL_SETUP.md 참고)

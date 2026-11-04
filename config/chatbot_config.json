@@ -341,5 +341,170 @@
     "texture": "단단함–부드러움의 감각 축을 결정한다",
     "roles": "AI가 외계인의 추측 타일과 표정을 정하고, 논문 공식이 그 신호의 뜻과 확신을 계산한다",
     "details": "data/knowledge/paper_rules.md"
+  },
+  "game": {
+    "_note": "요리 게임 규칙 (services/chatbot_service.py 2-2부). 모든 숫자는 [앱 설정] 초기 권장치. 팀 확정 필요",
+    "stage_names": {
+      "ingredient": "select",
+      "prep": "prep",
+      "cook": "cook",
+      "plating": "plate"
+    },
+    "metrics": {
+      "_note": "판정값 0~100 계산. size = 크기 막대(texture.freq: freq_small→0, freq_large→100). roughness·noise = 밀도 막대(texture.oct: oct_min→0, oct_max→100). heat = 논문 따뜻함 점수 wc(-1 따뜻→100, +1 차가움→0, R4). hue = 색을 sRGB로 되돌린 HSV 색상(0~360°)",
+      "freq_small": 0.9,
+      "freq_large": 0.4,
+      "oct_min": 1,
+      "oct_max": 12
+    },
+    "menu": {
+      "_note": "1단계 첫 타일로 메뉴를 정한다. heat가 warm_min 이상이면 따뜻한 색, noise가 noise_min 이상이면 높은 노이즈",
+      "warm_min": 50,
+      "noise_min": 50,
+      "warm_high": "pizza",
+      "cool_high": "hamburger",
+      "cool_low": "ramen",
+      "warm_low": "omurice"
+    },
+    "confidence": {
+      "_note": "근접도(closeness, 0~1) = 범위 안이면 1, 벗어난 만큼 falloff(Hue는 hue_falloff)에 걸쳐 0으로. 외계인 확신 = 첫 시도는 목표, 두 번째부터 memory×이전 확신 + (1-memory)×목표. 목표 = (1-bluff)×근접도 + bluff×무작위(타일 seed로 정해짐). bluff가 클수록 성공 여부와 확신이 어긋난다",
+      "threshold": 0.7,
+      "falloff": 25,
+      "hue_falloff": 40,
+      "memory": 0.3,
+      "bluff": 0.2
+    },
+    "max_attempts": {
+      "prep": 3,
+      "cook": 3,
+      "plating": 3
+    },
+    "finalize": "last",
+    "_finalize_note": "최대 시도에 닿았을 때 결과 확정 방식. last = 마지막 타일, average = 그 단계에서 보낸 타일 판정값의 평균(Hue는 원형 평균)",
+    "verdict_expressions": {
+      "success": "convinced",
+      "under": "doubt",
+      "over": "surprised",
+      "unstable": "thinking"
+    },
+    "llm_messages": false,
+    "_llm_note": "true면 OpenAI 키가 있을 때 외계인 행동 묘사(alien_message)를 생성한다(타일마다 3~6초 더 걸림). 지금은 화면에 글로 안 보여서 꺼 둠 → messages 문구를 바로 씀",
+    "messages": {
+      "select": "외계인이 타일을 보더니 {dish}을(를) 만들기로 정합니다.",
+      "prep": {
+        "success": "외계인이 재료를 알맞은 크기로 고르게 손질합니다.",
+        "under": "외계인이 재료를 너무 잘게 다져 버립니다.",
+        "over": "외계인이 재료를 너무 큼직하게 툭툭 자릅니다.",
+        "unstable": "외계인의 칼질이 거칠어 재료가 들쭉날쭉합니다."
+      },
+      "cook": {
+        "success": "외계인이 알맞은 불로 {dish}을(를) 익힙니다.",
+        "under": "불이 약해 {dish}이(가) 덜 익었습니다.",
+        "over": "불이 너무 세서 {dish}이(가) 타기 시작합니다.",
+        "unstable": "불이 들쭉날쭉해 겉과 속이 고르지 않게 익습니다."
+      },
+      "plating": {
+        "success": "외계인이 {dish}을(를) 먹음직스러운 빛깔로 담습니다.",
+        "under": "외계인이 {dish}에 낯선 빛깔을 입혀 담습니다.",
+        "over": "외계인이 {dish}을(를) 엉뚱한 빛깔로 물들여 담습니다.",
+        "unstable": "외계인이 {dish}을(를) 얼룩덜룩하게 담습니다."
+      },
+      "retry": "외계인이 고개를 갸웃하며 타일을 한 번 더 기다립니다."
+    },
+    "rules": {
+      "_note": "요리별 판정 기준표(0~100, Hue는 도). [lo, hi] 범위보다 낮으면 under, 높으면 over, max_* 를 넘으면 unstable. Hue는 원형 범위(lo>hi면 0°를 넘어감). base_hue = 요리 그림의 원래 색상(화면에서 플레이팅 색을 입힐 때 기준)",
+      "pizza": {
+        "prep": {
+          "size": [
+            30,
+            65
+          ],
+          "max_roughness": 50
+        },
+        "cook": {
+          "heat": [
+            65,
+            85
+          ],
+          "max_noise": 40
+        },
+        "plating": {
+          "hue": [
+            345,
+            45
+          ]
+        },
+        "base_hue": 28
+      },
+      "hamburger": {
+        "prep": {
+          "size": [
+            45,
+            75
+          ],
+          "max_roughness": 45
+        },
+        "cook": {
+          "heat": [
+            55,
+            80
+          ],
+          "max_noise": 40
+        },
+        "plating": {
+          "hue": [
+            15,
+            55
+          ]
+        },
+        "base_hue": 36
+      },
+      "ramen": {
+        "prep": {
+          "size": [
+            15,
+            45
+          ],
+          "max_roughness": 40
+        },
+        "cook": {
+          "heat": [
+            50,
+            75
+          ],
+          "max_noise": 40
+        },
+        "plating": {
+          "hue": [
+            25,
+            65
+          ]
+        },
+        "base_hue": 30
+      },
+      "omurice": {
+        "prep": {
+          "size": [
+            10,
+            35
+          ],
+          "max_roughness": 35
+        },
+        "cook": {
+          "heat": [
+            35,
+            60
+          ],
+          "max_noise": 35
+        },
+        "plating": {
+          "hue": [
+            35,
+            65
+          ]
+        },
+        "base_hue": 24
+      }
+    }
   }
 }

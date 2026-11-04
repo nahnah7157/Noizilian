@@ -399,6 +399,10 @@ const thinkEl = document.getElementById("alien-think");
 const thinkTile = thinkEl?.querySelector(".think-tile");
 const thinkDots = thinkEl?.querySelector(".think-dots");
 const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const hudEl = document.getElementById("game-hud");
+const hudRetry = document.getElementById("hud-retry");
+const STEP_IDS = ["select", "prep", "cook", "plate"]; // 서버 응답 stage_name과 같다 (config.game.stage_names)
+let lastGame = null; // 서버가 판정한 요리 게임 상태 (진행 표시·연출용). 판정은 서버가 하고 화면은 그리기만 한다
 
 let currentState = null;
 let currentStageId = null;
@@ -525,8 +529,45 @@ function playOffer(finishedIndex, afterFill) {
   Promise.all(jobs).then(afterFill);
 }
 
+// 요리 게임 필드만 모은다 (되돌리기 스냅샷에도 넣는다)
+function gameView(data) {
+  return {
+    menu: data.menu, stageName: data.stage_name, verdict: data.verdict,
+    retry: !!data.retry, attemptsLeft: data.attempts_left ?? 0, plating: data.plating,
+    verdicts: data.state?.verdicts || {}, stageIndex: data.stage?.index ?? 0, done: !!data.state?.done,
+  };
+}
+
+// 진행 표시 (메뉴는 보여 주지 않는다): 4단계 칸(지금 단계 강조, 끝난 단계는 판정 색) · 재요청이면 ↻ + 남은 시도 점
+function renderHud(view) {
+  if (!hudEl || !view) return;
+  const done = { select: view.menu ? "success" : null };
+  for (const [stageId, v] of Object.entries(view.verdicts)) done[STEP_IDS[STAGE_IDS.indexOf(stageId)]] = v.verdict;
+  hudEl.querySelectorAll(".hud-steps li").forEach((li, i) => {
+    li.className = (i === view.stageIndex && !view.done ? "current" : "") + (done[li.dataset.step] ? ` v-${done[li.dataset.step]}` : "");
+  });
+  hudRetry.hidden = !view.retry;
+  if (view.retry) hudRetry.querySelector(".hud-dots").textContent = "●".repeat(view.attemptsLeft);
+}
+
+// 판정 연출: 외계인 반응(움직임). 플레이팅 색(hue_shift)은 결과 화면 요리 그림에 입힌다
+function renderVerdict(view, animate) {
+  if (!view) return;
+  if (animate && signalCenter && view.verdict && view.stageName !== "select" && !reduceMotion) {
+    signalCenter.dataset.react = view.verdict;
+    signalCenter.classList.remove("reacting");
+    void signalCenter.offsetWidth; // 같은 판정이 이어져도 애니메이션을 다시 시작
+    signalCenter.classList.add("reacting");
+  }
+}
+
 function updateGameState(data) {
   const prevIndex = currentStageIndex;
+  if ("stage_name" in data) {
+    lastGame = gameView(data);
+    renderHud(lastGame);
+    renderVerdict(lastGame, true);
+  }
   if (data.state) currentState = data.state;
   if (data.stage) {
     currentStageId = data.stage.id;
@@ -552,6 +593,10 @@ function updateGameState(data) {
           if (resultImageEl) resultImageEl.src = data.result.image;
           resultSuccess = data.result.success;
           resultOverlayEl.hidden = false;
+          // 플레이팅 색을 결과 요리 그림에도 입힌다 (abnormal이면 파란 피자 같은 색 그대로)
+          const shift = data.result.plating?.hue_shift;
+          resultImageEl?.classList.toggle("tinted", shift != null);
+          resultImageEl?.style.setProperty("--hue-shift", `${shift ?? 0}deg`);
           showRecord();
         }
         sendButton.disabled = true;
@@ -616,6 +661,7 @@ sendButton.addEventListener("click", async () => {
     stageIndex: currentStageIndex,
     historyLen: history.length,
     signal: structuredClone(signal),
+    game: lastGame && structuredClone(lastGame),
   });
   const sentStage = currentStageId;
   awaiting = true;
@@ -662,6 +708,9 @@ undoBtn?.addEventListener("click", () => {
   currentStageId = snap.stageId;
   currentStageIndex = snap.stageIndex;
   history.length = snap.historyLen; // 방금 보낸 내 타일 + 외계인 응답 제거
+  lastGame = snap.game;
+  renderHud(lastGame);
+  renderVerdict(lastGame, false);
   window.noizilian?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
   renderTileRecord();
   updateThink();
