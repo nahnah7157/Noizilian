@@ -119,8 +119,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   --stage-w: 1920px;
   --stage-h: 1080px;
   --letterbox: #1d1a33;
-  --portrait-panel: 35dvh; /* 세로 화면: 아래 타일 패널 최대 높이(평소엔 내용 높이). 외계인 발밑(64dvh) 아래 여백. 넘치면 패널 안만 스크롤 */
   --touch: 44px; /* 세로 화면: 터치 요소 최소 크기 */
+  --portrait-panel: 35dvh; /* 세로 화면: 아래 타일 패널 최대 높이(평소엔 내용 높이). 외계인 발밑(64dvh) 아래 여백. 넘치면 패널 안만 스크롤 */
   height: 100dvh;
   overflow: hidden;
   background: var(--letterbox);
@@ -247,58 +247,54 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .confidence-text { font-size: 0.75rem; color: #777; white-space: nowrap; }
 
+/* 결과 화면도 게임 화면처럼 1920×1080 스테이지: 배경·음식·레코드가 같은 좌표를 쓴다. 남는 곳은 --letterbox 여백 */
 .result-overlay {
+  --dish-h: 380px; /* 눈에 보이는 음식 높이 */
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
-  place-items: center;
-  background: #f7f7f7 url("../images/background/bg_result.png") center / cover no-repeat;
-  padding: 20px;
-  overflow: hidden; /* 첫 화면처럼 스크롤 없음 */
+  background: var(--letterbox);
+  overflow: hidden;
 }
 .result-overlay[hidden] { display: none; }
-.result-content {
-  width: min(960px, 100%);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 30px;
-  align-items: center;
-  padding: 30px;
-  text-align: center;
-}
-/* 요리는 bg_result 책상 위에 올린다. .result-dish는 레코드 자리를 그대로 두는 빈 칸 */
+.result-content { background: #f7f7f7 url("../images/background/bg_result.png") center / cover no-repeat; }
+/* 테이블 윗면은 y 590~910. 접시 아래 끝을 y 840에 놓는다 */
 #result-image {
-  position: fixed;
-  left: 25%;
-  bottom: 20vh;
-  width: min(44vw, 66vh);
-  transform: translateX(-50%);
+  position: absolute;
+  left: 600px;
+  top: 840px;
+  height: calc(var(--dish-h) / var(--fill, 1));
+  transform: translate(-50%, calc(-100% + var(--foot, 0%)));
+  filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%));
 }
-.result-dish { flex: 1 1 260px; }
-.result-overlay .start-button { position: fixed; right: 24px; bottom: 24px; margin: 0; }
-.record { flex: 1.4 1 320px; margin: 0; }
-.record-disc { position: relative; aspect-ratio: 1; max-width: 85dvh; margin: 0 auto; }
+/* 음식 그림마다 투명 여백이 달라서 --fill(보이는 높이 비율)로 크기를, --foot(아래 여백)으로 접시 끝을 맞춘다 */
+#result-image[src*="hamburger"] { --fill: .70; --foot: 7.7%; }
+#result-image[src*="omurice"] { --fill: .717; --foot: 8.2%; }
+#result-image[src*="pizza"] { --fill: .954; --foot: .2%; }
+#result-image[src*="ramen"] { --fill: .916; --foot: 2.2%; }
+.result-overlay .start-button { position: absolute; right: 40px; bottom: 30px; margin: 0; }
+.record { margin: 0; }
+.record-disc { position: absolute; left: 1050px; top: 300px; width: 560px; height: 560px; }
 .record-disc > img, .record-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.record-disc > img { filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%)); }
 .record-tip {
   position: absolute;
   z-index: 1;
-  width: min(180px, 60%);
-  padding: 10px 12px;
-  border-radius: 10px;
+  width: 300px;
+  padding: 14px 16px;
+  border-radius: 14px;
   background: rgb(255 255 255 / 95%);
   box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
-  font-size: .85rem;
+  font-size: 1.2rem;
   line-height: 1.5;
   text-align: left;
   pointer-events: none;
 }
-.record-tip img { display: block; width: 96px; height: auto; margin: 6px auto 0; }
+.record-tip img { display: block; width: 150px; height: auto; margin: 8px auto 0; }
 .record-tip img[hidden] { display: none; }
-.record-tip q { display: block; font-size: 1rem; font-weight: 600; text-align: center; }
+.record-tip q { display: block; font-size: 1.4rem; font-weight: 600; text-align: center; }
 
 @media (max-width: 600px) {
-  .result-dish { display: contents; } /* 좁은 화면에선 빈 칸 없이 레코드만 가운데 */
   .landing-title { font-size: 1.6rem; }
   .detail-page .start-button { bottom: 150px; } /* 좁은 화면에선 이름 칸 위로 */
   #chat-log { padding: 14px; }
@@ -338,50 +334,56 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .sense-legend { margin: 2px 0 0; color: #777; font-size: .75rem; line-height: 1.4; }
 .message.user img.signal-image { width: 72px; height: 72px; margin: 0 0 6px auto; border-radius: 4px; }
 
-/* 와이어프레임 레이아웃: 부엌 배경 위 좌우 패널 + 가운데 외계인 */
-/* 가운데 아래 패널: [색 네모 | 색상·크기·밀도 막대] [미리보기·체크] */
+/* 게임 화면 배치(1920×1080 기준): 기록칸 왼쪽 위, 타일 패널 오른쪽 위, 외계인 가운데 바닥 */
+/* 오른쪽 위 패널: 색 네모·색상 막대 → 크기·밀도 막대 → 미리보기·버튼 */
 .signal-dock {
   position: absolute;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
+  top: 40px;
+  right: 40px;
+  width: 430px; /* 아래 끝이 y 590 안: 조리 배경의 프라이팬(y 625~)·냄비를 가리지 않게 */
   z-index: 2;
   display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 20px;
-  border-radius: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
   background: rgb(206 208 214 / 92%);
   box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
 }
-.signal-left { display: flex; flex-direction: column; gap: 10px; }
+.signal-left { display: flex; align-items: stretch; gap: 10px; }
 .signal-right {
   display: grid;
-  grid-template-columns: 280px 440px;
-  grid-template-rows: repeat(3, auto);
-  gap: 14px 20px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
 }
 .signal-right #color-picker { display: contents; }
-.signal-right #color-canvas { grid-row: 1 / 4; }
 
+/* 외계인 크기에 딱 맞는 상자. 말풍선이 이 상자를 기준으로 머리 옆을 따라간다 */
 .signal-center {
   position: absolute;
-  top: 0;
-  bottom: 300px; /* 아래 패널 자리 */
-  left: 0;
-  right: 0;
-  display: grid;
-  place-items: center;
+  left: 50%;
+  bottom: 10px;
+  height: 700px;
+  transform: translateX(-50%);
   z-index: 1;
 }
-.alien-expression { max-width: 100%; max-height: calc((var(--stage-h) - 170px) * 2 / 3); object-fit: contain; } /* 2/3 크기 */
+.alien-expression { display: block; height: 100%; width: auto; transform: translateY(var(--foot, 0)); }
+/* 표정 이미지마다 아래 투명 여백이 달라서, 그만큼 내려 발을 바닥에 맞춘다 */
+.alien-expression[src*="alien_default"] { --foot: 7.1%; }
+.alien-expression[src*="alien_doubt"] { --foot: 3.8%; }
+.alien-expression[src*="alien_convinced"] { --foot: 4.6%; }
+.alien-expression[src*="alien_surprised"] { --foot: 5.3%; }
+.alien-expression[src*="alien_thinking"] { --foot: 3.6%; }
+.alien-expression[src*="alien_joy"] { --foot: 6.4%; }
 
-/* 요리 진행 표시 (오른쪽 위, 메뉴는 숨김): 4단계 칸 · 재요청 ↻ + 남은 시도. 칸 색 = 서버 판정(verdict) */
+/* 요리 진행 표시 (위 가운데, 메뉴는 숨김): 4단계 칸 · 재요청 ↻ + 남은 시도. 칸 색 = 서버 판정(verdict).
+   왼쪽 위 기록칸·오른쪽 위 타일 패널 사이 */
 .game-hud {
   position: absolute;
   top: 20px;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -468,11 +470,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .dish-help-pop img { width: 200px; height: 150px; object-fit: contain; }
 .dish-help-line { grid-column: 1 / -1; margin: 0 0 4px; color: #4a3b6b; font-size: 1.5rem; font-weight: 700; text-align: center; }
 
-/* 진행 중 외계인 머리 위 말풍선: 내가 보낸 타일(없으면 "…")을 띄우고 깜박인다. 속도 = 확신(--think) */
+/* 진행 중 외계인 머리 옆 말풍선: 내가 보낸 타일(없으면 "…")을 띄우고 깜박인다. 속도 = 확신(--think) */
 .alien-think {
   position: absolute;
-  top: 110px;
-  left: calc(50% + 230px); /* 1920 스테이지: 외계인 머리 오른쪽 위 */
+  top: 4%;
+  left: calc(100% - 40px);
   padding: 14px;
   border-radius: 24px;
   background: rgb(255 255 255 / 92%);
@@ -517,16 +519,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   left: 24px;
   z-index: 2;
   display: grid;
-  grid-template-columns: auto repeat(4, 120px);
-  gap: 16px;
+  grid-template-columns: auto repeat(4, 90px);
+  gap: 12px;
   align-items: center;
-  padding: 20px;
-  border-radius: 20px;
+  padding: 15px;
+  border-radius: 15px;
   background: rgb(255 255 255 / 70%);
 }
 .record-row-icon {
-  width: 120px;
-  height: 120px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   object-fit: contain;
 }
@@ -542,7 +544,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .signal-tile { display: block; }
 #preview-tile {
   display: block;
-  width: 100px;
+  width: 66px;
   height: auto;
   aspect-ratio: 1;
   border-radius: 4px;
@@ -550,14 +552,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 
 /* 되돌리기(파랑, 보낸 타일 취소)·보내기(초록) 버튼 */
-.signal-buttons { display: flex; gap: 8px; }
+.signal-buttons { flex: 1; display: flex; gap: 8px; }
 .signal-buttons button {
   flex: 1;
+  min-height: 44px;
   padding: 8px 0;
   border: 0;
   border-radius: 8px;
   color: #fff;
-  font-size: 1.6rem;
+  font-size: 2.4rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -572,7 +575,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 #color-canvas {
   display: block;
   width: 100%;
-  aspect-ratio: 1.25;
+  aspect-ratio: 1.4;
   border-radius: 6px;
   cursor: crosshair;
 }
@@ -582,9 +585,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   -webkit-appearance: none;
   margin: 0;
   width: 100%;
-  height: 28px;
+  height: 24px;
   cursor: pointer;
-  border-radius: 14px;
+  border-radius: 12px;
   background: linear-gradient(to right,
     hsl(0, 100%, 50%),
     hsl(60, 100%, 50%),
@@ -597,16 +600,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .hue-slider::-moz-range-track { background: transparent; }
 .hue-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border: 3px solid #fff;
   border-radius: 50%;
   background: transparent;
   box-shadow: 0 0 0 1px #333;
 }
 .hue-slider::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border: 3px solid #fff;
   border-radius: 50%;
   background: transparent;
@@ -616,26 +619,37 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 /* 오른쪽: 크기·밀도 막대 (아이콘만, 글자 없음) */
 .sense-row {
   display: grid;
-  grid-template-columns: 36px 1fr 36px;
+  grid-template-columns: 30px 1fr 30px;
   gap: 8px;
   align-items: center;
-  padding: 14px 18px;
-  border-radius: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: rgb(255 255 255 / 70%);
 }
 .sense-bar input { width: 100%; accent-color: #764ba2; }
 .sense-icon { justify-self: center; border-radius: 50%; background: #555; }
-.sense-icon.freq-min, .sense-icon.density-min { width: 12px; height: 12px; }
-.sense-icon.freq-max, .sense-icon.density-max { width: 26px; height: 26px; }
+.sense-icon.freq-min, .sense-icon.density-min { width: 10px; height: 10px; }
+.sense-icon.freq-max, .sense-icon.density-max { width: 22px; height: 22px; }
 .sense-bar input { height: 28px; }
 
-/* 세로 화면(모바일 9:16 등): 배율 없이 외계인 위, 타일 패널 아래로 쌓는다. 패널이 넘치면 패널 안만 스크롤 */
+/* 세로 화면 결과: 배경을 키워 테이블을 아래로 내리고, 음식은 테이블 가운데, 레코드는 위쪽 창 앞 */
+@media (orientation: portrait) {
+  .result-overlay { --dish-h: min(22dvh, 62vw); }
+  .result-content { background-size: auto 115%; background-position: center top; }
+  #result-image { left: 50%; top: 88dvh; }
+  .result-overlay .start-button { right: 24px; bottom: 24px; }
+  .record-disc { left: 50%; top: 4dvh; width: min(30dvh, 80vw); height: min(30dvh, 80vw); transform: translateX(-50%); }
+  .record-tip { width: min(220px, 70vw); padding: 10px 12px; border-radius: 10px; font-size: .85rem; }
+  .record-tip img { width: 96px; margin-top: 6px; }
+  .record-tip q { font-size: 1rem; }
+}
+
+/* 세로 화면(모바일 9:16 등): 외계인은 가로 화면처럼 배경 둥근 창 안(조리대 위)에 고정하고, 기록칸·진행 표시·패널은 그 바깥 여백에 둔다 */
 @media (orientation: portrait) {
   .stage { left: 0; top: 0; width: 100%; height: 100dvh; transform: none; }
-  /* 외계인은 가로 화면과 같은 비율로 배경 창 안(조리대 위)에 선다: 배경이 화면 높이에 맞춰 깔리므로
-     가로 스테이지(1080)의 위 86px·높이 607px를 dvh 비율로 옮긴다. 기록 박스·패널은 그 바깥 여백에 놓는다 */
+  /* 배경이 화면 높이에 맞춰 깔리므로 창 안 위치를 dvh 비율로: 위 86/1080, 높이 607/1080 */
   .layout-row { display: grid; grid-template-rows: 1fr auto auto; } /* 외계인 영역 / 진행 표시 / 패널 */
-  .signal-center { position: absolute; inset: 0; display: block; pointer-events: none; }
+  .signal-center { position: absolute; inset: 0; left: 0; bottom: 0; height: auto; display: block; transform: none; pointer-events: none; }
   .alien-expression {
     position: absolute;
     left: 50%;
@@ -646,8 +660,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     transform: translateX(-50%);
   }
   .signal-dock { grid-row: 3; }
-  /* 진행 표시는 패널 바로 위 가로 한 줄(격자 2번째 줄). 말풍선은 오른쪽 위 */
-  .game-hud { position: relative; top: auto; right: auto; grid-row: 2; grid-column: 1; justify-self: center; gap: 6px; margin-bottom: 6px; padding: 4px 8px; border-radius: 12px; }
+  /* 진행 표시는 패널 바로 위 가로 한 줄(격자 2번째 줄), ?는 그 왼쪽. 말풍선은 오른쪽 위 */
+  .game-hud { position: relative; top: auto; left: auto; right: auto; transform: none; grid-row: 2; grid-column: 1; justify-self: center; gap: 6px; margin-bottom: 6px; padding: 4px 8px; border-radius: 12px; }
   .hud-steps { gap: 4px; }
   .hud-steps li { width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; }
   .hud-steps li.current { outline-width: 2px; }
@@ -665,8 +679,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .record-row-icon { width: 32px; height: 32px; }
   .signal-dock {
     position: relative;
+    top: auto;
+    right: auto;
     left: auto;
     bottom: auto;
+    width: auto;
+    min-height: 0;
     transform: none;
     flex-direction: column;
     align-items: stretch;
@@ -677,11 +695,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     overscroll-behavior: contain;
     border-radius: 16px 16px 0 0;
   }
-  /* 가로 화면처럼 [색 네모 | 색상·크기·밀도 막대] 두 칸으로 접어 높이를 줄인다 */
-  .signal-right { grid-template-columns: 38% 1fr; gap: 6px 10px; }
-  .signal-right #color-canvas { height: calc(var(--touch) * 3 + 12px); aspect-ratio: auto; } /* 오른쪽 막대 세 줄 높이 */
+  /* [색 네모 | 색상·크기·밀도 막대] 두 칸으로 접어 높이를 줄인다 */
+  .signal-right { grid-template-columns: 38% minmax(0, 1fr); gap: 6px 10px; }
+  .signal-right #color-canvas { grid-row: 1 / 4; height: calc(var(--touch) * 3 + 12px); aspect-ratio: auto; } /* 오른쪽 막대 세 줄 높이 */
   .hue-slider { height: var(--touch); border-radius: 12px; }
   .hue-slider::-webkit-slider-thumb { width: 30px; height: 30px; }
+  .hue-slider::-moz-range-thumb { width: 16px; height: 16px; }
+  .sense-icon.freq-min, .sense-icon.density-min { width: 8px; height: 8px; }
+  .sense-icon.freq-max, .sense-icon.density-max { width: 18px; height: 18px; }
   .sense-row { min-height: var(--touch); padding: 0 8px; gap: 6px; grid-template-columns: 26px 1fr 26px; }
   .sense-bar input { height: var(--touch); margin: 0; }
   .signal-left { flex-direction: row; align-items: center; gap: 10px; }
