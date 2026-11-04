@@ -669,20 +669,15 @@ undoBtn?.addEventListener("click", () => {
 });
 
 // ── 7. 골든 레코드 ──────────────────────────────────────────
-// 주고받은 타일마다 무작위 기호 3개(한 묶음)를 바깥에서 안쪽으로 도는 나선 홈을 따라 새긴다.
-// 묶음에 마우스를 올리면 ① 그 타일 값으로 만든 무작위 3음 소리 ② 타일을 말로 옮긴 대사(OpenAI)
-// ③ 외계인 대사면 대사와 가장 비슷한 외계인 그림(서버가 임베딩으로 고름)
+// 주고받은 타일을 바깥에서 안쪽으로 도는 나선 홈에 순서대로 새긴다.
+// 타일 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사(OpenAI) ② 외계인 대사면 대사와 가장 비슷한 외계인 그림(서버가 임베딩으로 고름)
 
 const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
 const PER_TURN = 12; // 한 바퀴에 들어가는 타일 수
-const SYMBOLS_PER_TILE = 3;
-let symbols = []; // {x, y, size, angle, glyph, tile}
-let motifs = []; // 타일마다 무작위 3음 패턴
 let lines = null; // 타일마다 {text, image} — null이면 아직 만드는 중
 let hovered = -1; // 마우스가 올라간 타일 번호
 let recordToken = 0;
-let audio = null;
 
 const RECORD_SIZE = 600; // 레코드 기준 좌표. 실제 캔버스 픽셀은 fitCanvases가 화면에 맞추고 drawRecord가 늘려 그린다
 
@@ -697,95 +692,40 @@ function arcOf(i) {
   return { r: outer - (i * pitch) / PER_TURN - band / 2, start, end: start + step - 0.06 };
 }
 
-/** 무작위 기호: 고리·막대·지그재그·점·반원 중 2~3개를 겹친다 (단위 좌표 -1~1) */
-function randomGlyph(rand) {
-  const kinds = ["ring", "bar", "zigzag", "dot", "half"];
-  return Array.from({ length: 2 + Math.floor(rand() * 2) }, () => {
-    const kind = kinds[Math.floor(rand() * kinds.length)];
-    const a = rand() * Math.PI * 2;
-    if (kind === "ring") return { kind, r: 0.4 + rand() * 0.6 };
-    if (kind === "dot") return { kind, x: Math.cos(a) * 0.6, y: Math.sin(a) * 0.6 };
-    if (kind === "half") return { kind, r: 0.5 + rand() * 0.4, a };
-    if (kind === "bar") return { kind, a };
-    const n = 3 + Math.floor(rand() * 2);
-    return { kind, points: Array.from({ length: n }, (_, j) => [-1 + (2 * j) / (n - 1), rand() * 2 - 1]) };
-  });
-}
-
-/** 무작위 3음 패턴: 음계 안의 음·옥타브 뛰기·간격·길이를 매번 다르게 */
-function randomMotif() {
-  const pick = (list) => list[Math.floor(Math.random() * list.length)];
-  let at = 0;
-  return Array.from({ length: SYMBOLS_PER_TILE }, () => {
-    const note = { degree: Math.floor(Math.random() * 5), octave: pick([0, 0, 0, 1, -1]), at, length: 0.25 + Math.random() * 0.45 };
-    at += pick([0.12, 0.18, 0.25, 0.35]);
-    return note;
-  });
-}
-
-function buildSymbols() {
-  const { S, band } = recordGeometry();
-  symbols = [];
-  motifs = history.map(randomMotif);
-  history.forEach((entry, i) => {
-    const arc = arcOf(i);
-    for (let k = 0; k < SYMBOLS_PER_TILE; k++) {
-      const angle = arc.start + ((k + 0.5) * (arc.end - arc.start)) / SYMBOLS_PER_TILE;
-      symbols.push({
-        x: S / 2 + arc.r * Math.cos(angle),
-        y: S / 2 + arc.r * Math.sin(angle),
-        size: band * 0.5,
-        angle,
-        glyph: randomGlyph(mulberry32(Math.floor(Math.random() * 2 ** 31))),
-        tile: i,
-      });
-    }
-  });
-}
-
-function drawGlyph(ctx, glyph) {
-  ctx.beginPath();
-  for (const part of glyph) {
-    if (part.kind === "ring") {
-      ctx.moveTo(part.r, 0);
-      ctx.arc(0, 0, part.r, 0, Math.PI * 2);
-    } else if (part.kind === "half") {
-      ctx.moveTo(part.r * Math.cos(part.a), part.r * Math.sin(part.a));
-      ctx.arc(0, 0, part.r, part.a, part.a + Math.PI);
-    } else if (part.kind === "bar") {
-      ctx.moveTo(-Math.cos(part.a), -Math.sin(part.a));
-      ctx.lineTo(Math.cos(part.a), Math.sin(part.a));
-    } else if (part.kind === "dot") {
-      ctx.moveTo(part.x + 0.12, part.y);
-      ctx.arc(part.x, part.y, 0.12, 0, Math.PI * 2);
-    } else {
-      part.points.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    }
-  }
-  ctx.stroke();
-}
-
 function drawRecord() {
   const ctx = recordCanvas.getContext("2d");
   const { S } = recordGeometry();
   ctx.setTransform(recordCanvas.width / S, 0, 0, recordCanvas.width / S, 0, 0);
   ctx.clearRect(0, 0, S, S);
-  ctx.lineCap = ctx.lineJoin = "round";
-  symbols.forEach((sym) => {
-    ctx.save();
-    ctx.translate(sym.x, sym.y);
-    ctx.rotate(sym.angle + Math.PI / 2); // 홈 방향으로 눕혀 새긴 느낌
-    ctx.scale(sym.size, sym.size);
-    ctx.lineWidth = 2.2 / sym.size;
-    ctx.shadowColor = "rgb(0 0 0 / 60%)";
-    ctx.shadowBlur = 3;
-    ctx.strokeStyle = sym.tile === hovered ? "#fff" : "rgb(255 236 170 / 90%)"; // 원본 레코드의 새긴 선 색
-    drawGlyph(ctx, sym.glyph);
-    ctx.restore();
+  const { band } = recordGeometry();
+  history.forEach((entry, i) => {
+    const { r, start, end } = arcOf(i);
+    entry.pattern ??= tilePattern(ctx, entry);
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, r, start, end);
+    ctx.lineWidth = band + 3; // 홈 테두리 (마우스가 올라간 타일은 흰색)
+    ctx.strokeStyle = i === hovered ? "#fff" : "rgb(0 0 0 / 45%)";
+    ctx.stroke();
+    ctx.lineWidth = band;
+    ctx.strokeStyle = entry.pattern;
+    ctx.stroke();
   });
 }
 
-/** 커서가 있는 묶음(타일) 번호, 없으면 -1. 기호 3개가 놓인 홈 구간 전체를 한 히트박스로 본다 */
+/** 홈을 채울 타일 무늬. 기록칸·말풍선과 같은 seed라 같은 타일로 보인다 */
+function tilePattern(ctx, entry) {
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = 48;
+  if (entry.who === "user") {
+    renderTile(tile, entry.signal.color, entry.signal.texture, 54321);
+  } else {
+    const texture = textureFor(entry.scores.hs);
+    renderTile(tile, colorFor(entry.scores, texture), texture, 12345);
+  }
+  return ctx.createPattern(tile, "repeat");
+}
+
+/** 커서가 있는 타일 번호, 없으면 -1. 그 타일이 새겨진 홈 구간을 히트박스로 본다 */
 function hitTile(event) {
   const rect = recordCanvas.getBoundingClientRect();
   const { S, band } = recordGeometry();
@@ -793,37 +733,12 @@ function hitTile(event) {
   const y = ((event.clientY - rect.top) * S) / rect.height - S / 2;
   const r = Math.hypot(x, y);
   const angle = Math.atan2(y, x);
-  const reach = band * 0.7; // 기호 반지름(band × 0.5)보다 조금 넉넉하게
+  const reach = band * 0.7; // 홈 반폭(band × 0.5)보다 조금 넉넉하게
   return history.findIndex((_, i) => {
     const arc = arcOf(i);
     const d = (((angle - arc.start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     return d <= arc.end - arc.start && Math.abs(r - arc.r) <= reach;
   });
-}
-
-/** 타일 점수 + 무작위 패턴으로 3음을 낸다. [앱 설정] 소리 대응은 논문이 아니라 우리가 정한 것:
- *  무거움–가벼움 → 음높이, 따뜻함–차가움 → 장·단조 음계와 음색 밝기, 단단함–부드러움 → 파형과 시작 속도. */
-function playTile(scores, motif) {
-  audio ??= new AudioContext();
-  audio.resume();
-  const scale = scores.wc < 0 ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]; // 따뜻함 = 장조 5음, 차가움 = 단조 5음
-  const root = 262 * 2 ** scores.hl;
-  const attack = scores.hs > 0 ? 0.08 : 0.01; // 부드러울수록 천천히 시작
-  for (const note of motif) {
-    const start = audio.currentTime + note.at;
-    const osc = audio.createOscillator();
-    osc.type = scores.hs < -0.33 ? "square" : scores.hs > 0.33 ? "sine" : "triangle";
-    osc.frequency.value = root * 2 ** (note.octave + scale[note.degree] / 12);
-    const filter = audio.createBiquadFilter();
-    filter.frequency.value = 1800 * 2 ** -scores.wc; // 따뜻할수록(음수) 밝게
-    const gain = audio.createGain();
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(0.15, start + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + note.length);
-    osc.connect(filter).connect(gain).connect(audio.destination);
-    osc.start(start);
-    osc.stop(start + note.length + 0.05);
-  }
 }
 
 // 대사는 타일 단위. 외계인 대사에만 그림
@@ -855,7 +770,6 @@ function onRecordPointer(event) {
   } else {
     showTip(event, tile);
     recordCanvas.style.cursor = "pointer";
-    if (tile !== hovered) playTile(history[tile].scores, motifs[tile]);
   }
   if (tile !== hovered) {
     hovered = tile;
@@ -876,7 +790,6 @@ async function showRecord() {
   recordTip.hidden = true;
   hovered = -1;
   lines = null;
-  buildSymbols();
   fitCanvases(); // 결과 화면이 막 보여서 레코드 크기를 이제 알 수 있다 (drawRecord 포함)
   if (!history.length) return;
   try {
