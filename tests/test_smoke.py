@@ -45,7 +45,7 @@ class SmokeTest(unittest.TestCase):
         for path in (
             "/assets/js/chatbot.js",
             "/assets/css/style.css",
-            "/assets/images/hateslop-logo.png",
+            "/assets/images/alien/alien_default.png",
         ):
             with self.subTest(path=path):
                 response = self.client.get(path)

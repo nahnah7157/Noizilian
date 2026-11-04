@@ -46,7 +46,7 @@ def load_config() -> dict:
 
 
 def bot_view(config: dict) -> dict:
-    thumbnail = config.get("thumbnail") or "assets/images/hateslop-logo.png"
+    thumbnail = config.get("thumbnail") or "assets/images/alien/alien_default.png"
     return {
         "name": config["name"],
         "description": config.get("description", ""),
