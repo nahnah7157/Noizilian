@@ -33,13 +33,15 @@ class SmokeTest(unittest.TestCase):
         self.client = app.test_client()
 
     def test_pages_and_referenced_assets(self):
+        self.assertIn('data-player="female"', self.client.get("/chat?player=female").get_data(as_text=True))
+        self.assertIn('data-player="male"', self.client.get("/chat?player=<b>").get_data(as_text=True))
         for route in ("/", "/detail", "/chat?username=헤슬", "/health"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(route).status_code, 200)
 
         chat_page = self.client.get("/chat").get_data(as_text=True)
         self.assertIn("/assets/js/chatbot.js", chat_page)
-        self.assertIn("/assets/images/alien/alien_cute_a.png", self.client.get("/").get_data(as_text=True))
+        self.assertIn("/assets/images/alien/alien_default.png", self.client.get("/").get_data(as_text=True))
         for path in (
             "/assets/js/chatbot.js",
             "/assets/css/style.css",
@@ -288,6 +290,20 @@ class AdvanceTest(unittest.TestCase):
         self.assertFalse(should_advance(0.3, 99, {"confidence_threshold": 0.8, "max_exchanges": None})["advance"])
         self.assertEqual(should_advance(0.3, 4, {"confidence_threshold": 0.8, "max_exchanges": 4})["reason"], "max_reached")
 
+    def test_expression_rules(self):
+        # 아주 멀면 surprised, 확신이 내려가면 thinking, 오르면 확신 크기에 따라 convinced / doubt
+        from services.generator import DemoGenerator
+        def face(distance, step, confidence):
+            update = {"distance": distance, "step": step, "confidence": confidence}
+            signal = {"scores": {a: 0.0 for a in AXES}}
+            return DemoGenerator().respond_to_tile(STAGES["ingredient"], {}, CONFIG, signal,
+                                                   {a: 0.0 for a in AXES}, update, [])["expression"]
+        self.assertEqual(face(1.5, -0.3, 0.0), "surprised")
+        self.assertEqual(face(0.8, -0.1, 0.2), "thinking")
+        self.assertEqual(face(0.2, 0.2, 0.6), "convinced")
+        self.assertEqual(face(0.2, 0.2, 0.2), "doubt")
+        self.assertTrue(set(CONFIG["expressions"]) - {"_note"} >= {"default", "doubt", "convinced", "surprised", "thinking", "joy"})
+
 
 class DishTest(unittest.TestCase):
     def test_exact_targets_succeed(self):
@@ -335,7 +351,7 @@ class CookingFlowTest(unittest.TestCase):
         self.assertEqual(data["stage"]["id"], "ingredient")
         self.assertEqual(data["dish"], {"id": "ramen", "name": "라멘"})
         self.assertEqual(set(data["alien"]["scores"]), set(AXES))
-        self.assertEqual(data["image"], "/" + STAGES["ingredient"]["pose_image"])
+        self.assertEqual(data["image"], "/" + CONFIG["expressions"]["default"]["image"])
 
     def test_start_random_dish(self):
         self.assertIn(self.client.post("/api/start", json={}).get_json()["dish"]["id"], DISHES)
@@ -368,7 +384,9 @@ class CookingFlowTest(unittest.TestCase):
         self.assertTrue(data["stage"]["advanced"])
         self.assertEqual(state["stage_index"], 1)
         self.assertIn("ingredient", state["finals"])
-        self.assertEqual(data["image"], "/" + STAGES["prep"]["pose_image"])  # 손질: 칼 든 외계인
+        # 확신해서 넘어가면 joy, 횟수가 차서 넘어가면 thinking
+        face = "joy" if data["stage"]["reason"] == "confident" else "thinking"
+        self.assertEqual(data["image"], "/" + CONFIG["expressions"][face]["image"])
 
     def test_full_game_ends_with_dish_image(self):
         from services.image_selector import _url
@@ -422,10 +440,26 @@ class RecordDialogueTest(unittest.TestCase):
     def test_picks_most_similar_image(self):
         from services.image_selector import match_images
 
-        vectors = {"썰자": [1, 0], "굽자": [0, 1], "칼 그림": [0.9, 0.1], "팬 그림": [0.1, 0.9]}
-        images = {"assets/knife.png": "칼 그림", "assets/pan.png": "팬 그림"}
-        self.assertEqual(match_images(["썰자", "굽자"], images, lambda texts: [vectors[t] for t in texts]),
-                         ["/assets/knife.png", "/assets/pan.png"])
+        vectors = {"알겠어": [1, 0], "모르겠어": [0, 1], "응…": [0.9, 0.1], "음…": [0.1, 0.9], "끄덕": [0.5, -0.5],
+                   "알겠다…?!": [1, 0], "와!": [-1, 0]}
+        images = {"convinced": ["끄덕", "응…"], "thinking": ["음…"], "surprised": ["와!"]}
+        embed = lambda texts: [vectors[t] for t in texts]
+        # 가장 비슷한 예시 하나로 고른다 (convinced의 '끄덕'은 멀어도 '응…'이 가까움)
+        self.assertEqual(match_images(["알겠어", "모르겠어"], images, embed), ["convinced", "thinking"])
+        # ?!가 있으면 임베딩이 convinced에 가까워도 surprised
+        self.assertEqual(match_images(["알겠다…?!"], images, embed), ["surprised"])
+
+    def test_spreads_emotions_without_breaking_punctuation(self):
+        from services.image_selector import pick_diverse
+
+        keys = ["default", "doubt", "convinced", "surprised", "thinking", "joy"]
+        # 유사도가 doubt 쪽으로 조금만 앞서면 겹침 감점으로 thinking도 섞인다
+        similarity = [{k: 0.5 + 0.01 * (k == "doubt") for k in keys} for _ in range(4)]
+        picks = pick_diverse(["맞아…?"] * 4, keys, similarity)
+        self.assertEqual(set(picks), {"doubt", "thinking"})
+        # 키가 없을 때도 같은 표정만 이어지지 않고, ?는 의심·고민 / !는 기쁨·확신·놀람 안에서만 고른다
+        self.assertEqual(pick_diverse(["맞아…?", "맞아…?", "알겠다…!", "알겠다…!"], keys),
+                         ["doubt", "thinking", "joy", "convinced"])
 
     def test_without_key_uses_fallback_lines_and_alien_images(self):
         alien = {"who": "alien", "stage": "ingredient", "message": "이거…?", "scores": {a: 0.0 for a in AXES}}

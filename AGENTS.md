@@ -5,9 +5,9 @@
 ## 컨셉 (기준: config/chatbot_config.json)
 - 요리 4단계: 재료 준비 → 손질 → 조리 → 플레이팅. 한 단계 = 한 턴
 - 한 턴 안에서 타일을 여러 번 주고받는다. 외계인의 확신이 기준(0.8)을 넘거나 최대 횟수(임시 4번)에 닿으면 다음 단계로
-- 외계인은 매번 타일 + 표정으로 응답한다. 표정 이미지는 아직 없어서 단계별 포즈(기본 / 칼 / 프라이팬)를 대신 쓴다
+- 외계인은 매번 타일 + 표정으로 응답한다
 - 네 단계에서 확정된 타일이 요리 목표와 가까우면 성공, 멀면 실패 이미지 (햄버거·오므라이스·피자·라멘)
-- 외계인 이미지는 귀여운 그림체(alien_cute_*)만 쓴다
+- 외계인 표정 이미지: alien_default·doubt·convinced·surprised·thinking·joy (config.expressions, 고르는 규칙은 generator.py). 배경: images/background/bg_* (단계별, style.css body[data-stage])
 - 감각 규칙: Lucassen, Gevers, Gijsenij (2011) "Texture Affects Color Emotion" Table III. 근거는 data/knowledge/paper_rules.md의 R1~R15
 
 ## 스택
@@ -41,8 +41,8 @@
   - alien = {scores, word, expression, reading}, state = {dish, stage_index, exchange_count, confidence, alien_scores, finals, done}
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-11-03)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 39개
+## 현재 진행 상황 (2026-11-04)
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 43개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
@@ -55,26 +55,32 @@
   - 대화 순서: 12시에서 시작해 시계방향, 한 바퀴(12타일)마다 안쪽 홈으로 이어짐
   - 논문 근거 문장과 결과 화면 외계인 대사(result-line)는 표시 안 함
 - 완료: 외계인 대사 제거. config의 greeting·stages[].alien_line·result.success_line/fail_line 삭제, persona.speaking_style을 "말하지 않음"으로. generator.py의 "…지직" 대사 삭제 → alien.word는 항상 ""(형식 유지), reply는 괄호 지문만(화면에 안 보임). judge_dish 결과의 line 삭제
-- 완료: 네 가지 다듬기 (chat.html, style.css, chatbot.js, app.py, generator.py, chatbot_service.py, tests) — 테스트 40개
-  - 결과 안내 문구: 레코드 대사 만드는 동안 "외계인이 신호를 보내는 중이에요", 다 만들면 figcaption 비움. "기호에 마우스를…"·"OpenAI 키…" 문구 삭제(RECORD_NOTES 제거)
-  - 타일 기록칸 = 4단계(윗줄 외계인·아랫줄 나), 단계가 끝날 때만 그 칸을 채운다(renderTileRecord의 stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 내가 방금 보낸 타일(없으면 "…", think-tile/think-dots)을 띄우고 깜박이며, 확신(state.confidence)이 오를수록 깜박임이 빨라진다(CSS 변수 --think). 단계 종료(advanced/done) 시 깜박임이 멈추고 두 타일이 날아감(flyTile): 내 타일(말풍선 위치)→아랫줄 칸, 외계인 타일(외계인 앞)→윗줄 칸. 끝나면 칸 채우고 다음 포즈. 다음 단계 첫 추측은 화면에 안 보임. prefers-reduced-motion이면 날아가기 생략. 되돌리기 시 말풍선도 이전 타일/"…"로
-  - 반응형: 시도했다가 전부 되돌림. 레이아웃은 main 원본(고정 절대배치: 패널 230/236px, 가운데 left 270/right 276, 외계인 max-height 78vh) 그대로. (별도 반응형 없음)
-  - 결과 대기 단축: showRecord가 /api/record를 단계별로 병렬 호출하고 도착한 단계부터 기호에 붙임. 계약에 선택 필드 wrong(그 묶음에 넣을 엉뚱한 방법 대사 수) 추가 — 성공=첫 단계 1, 실패=앞 세 단계 1씩(총 3). wrong 없으면 기존 success 규칙(하위호환)
-- 완료: 되돌리기(↺) = 보낸 타일 취소 (chatbot.js, tests — app.py 안 고침). 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, ↺면 마지막 스냅샷으로 복원(history에서 빼고 확신·단계 이전 값, 선택기는 취소한 타일 값으로). 여러 번 누르면 이번 단계 보낸 타일을 하나씩 취소. 단계가 바뀌면(advanced/done) 스냅샷 비워 이전 단계로는 안 감. 되돌릴 게 없거나 응답 대기 중이거나 done이면 버튼 비활성. state는 브라우저가 들고 있어 이전 state로 다시 보냄(테스트: 같은 state 재전송 정상). 테스트 41개
-- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 fallback_lines, 임베딩 그림 선택은 동작 안 함(그림을 차례로 붙임). 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
+- 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
+  - 표정: 시작 default / 단계 확신 통과·요리 성공 joy / 횟수 차서 통과·요리 실패 thinking / 교환 중엔 아주 다르면 surprised, 확신이 내려가면 thinking, 오르면 확신 0.4 이상 convinced 아니면 doubt. 단계별 포즈(alien_cute_a/b/c) 제거
+  - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
+  - 결과 화면: 요리 이미지는 bg_result 책상 위(fixed), 레코드 자리는 그대로, 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
+  - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
+  - 이름 정하기 화면(detail.html): bg_default 전체 배경, 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
+  - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기(50px)·보내기(✓)를 가운데 아래 패널 하나(.signal-dock)로 합침: [색 네모 | 색상·크기·밀도 막대] [미리보기·↺·✓]
+  - 반응형 게임 화면 (chat.html, style.css, chatbot.js 8번): 전환 기준은 orientation 하나(CSS @media·JS matchMedia 같음)
+    - 가로: main.stage(1920×1080)를 scale=min(창너비/1920, 창높이/1080)로 가운데 확대·축소, 남는 곳은 --letterbox 여백. 배경은 body의 --bg를 스테이지가 그림
+    - 세로: 외계인은 가로와 같은 비율로 배경 창 안(위 86/1080·높이 607/1080 dvh)에 고정. 기록 박스(칸 32px)는 왼쪽 위 구석, 패널은 내용 높이(최대 --portrait-panel 35dvh, 외계인 발밑 아래)로 [색 네모 | 막대들] + [미리보기·↺·✓]. 터치 요소 --touch(44px) 이상, 넘치면 패널만 스크롤
+    - 캔버스 실제 픽셀 = 보이는 크기 × 배율 × devicePixelRatio (색 네모 최대 1024, 미리보기 256, 레코드 1600). 레코드는 기준 좌표 600 고정(RECORD_SIZE)
+    - 결과 화면 오버레이는 스테이지 밖(배율 없음)
+    - 기록 박스(칸 120px·아이콘 120px, 제목 "Noizilian" 없애고 그 자리=왼쪽 위)와 아래 패널(색 네모 280px·미리보기 100px)을 약 2배로 키우고 외계인은 2/3 크기로 줄임.
+  - 레코드 대사 지시문(generator._lines_with_openai)에 외계인 감정 6가지와 흐름을 넣어, 외계인 대사가 질문만 되지 않게 함
+- 완료 (팀원 feat/turn-flow에서 가져옴): 되돌리기(↺) = 보낸 타일 취소, 말풍선·타일 날아가기 연출 (chatbot.js, style.css, chat.html)
+  - ↺: 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, 누르면 마지막 스냅샷으로 복원(선택기는 취소한 타일 값으로). 단계가 바뀌면 비움. 되돌릴 게 없거나 응답 대기 중이거나 done이면 비활성. app.py 안 고침(이전 state 재전송)
+  - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 방금 보낸 타일(없으면 "…"), 확신이 오를수록 빨리 깜박임(--think). 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile). 세로 화면 말풍선은 오른쪽 위
+  - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
+- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 fallback_lines, 그림은 문장부호 규칙으로만 고름. 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
 - 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
   1. GPT 연결 (과제 핵심): generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체. 대사 없이 타일 점수·표정만, 반환 형식 유지 (docs/MODEL_SETUP.md 참고)
   2. RAG: retriever.py(지금 빈 틀)가 현재 단계 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김. 넣기 전·후 비교 수치 기록
   3. 확신 기준·최대 횟수·요리 목표 점수 조정 (지금은 대부분 4번 채워서 넘어감). GPT 연결 뒤에
-  4. 반응형 다시 하기 (아래 요구사항). 한 번에 CSS만, 1920×1080·1280×720·390×844에서 화면 확인 후 커밋
-  5. 그림 받으면: 표정 5종 → config.expressions, 요리 재료 이미지 → 단계별 화면 연결, 레코드 그림 후보 → config.record.line_images(경로+설명, 5~10장 이상)
-  6. 대체 대사(fallback_lines) 말투 다듬기(외계인은 요리를 모름), 디자인 토큰(tokens.css), README·공개 URL 최종 확인
-- 반응형 요구사항 (11/2 시도는 실패해서 되돌림)
-  - 가로 화면(16:9): 지금 배치 그대로. 단 외계인·패널이 화면 크기에 비례해 같이 커지고 작아짐(큰 모니터에선 더 크게, 작은 화면에선 훨씬 작게). 외계인만 줄어들면 안 됨
-  - 세로 화면(9:16 정도): 외계인 위, 패널 아래(왼쪽·오른쪽 패널 나란히). 외계인 영역과 패널 영역 크기가 비슷하게
-  - 어느 크기에서도 스크롤 없이 한 화면. 색 네모 클릭 좌표가 크기 바뀌어도 맞아야 함
-- 팀 확정 필요: 부엌 전용 배경 이미지(지금은 background_basic.png 유지), config의 "초안: 팀 확정 필요" 값, 표정·재료 이미지 일정, 레코드 그림 후보, 레코드 소리 대응, 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
+  4. 요리 재료 이미지 → 단계별 화면 연결, 대체 대사(fallback_lines) 말투 다듬기, 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+- 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 소리 대응·대체 대사(fallback_lines), 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
 - 색, 간격, 폰트는 public/assets/css/tokens.css의 변수만 사용. 새 색상 하드코딩 금지 (tokens.css는 레퍼런스 확정 후 작성 예정)

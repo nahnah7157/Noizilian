@@ -147,7 +147,8 @@ def detail():
 @app.get("/chat")
 def chat():
     username = (request.args.get("username") or "사용자").strip()[:50] or "사용자"
-    return render_template("chat.html", bot=bot_view(load_config()), username=username)
+    player = request.args.get("player") if request.args.get("player") in ("male", "female") else "male"
+    return render_template("chat.html", bot=bot_view(load_config()), username=username, player=player)
 
 
 @app.post("/api/chat")

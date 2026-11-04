@@ -24,11 +24,12 @@ def _explained(entry: dict) -> dict:
 
 # 표정별 상황 설명 (괄호 안 지문). 표정 키는 config.expressions와 같다.
 NARRATION = {
-    "confused": "외계인이 고개를 갸웃하며 타일을 다시 내밉니다.",
-    "curious": "외계인이 당신의 타일을 따라 하며 조금씩 맞춰 봅니다.",
-    "sure": "외계인이 확신에 찬 눈빛으로 고개를 끄덕입니다.",
-    "happy": "외계인이 접시를 들고 기뻐합니다.",
-    "sad": "외계인이 접시를 내려다보며 시무룩해집니다.",
+    "default": "외계인이 타일을 내밉니다.",
+    "doubt": "외계인이 이게 맞나 하고 고개를 갸웃합니다.",
+    "convinced": "외계인이 아, 이렇게 하라는 거구나 하고 고개를 끄덕입니다.",
+    "surprised": "외계인이 예상과 너무 다른 타일에 깜짝 놀랍니다.",
+    "thinking": "외계인이 점점 더 헷갈려하며 골똘히 생각합니다.",
+    "joy": "외계인이 이제 알겠다며 기뻐합니다.",
 }
 
 
@@ -57,7 +58,7 @@ class DemoGenerator:
     # OpenAI 호출로 바꾸면 된다. 반환 형식(dict)은 그대로 유지한다:
     #   scores     외계인의 다음 추측 타일 점수 {wc, mf, hs, hl} (-1~+1). 화면이 이 점수로 타일을 그린다
     #   word       외계인 말. 외계인은 말하지 않으므로 항상 "" (형식 유지용)
-    #   expression 표정 키 (confused / curious / sure / happy / sad)
+    #   expression 표정 키 (default / doubt / convinced / surprised / thinking / joy)
     #   reading    외계인이 사용자 타일을 어떻게 읽었는지 (개발 확인용, 화면에 안 보임)
     #   reply      상황 지문 (화면에 안 보임, 개발 확인용)
 
@@ -69,11 +70,11 @@ class DemoGenerator:
         for axis, value in target.items():
             scores[axis] = round(-0.5 * value, 3)
         if previous is None:
-            expression, note = "confused", f"외계인이 '{stage['name']}' 타일을 내밉니다."
+            expression, note = "default", f"외계인이 '{stage['name']}' 타일을 내밉니다."
         elif reason == "confident":
-            expression, note = "sure", f"'{previous['name']}' 확정! 외계인이 '{stage['name']}' 타일을 내밉니다."
+            expression, note = "joy", f"'{previous['name']}' 확정! 외계인이 '{stage['name']}' 타일을 내밉니다."
         else:
-            expression, note = "confused", f"외계인이 확신은 없지만 '{stage['name']}' 단계로 넘어갑니다."
+            expression, note = "thinking", f"외계인이 확신은 없지만 '{stage['name']}' 단계로 넘어갑니다."
         return {
             "scores": scores,
             "word": "",
@@ -90,7 +91,13 @@ class DemoGenerator:
         scores = dict(alien_scores)
         for axis in stage["axes"]:
             scores[axis] = round(alien_scores[axis] + 0.5 * (user[axis] - alien_scores[axis]), 3)
-        expression = "curious" if update["confidence"] >= 0.4 else "confused"
+        tolerance = (character.get("exchange") or {}).get("match_tolerance", 0.6)
+        if update["distance"] >= 2 * tolerance:  # 모든 축이 "아님"으로 읽힐 만큼 멀다
+            expression = "surprised"
+        elif update["step"] < 0:
+            expression = "thinking"
+        else:
+            expression = "convinced" if update["confidence"] >= 0.4 else "doubt"
         return {
             "scores": scores,
             "word": "",
@@ -101,7 +108,7 @@ class DemoGenerator:
 
     def finish(self, result: dict, dish: dict, character: dict) -> dict:
         """네 단계가 끝나 요리가 완성됐을 때의 반응."""
-        expression = "happy" if result["success"] else "sad"
+        expression = "joy" if result["success"] else "thinking"
         done = "완성했습니다!" if result["success"] else "만들었지만 뭔가 이상합니다."
         return {
             "scores": None,
@@ -179,6 +186,12 @@ class DemoGenerator:
             "  · 외계인 말투: 완전한 문장 없이 깨진 한국어 단어 몇 개와 말줄임(…). '지직' 같은 잡음 소리는 쓰지 않는다. "
             "예: '따뜻… 무거운… 이거, 뭐 넣어…?', "
             "'돼지뼈…? 끓여…? 오래…?'\n"
+            "  · 외계인 대사마다 아래 감정 중 하나가 드러나게 쓰고, 같은 감정이 연달아 나오지 않게 고루 섞는다. "
+            "모든 외계인 대사를 질문으로 끝내지 않는다.\n"
+            "    담담함(이거… 재료…), 의심(이거… 맞아…?), 알아들음(아… 그렇구나… 알았어), "
+            "깜짝 놀람(뭐…?! 진짜…?!), 점점 헷갈림(음… 더… 모르겠어…), 기쁨(알겠다…! 다음…!)\n"
+            "    흐름: 단계 첫 대사는 의심이나 담담함, 지구인이 알려 주면 알아들음, 지구인 타일이 앞 추측과 크게 다르면 놀람, "
+            "고쳐도 계속 어긋나면 헷갈림, 단계의 마지막 외계인 대사는 기쁨이나 알아들음.\n"
             "- 지구인은 요리를 아는 선생님이다. 자연스러운 한국어 구어체로 단계에 맞는 구체적인 내용을 하나씩 가르친다. "
             "재료 준비 = 어떤 재료를 준비할지, 손질 = 썰기·다지기·반죽 등 손질 방법, 조리 = 불 세기·굽기·끓이기 등 조리 방법, "
             "플레이팅 = 어떻게 담고 꾸밀지.\n"
