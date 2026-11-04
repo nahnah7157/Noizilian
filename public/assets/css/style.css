@@ -247,6 +247,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .confidence-text { font-size: 0.75rem; color: #777; white-space: nowrap; }
 
 .result-overlay {
+  /* cover로 그려진 배경의 실제 크기(bg_result 1671×941). 음식을 이 크기 기준 좌표에 놓아 배경이 잘려도 테이블에 붙어 있게 한다 */
+  --bg-w: max(100vw, 100dvh * 1671 / 941);
+  --bg-h: max(100dvh, 100vw * 941 / 1671);
+  --dish-x: .25; /* 접시 가운데: 배경 폭 비율 */
+  --dish-y: .74; /* 접시 아래 끝: 배경 높이 비율. 테이블 윗면은 .54~.84 */
+  --dish-w: min(var(--bg-w) * .36, 100vw - var(--bg-w) * .5); /* 배경 좌우가 잘리는 화면에서도 왼쪽이 안 잘리게 */
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -269,11 +275,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 /* 요리는 bg_result 책상 위에 올린다. .result-dish는 레코드 자리를 그대로 두는 빈 칸 */
 #result-image {
   position: fixed;
-  left: 25%;
-  bottom: 20vh;
-  width: min(44vw, 66vh);
-  transform: translateX(-50%);
+  left: calc(50vw + (var(--dish-x) - .5) * var(--bg-w));
+  top: calc(50dvh + (var(--dish-y) - .5) * var(--bg-h));
+  width: var(--dish-w);
+  transform: translate(-50%, calc(-100% + var(--foot, 0%)));
 }
+/* 음식 그림마다 아래 투명 여백이 달라서, 그만큼 내려 접시 아래 끝을 맞춘다 */
+#result-image[src*="hamburger"] { --foot: 7.7%; }
+#result-image[src*="omurice"] { --foot: 8.2%; }
+#result-image[src*="pizza"] { --foot: .2%; }
+#result-image[src*="ramen"] { --foot: 2.2%; }
 .result-dish { flex: 1 1 260px; }
 .result-overlay .start-button { position: fixed; right: 24px; bottom: 24px; margin: 0; }
 .record { flex: 1.4 1 320px; margin: 0; }
@@ -343,22 +354,22 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   position: absolute;
   top: 40px;
   right: 40px;
-  width: 360px; /* 아래 끝이 y 500 안: 배경의 화구(y 650~)를 가리지 않게 */
+  width: 430px; /* 아래 끝이 y 590 안: 조리 배경의 프라이팬(y 625~)·냄비를 가리지 않게 */
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 16px;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
   background: rgb(206 208 214 / 92%);
   box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
 }
-.signal-left { display: flex; align-items: stretch; gap: 8px; }
+.signal-left { display: flex; align-items: stretch; gap: 10px; }
 .signal-right {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 .signal-right #color-picker { display: contents; }
 
@@ -429,16 +440,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   left: 24px;
   z-index: 2;
   display: grid;
-  grid-template-columns: auto repeat(4, 120px);
-  gap: 16px;
+  grid-template-columns: auto repeat(4, 90px);
+  gap: 12px;
   align-items: center;
-  padding: 20px;
-  border-radius: 20px;
+  padding: 15px;
+  border-radius: 15px;
   background: rgb(255 255 255 / 70%);
 }
 .record-row-icon {
-  width: 120px;
-  height: 120px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   object-fit: contain;
 }
@@ -454,7 +465,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .signal-tile { display: block; }
 #preview-tile {
   display: block;
-  width: 56px;
+  width: 66px;
   height: auto;
   aspect-ratio: 1;
   border-radius: 4px;
@@ -470,7 +481,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border: 0;
   border-radius: 8px;
   color: #fff;
-  font-size: 2rem;
+  font-size: 2.4rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -495,9 +506,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   -webkit-appearance: none;
   margin: 0;
   width: 100%;
-  height: 20px;
+  height: 24px;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 12px;
   background: linear-gradient(to right,
     hsl(0, 100%, 50%),
     hsl(60, 100%, 50%),
@@ -510,16 +521,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .hue-slider::-moz-range-track { background: transparent; }
 .hue-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border: 3px solid #fff;
   border-radius: 50%;
   background: transparent;
   box-shadow: 0 0 0 1px #333;
 }
 .hue-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border: 3px solid #fff;
   border-radius: 50%;
   background: transparent;
@@ -529,18 +540,26 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 /* 오른쪽: 크기·밀도 막대 (아이콘만, 글자 없음) */
 .sense-row {
   display: grid;
-  grid-template-columns: 26px 1fr 26px;
-  gap: 6px;
+  grid-template-columns: 30px 1fr 30px;
+  gap: 8px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 8px 10px;
   border-radius: 10px;
   background: rgb(255 255 255 / 70%);
 }
 .sense-bar input { width: 100%; accent-color: #764ba2; }
 .sense-icon { justify-self: center; border-radius: 50%; background: #555; }
-.sense-icon.freq-min, .sense-icon.density-min { width: 8px; height: 8px; }
-.sense-icon.freq-max, .sense-icon.density-max { width: 18px; height: 18px; }
+.sense-icon.freq-min, .sense-icon.density-min { width: 10px; height: 10px; }
+.sense-icon.freq-max, .sense-icon.density-max { width: 22px; height: 22px; }
 .sense-bar input { height: 28px; }
+
+/* 세로 화면 결과: 레코드는 테이블 위쪽 벽면, 음식은 화면 가운데 테이블 위 */
+@media (orientation: portrait) {
+  .result-overlay { --dish-x: .5; --dish-w: min(80vw, 36dvh); place-items: start center; }
+  .result-content { justify-content: center; padding: 0; }
+  .result-dish { display: contents; }
+  .record { flex: 0 0 auto; width: min(88vw, 44dvh); }
+}
 
 /* 세로 화면(모바일 9:16 등): 배율 없이 위에서부터 기록칸 → 외계인(바닥 쪽) → 타일 패널. 스크롤 없이 한 화면 */
 @media (orientation: portrait) {
@@ -569,6 +588,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .signal-right #color-canvas { grid-row: 1 / 4; height: calc(var(--touch) * 3 + 12px); aspect-ratio: auto; } /* 오른쪽 막대 세 줄 높이 */
   .hue-slider { height: var(--touch); border-radius: 12px; }
   .hue-slider::-webkit-slider-thumb { width: 30px; height: 30px; }
+  .hue-slider::-moz-range-thumb { width: 16px; height: 16px; }
+  .sense-icon.freq-min, .sense-icon.density-min { width: 8px; height: 8px; }
+  .sense-icon.freq-max, .sense-icon.density-max { width: 18px; height: 18px; }
   .sense-row { min-height: var(--touch); padding: 0 8px; gap: 6px; grid-template-columns: 26px 1fr 26px; }
   .sense-bar input { height: var(--touch); margin: 0; }
   .signal-left { align-items: center; gap: 10px; }
