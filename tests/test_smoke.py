@@ -24,6 +24,13 @@ from services.chatbot_service import (
 from services.retriever import KnowledgeHit
 
 
+def setUpModule():
+    # .env에 OpenAI 키가 있어도 테스트는 모델을 부르지 않는다 (느리고 비용이 든다). 준비된 문구로 확인
+    patcher = patch.dict("os.environ", {"OPENAI_API_KEY": ""})
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 # ═══════════════════════════════════════════════════════════════
 # 1. 베이스 스모크 테스트 (화면·API·서비스 연결)
 # ═══════════════════════════════════════════════════════════════
@@ -356,49 +363,69 @@ class CookingFlowTest(unittest.TestCase):
     def test_start_random_dish(self):
         self.assertIn(self.client.post("/api/start", json={}).get_json()["dish"]["id"], DISHES)
 
+    def after_menu(self, tile=None):
+        """1단계(메뉴 선택)를 지난 state와 응답."""
+        data = self.send(self.start()["state"], tile or game_tile("pizza")).get_json()
+        return data["state"], data
+
+    def test_first_tile_picks_menu_and_moves_to_prep(self):
+        state, data = self.after_menu()
+        self.assertEqual((state["menu"], state["dish"], state["stage_index"]), ("pizza", "pizza", 1))
+        self.assertEqual(data["dish"]["id"], "pizza")
+        self.assertEqual((data["stage_number"], data["stage_name"], data["retry"]), (1, "select", False))
+        self.assertTrue(data["stage"]["advanced"])
+        self.assertEqual(state["finals"], {"ingredient": state["finals"]["ingredient"]})
+        self.assertNotIn("ingredient", data["state"]["verdicts"].get("prep", {}))
+
     def test_one_exchange_updates_state(self):
-        data = self.send(self.start()["state"]).get_json()
-        self.assertEqual(data["state"]["exchange_count"], 1)
+        state, _ = self.after_menu()
+        data = self.send(state, game_tile("pizza", "prep", "under")).get_json()
+        self.assertEqual(data["stage_name"], "prep")
         self.assertIn(data["alien"]["expression"], CONFIG["expressions"])
         self.assertIsNone(data["result"])
+        if data["retry"]:
+            self.assertEqual(data["state"]["exchange_count"], 1)
+            self.assertEqual(data["attempts_left"], GAME["max_attempts"]["prep"] - 1)
 
     def test_resend_after_undo_uses_previous_state(self):
         # 되돌리기 = 이전 state로 복원. 같은(이전) state로 다시 보내도 서버가 정상 응답한다
-        s0 = self.start()["state"]
-        first = self.send(s0).get_json()  # s0 -> s1
-        self.assertEqual(first["state"]["exchange_count"], 1)
-        again = self.send(s0)  # 되돌린 뒤 같은 s0로 다시 보냄
+        s1, _ = self.after_menu()
+        tile = game_tile("pizza", "prep", "under")
+        first = self.send(s1, tile).get_json()
+        again = self.send(s1, tile)  # 되돌린 뒤 같은 s1로 다시 보냄
         self.assertEqual(again.status_code, 200)
         data = again.get_json()
         self.assertIsInstance(data["reply"], str)
-        self.assertEqual(data["state"]["exchange_count"], 1)  # s0 기준이라 다시 1
+        self.assertEqual(data["state"], first["state"])  # 같은 state·같은 타일이면 같은 결과
 
-    def test_stage_advances_within_max_exchanges(self):
-        # 같은 타일만 보내도 최대 4번 안에는 다음 단계로 넘어간다 (exchange.max_exchanges)
-        state = self.start()["state"]
-        for _ in range(EXCHANGE["max_exchanges"]):
-            data = self.send(state).get_json()
+    def test_stage_advances_within_max_attempts(self):
+        # 같은 타일만 보내도 최대 시도 안에는 다음 단계로 넘어간다 (game.max_attempts)
+        state, _ = self.after_menu()
+        for _ in range(GAME["max_attempts"]["prep"]):
+            data = self.send(state, game_tile("pizza", "prep", "under")).get_json()
             state = data["state"]
             if data["stage"]["advanced"]:
                 break
         self.assertTrue(data["stage"]["advanced"])
-        self.assertEqual(state["stage_index"], 1)
-        self.assertIn("ingredient", state["finals"])
-        # 확신해서 넘어가면 joy, 횟수가 차서 넘어가면 thinking
+        self.assertEqual(state["stage_index"], 2)
+        self.assertEqual(state["verdicts"]["prep"]["verdict"], data["verdict"])
         face = "joy" if data["stage"]["reason"] == "confident" else "thinking"
         self.assertEqual(data["image"], "/" + CONFIG["expressions"][face]["image"])
 
     def test_full_game_ends_with_dish_image(self):
         from services.image_selector import _url
         state, data = self.start()["state"], None
-        for _ in range(len(STAGES) * EXCHANGE["max_exchanges"]):
+        for _ in range(1 + 3 * max(GAME["max_attempts"].values())):
             data = self.send(state).get_json()
             state = data["state"]
             if state["done"]:
                 break
         self.assertTrue(state["done"])
-        self.assertIn(data["result"]["image"], [_url(p) for p in DISHES["ramen"]["images"].values()])
-        self.assertEqual(data["image"], _url(DISHES["ramen"]["images"]["fail"] if not data["result"]["success"] else DISHES["ramen"]["images"]["success"]))
+        menu = data["menu"]
+        expected = DISHES[menu]["images"]["success" if data["result"]["success"] else "fail"]
+        self.assertEqual(data["result"]["image"], _url(expected))
+        self.assertEqual(data["image"], _url(expected))
+        self.assertEqual(set(data["result"]["verdicts"]), {"prep", "cook", "plating"})
         # 끝난 뒤에는 더 보낼 수 없다
         self.assertEqual(self.send(state).get_json()["error"]["code"], "invalid_state")
 
@@ -411,17 +438,21 @@ class CookingFlowTest(unittest.TestCase):
         response = self.client.post("/api/chat", json={"message": "안녕", "state": good})
         self.assertEqual(response.get_json()["error"]["code"], "invalid_state")  # 신호 없이 상태만
 
-    def test_following_the_recipe_succeeds(self):
-        # 요리 목표와 같은 타일을 계속 보내면 성공 이미지가 나온다
-        service, dish = ChatbotService(), DISHES["omurice"]
-        state = service.start(CONFIG, "omurice")["state"]
-        while not state["done"]:
-            stage_id = STAGES_ORDER[state["stage_index"]]
-            scores = {**{a: 0.0 for a in AXES}, **dish["targets"][stage_id]}
-            data = service.play_turn("", "헤슬", CONFIG, {"scores": scores, "color": TILE["color"]}, state)
-            state = data["state"]
-        self.assertTrue(data["result"]["success"])
-        self.assertEqual(data["image"], "/" + dish["images"]["success"])
+    def test_following_the_rules_succeeds_and_blue_pizza_fails(self):
+        for plating, success in (("success", True), ("over", False)):
+            with self.subTest(plating=plating):
+                state, data = self.after_menu()
+                for stage in ("prep", "cook", "plating"):
+                    verdict = plating if stage == "plating" else "success"
+                    for _ in range(GAME["max_attempts"][stage]):
+                        data = self.send(state, game_tile("pizza", stage, verdict)).get_json()
+                        state = data["state"]
+                        if data["stage"]["advanced"]:
+                            break
+                    self.assertEqual(data["verdict"], verdict)
+                self.assertEqual(data["result"]["success"], success)
+                self.assertEqual(data["plating"]["abnormal"], not success)
+                self.assertEqual(data["result"]["plating"]["abnormal"], not success)
 
 
 STAGES_ORDER = [s["id"] for s in CONFIG["stages"]]
@@ -510,3 +541,257 @@ class RecordDialogueTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5. 요리 게임 규칙 (config.game): 메뉴 결정 · 단계 판정 · 확신 · 결과 확정
+# ═══════════════════════════════════════════════════════════════
+
+import colorsys
+import copy
+import math
+
+from services.chatbot_service import (
+    GAME_RESPONSE_KEYS,
+    decide_menu,
+    game_metrics,
+    hue_in_range,
+    judge_stage,
+)
+
+GAME = CONFIG["game"]
+RULES = {k: v for k, v in GAME["rules"].items() if not k.startswith("_")}
+
+
+def hsv_color(h, s=0.7, v=0.85):
+    """chatbot.js의 hsvToRgb → rgbToLch와 같은 변환 (화면 색 선택기로 고를 수 있는 색)."""
+    r, g, b = [x * 255 for x in colorsys.hsv_to_rgb(h / 360, s, v)]
+    lin = lambda u: (u / 255) / 12.92 if u / 255 <= 0.04045 else ((u / 255 + 0.055) / 1.055) ** 2.4
+    R, G, B = lin(r), lin(g), lin(b)
+    X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047
+    Y = 0.2126 * R + 0.7152 * G + 0.0722 * B
+    Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    fx, fy, fz = f(X), f(Y), f(Z)
+    a, bb = 500 * (fx - fy), 200 * (fy - fz)
+    return {"L": 116 * fy - 16, "C": math.hypot(a, bb), "h": math.degrees(math.atan2(bb, a)) % 360}
+
+
+def raw_tile(color, density, size, seed=7):
+    """chatbot.js densityToTexture와 같은 질감. size 0~100 = 크기 막대."""
+    freq = 0.9 - size / 100 * 0.5
+    return {"color": color, "seed": seed,
+            "texture": {"oct": 1 + 11 * density, "freq": freq, "pers": 0.4 + 0.4 * density, "lac": 1.8 + 1.4 * density}}
+
+
+def find_tile(density, size, ok):
+    """판정값이 ok(metrics)를 만족하는 타일을 화면에서 고를 수 있는 색 중에서 찾는다."""
+    for h in range(0, 360, 3):
+        for s_, v in ((0.7, 0.85), (0.4, 0.8), (1, 1), (0.25, 0.6), (0.9, 0.5)):
+            tile = raw_tile(hsv_color(h, s_, v), density, size)
+            if ok(game_metrics(parse_signal(tile), GAME)):
+                return tile
+    raise AssertionError("조건에 맞는 타일이 없습니다")
+
+
+def mid(lo, hi):
+    return lo + ((hi - lo) % 360) / 2
+
+
+def game_tile(menu, stage="ingredient", verdict="success"):
+    """메뉴 선택 타일, 또는 menu·stage에서 verdict가 나오는 타일."""
+    if stage == "ingredient":
+        warm = menu in ("pizza", "omurice")
+        high = menu in ("pizza", "hamburger")
+        return find_tile(0.8 if high else 0.2, 50, lambda m: (m["heat"] >= GAME["menu"]["warm_min"]) == warm)
+    rule = RULES[menu][stage]
+    if stage == "prep":
+        lo, hi = rule["size"]
+        size = {"success": (lo + hi) / 2, "under": lo - 10, "over": hi + 10, "unstable": (lo + hi) / 2}[verdict]
+        density = (rule["max_roughness"] + 15 if verdict == "unstable" else rule["max_roughness"] - 15) / 100
+        return find_tile(density, size, lambda m: True)
+    if stage == "cook":
+        lo, hi = rule["heat"]
+        density = (rule["max_noise"] + 15 if verdict == "unstable" else rule["max_noise"] - 20) / 100
+        want = {"success": lambda m: lo + 2 <= m["heat"] <= hi - 2, "under": lambda m: m["heat"] < lo - 5,
+                "over": lambda m: m["heat"] > hi + 5, "unstable": lambda m: lo <= m["heat"] <= hi}[verdict]
+        return find_tile(density, 50, want)
+    lo, hi = rule["hue"]
+    want = {"success": lambda m: hue_in_range(m["hue"], (lo + 5) % 360, (hi - 5) % 360),
+            "over": lambda m: not hue_in_range(m["hue"], lo, hi) and (m["hue"] - hi) % 360 < (lo - m["hue"]) % 360,
+            "under": lambda m: not hue_in_range(m["hue"], lo, hi) and (lo - m["hue"]) % 360 < (m["hue"] - hi) % 360}[verdict]
+    return find_tile(0.2, 50, want)
+
+
+def metrics_for(menu, stage, verdict):
+    """기준표에서 바로 만든 판정값 (색 변환 없이 규칙만 확인)."""
+    rule = RULES[menu][stage]
+    m = {"size": 50.0, "roughness": 0.0, "heat": 50.0, "noise": 0.0, "hue": 0.0}
+    if stage == "prep":
+        lo, hi = rule["size"]
+        m["size"] = {"success": (lo + hi) / 2, "under": lo - 1, "over": hi + 1, "unstable": (lo + hi) / 2}[verdict]
+        m["roughness"] = rule["max_roughness"] + (1 if verdict == "unstable" else 0)
+    elif stage == "cook":
+        lo, hi = rule["heat"]
+        m["heat"] = {"success": (lo + hi) / 2, "under": lo - 1, "over": hi + 1, "unstable": (lo + hi) / 2}[verdict]
+        m["noise"] = rule["max_noise"] + (1 if verdict == "unstable" else 0)
+    else:
+        lo, hi = rule["hue"]
+        m["hue"] = {"success": mid(lo, hi) % 360, "under": (lo - 1) % 360, "over": (hi + 1) % 360}[verdict]
+    return m
+
+
+class MenuTest(unittest.TestCase):
+    def test_four_menu_branches(self):
+        for warm, high, menu in ((True, True, "pizza"), (False, True, "hamburger"), (False, False, "ramen"), (True, False, "omurice")):
+            with self.subTest(menu=menu):
+                heat = GAME["menu"]["warm_min"] + (5 if warm else -5)
+                noise = GAME["menu"]["noise_min"] + (5 if high else -5)
+                self.assertEqual(decide_menu({"heat": heat, "noise": noise}, GAME), menu)
+
+    def test_menu_boundaries_are_inclusive(self):
+        rule = GAME["menu"]
+        self.assertEqual(decide_menu({"heat": rule["warm_min"], "noise": rule["noise_min"]}, GAME), "pizza")
+        self.assertEqual(decide_menu({"heat": rule["warm_min"] - 0.01, "noise": rule["noise_min"] - 0.01}, GAME), "ramen")
+
+    def test_menu_from_real_tiles(self):
+        client = app.test_client()
+        for menu in RULES:
+            with self.subTest(menu=menu):
+                state = client.post("/api/start", json={}).get_json()["state"]
+                data = client.post("/api/chat", json={"message": "타일", "signal": game_tile(menu), "state": state}).get_json()
+                self.assertEqual((data["menu"], data["state"]["menu"], data["dish"]["id"]), (menu, menu, menu))
+
+
+class JudgeTest(unittest.TestCase):
+    def test_each_dish_stage_and_verdict(self):
+        for menu in RULES:
+            for stage in ("prep", "cook", "plating"):
+                for verdict in ("success", "under", "over", "unstable"):
+                    if stage == "plating" and verdict == "unstable":
+                        continue  # 플레이팅은 Hue 범위만 본다 (최대치 항목이 없음)
+                    with self.subTest(menu=menu, stage=stage, verdict=verdict):
+                        out = judge_stage(stage, metrics_for(menu, stage, verdict), RULES[menu][stage], GAME)
+                        self.assertEqual(out["verdict"], verdict)
+                        if stage == "plating":
+                            self.assertEqual(out["abnormal"], verdict != "success")
+                        if verdict == "success":
+                            self.assertEqual(out["closeness"], 1.0)
+                        else:
+                            self.assertLess(out["closeness"], 1.0)
+
+    def test_unstable_wins_over_range(self):
+        m = metrics_for("pizza", "prep", "under")
+        m["roughness"] = 99
+        self.assertEqual(judge_stage("prep", m, RULES["pizza"]["prep"], GAME)["verdict"], "unstable")
+
+    def test_pizza_hue_boundaries(self):
+        rule = RULES["pizza"]["plating"]
+        expected = {344: "under", 345: "success", 0: "success", 45: "success", 46: "over"}
+        for hue, verdict in expected.items():
+            with self.subTest(hue=hue):
+                out = judge_stage("plating", {**metrics_for("pizza", "plating", "success"), "hue": hue}, rule, GAME)
+                self.assertEqual(out["verdict"], verdict)
+                self.assertEqual(out["abnormal"], verdict != "success")
+
+    def test_real_tiles_get_expected_verdicts(self):
+        for menu in RULES:
+            for stage in ("prep", "cook"):
+                for verdict in ("success", "under", "over", "unstable"):
+                    with self.subTest(menu=menu, stage=stage, verdict=verdict):
+                        m = game_metrics(parse_signal(game_tile(menu, stage, verdict)), GAME)
+                        self.assertEqual(judge_stage(stage, m, RULES[menu][stage], GAME)["verdict"], verdict)
+
+    def test_metrics_follow_bars(self):
+        small = game_metrics(parse_signal(raw_tile(hsv_color(0), 0.0, 0)), GAME)
+        big = game_metrics(parse_signal(raw_tile(hsv_color(210), 1.0, 100)), GAME)
+        self.assertEqual((small["size"], small["roughness"], small["noise"]), (0, 0, 0))
+        self.assertEqual((big["size"], big["roughness"], big["noise"]), (100, 100, 100))
+        self.assertGreater(small["heat"], big["heat"])  # 빨강이 파랑보다 따뜻하다 (R4)
+        self.assertAlmostEqual(small["hue"], 0, delta=0.5)
+        self.assertAlmostEqual(big["hue"], 210, delta=0.5)
+
+
+class GameFlowTest(unittest.TestCase):
+    def play(self, game_changes, menu="pizza", stage_tiles=None):
+        config = copy.deepcopy(CONFIG)
+        config["game"].update(game_changes)
+        service = ChatbotService()
+        state = service.start(config, "ramen")["state"]
+        data = service.play_turn("", "헤슬", config, parse_signal(game_tile(menu)), state)
+        return service, config, data
+
+    def test_retry_until_max_attempts_then_finalize(self):
+        conf = {**GAME["confidence"], "threshold": 1.01}  # 절대 확신하지 않음 → 최대 시도에서 확정
+        service, config, data = self.play({"confidence": conf})
+        tile = parse_signal(game_tile("pizza", "prep", "under"))
+        max_attempts = GAME["max_attempts"]["prep"]
+        for attempt in range(1, max_attempts + 1):
+            data = service.play_turn("", "헤슬", config, tile, data["state"])
+            last = attempt == max_attempts
+            self.assertEqual(data["retry"], not last)
+            self.assertEqual(data["attempts_left"], max_attempts - attempt)
+            self.assertEqual(data["stage"]["advanced"], last)
+        self.assertEqual(data["stage"]["reason"], "max_reached")
+        self.assertEqual(data["state"]["verdicts"]["prep"]["verdict"], "under")
+        self.assertEqual(data["state"]["stage_index"], 2)
+
+    def test_finalize_average_uses_all_attempts(self):
+        conf = {**GAME["confidence"], "threshold": 1.01}
+        service, config, data = self.play({"confidence": conf, "finalize": "average", "max_attempts": {"prep": 2, "cook": 3, "plating": 3}})
+        under, over = parse_signal(game_tile("pizza", "prep", "under")), parse_signal(game_tile("pizza", "prep", "over"))
+        data = service.play_turn("", "헤슬", config, under, data["state"])
+        data = service.play_turn("", "헤슬", config, over, data["state"])
+        sizes = [game_metrics(t, GAME)["size"] for t in (under, over)]
+        self.assertAlmostEqual(data["state"]["verdicts"]["prep"]["metrics"]["size"], sum(sizes) / 2, places=1)
+
+    def test_confidence_follows_closeness_without_bluff(self):
+        conf = {**GAME["confidence"], "bluff": 0, "memory": 0, "threshold": 1.01}
+        service, config, data = self.play({"confidence": conf})
+        for verdict in ("success", "over"):
+            tile = parse_signal(game_tile("pizza", "prep", verdict))
+            out = service.play_turn("", "헤슬", config, tile, data["state"])
+            closeness = judge_stage("prep", game_metrics(tile, GAME), RULES["pizza"]["prep"], GAME)["closeness"]
+            self.assertAlmostEqual(out["confidence"], closeness, places=3)
+
+    def test_bluff_lets_confidence_disagree_with_verdict(self):
+        conf = {**GAME["confidence"], "bluff": 1, "memory": 0}  # 근거 없이 seed로만 정해짐
+        service, config, data = self.play({"confidence": conf})
+        values = {service.play_turn("", "헤슬", config, {**parse_signal(game_tile("pizza", "prep", "over")), "seed": seed},
+                                    data["state"])["confidence"] for seed in range(8)}
+        self.assertGreater(max(values), GAME["confidence"]["threshold"])  # 틀린 손질인데도 자신만만한 경우가 있다
+
+
+class GameResponseTest(unittest.TestCase):
+    OLD_KEYS = {"reply", "image", "sources", "alien", "state", "stage", "dish", "result"}
+
+    def test_existing_and_new_fields(self):
+        client = app.test_client()
+        start = client.post("/api/start", json={}).get_json()
+        chat = client.post("/api/chat", json={"message": "타일", "signal": game_tile("ramen"), "state": start["state"]}).get_json()
+        for name, data in (("start", start), ("chat", chat)):
+            with self.subTest(name=name):
+                self.assertTrue(self.OLD_KEYS <= set(data))
+                self.assertTrue(set(GAME_RESPONSE_KEYS) - {"metrics"} <= set(data))
+                self.assertEqual(set(data["stage"]), {"id", "name", "index", "total", "hint", "advanced", "reason"})
+                self.assertEqual(set(data["alien"]), {"scores", "word", "expression", "reading"})
+                self.assertIsInstance(data["reply"], str)
+        self.assertEqual((start["menu"], start["stage_number"], start["stage_name"]), (None, 1, "select"))
+        self.assertEqual((chat["menu"], chat["stage"]["id"], chat["alien_message"] == chat["reply"]), ("ramen", "prep", True))
+
+    def test_retriever_finds_cooking_knowledge(self):
+        from services.retriever import DemoRetriever
+        hits = DemoRetriever().search("ramen cook over")
+        self.assertEqual([h.title for h in hits], ["ramen · cook"])
+        self.assertIn("퍼지", hits[0].content)
+        self.assertEqual(DemoRetriever().search("안녕"), [])
+
+    def test_bad_game_state_is_rejected(self):
+        client = app.test_client()
+        state = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza"),
+                                               "state": client.post("/api/start", json={}).get_json()["state"]}).get_json()["state"]
+        for bad in ({**state, "menu": "kimchi"}, {**state, "verdicts": {"prep": {"verdict": "great"}}},
+                    {**state, "stage_metrics": [{"size": 500}]}):
+            with self.subTest(bad=str(bad)[:60]):
+                r = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza", "prep"), "state": bad})
+                self.assertEqual(r.get_json()["error"]["code"], "invalid_state")
