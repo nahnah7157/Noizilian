@@ -561,6 +561,60 @@ function renderVerdict(view, animate) {
   }
 }
 
+// 단계 힌트: 배경 속 그 단계의 물건을 잠깐 밝힌다. 좌표는 1920×1080 스테이지 기준
+const HINT_AREAS = {
+  ingredient: [{ x: 0, y: 780, w: 760, h: 300 }, { x: 1140, y: 760, w: 780, h: 320 }],
+  prep: [{ x: 0, y: 520, w: 640, h: 380 }],
+  cook: [{ x: 1360, y: 540, w: 480, h: 290 }],
+  plating: [{ x: 300, y: 590, w: 980, h: 150 }],
+};
+const HINT_MIN_VISIBLE = 0.3; // 세로 화면: 이만큼도 안 보이는 영역은 밝히지 않는다
+let hintEl = null;
+
+/** 스테이지 좌표 → 배경(cover)이 실제로 그려진 위치. 화면 밖·세로 화면 패널 뒤는 잘라 내고 거의 안 보이면 뺀다 */
+function visibleAreas(areas) {
+  const W = stageEl.clientWidth, H = stageEl.clientHeight;
+  const s = Math.max(W / 1920, H / 1080);
+  const floor = portrait.matches ? document.querySelector(".signal-dock").getBoundingClientRect().top : H;
+  return areas.map((a) => {
+    const x = W / 2 + (a.x - 960) * s, y = H / 2 + (a.y - 540) * s, w = a.w * s, h = a.h * s;
+    const l = Math.max(x, 0), t = Math.max(y, 0), r = Math.min(x + w, W), b = Math.min(y + h, floor);
+    return { x: l, y: t, w: r - l, h: b - t, shown: r > l && b > t ? ((r - l) * (b - t)) / (w * h) : 0 };
+  }).filter((a) => a.shown >= HINT_MIN_VISIBLE);
+}
+
+/** 화면을 어둡게 덮고 영역만 둥글게 밝힌다. 외계인·패널은 막 위에 있고 클릭은 막을 통과한다. 튜토리얼에서도 쓸 수 있다 */
+function highlightAreas(areas, ms) {
+  hintEl?.remove();
+  hintEl = null;
+  const holes = visibleAreas(areas);
+  if (!holes.length) return;
+  const rects = holes.map((a) => `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="36"/>`).join("");
+  const el = document.createElement("div");
+  el.className = "area-hint";
+  el.style.setProperty("--hint-ms", `${ms}ms`);
+  el.innerHTML = `<svg viewBox="0 0 ${stageEl.clientWidth} ${stageEl.clientHeight}" aria-hidden="true">
+    <defs>
+      <filter id="area-hint-soft"><feGaussianBlur stdDeviation="18"/></filter>
+      <mask id="area-hint-holes"><rect width="100%" height="100%" fill="#fff"/><g fill="#000" filter="url(#area-hint-soft)">${rects}</g></mask>
+    </defs>
+    <rect class="area-hint-dim" width="100%" height="100%" mask="url(#area-hint-holes)"/>
+    <g class="area-hint-glow">${rects}</g>
+  </svg>`;
+  stageEl.prepend(el);
+  hintEl = el;
+  setTimeout(() => {
+    el.remove();
+    if (hintEl === el) hintEl = null;
+  }, ms);
+}
+
+function showStageHint() {
+  const areas = HINT_AREAS[currentStageId];
+  if (document.querySelector(".fly-tile")) return; // 날아가는 중에 또 보냈으면 그 타일이 끝난 뒤에 한다
+  if (areas && !currentState?.done) highlightAreas(areas, reduceMotion ? 800 : 1800);
+}
+
 function updateGameState(data) {
   const prevIndex = currentStageIndex;
   if ("stage_name" in data) {
@@ -604,6 +658,7 @@ function updateGameState(data) {
       } else {
         showAlien(data); // 그다음 다음 단계 포즈 (첫 추측 타일은 화면에 안 보임)
         updateThink();   // 새 단계 진행 중 → 말풍선 다시
+        showStageHint(); // 타일이 다 날아간 뒤에 새 단계 힌트
       }
     });
   } else {
@@ -639,6 +694,7 @@ async function startCooking() {
     }
     addAlienToHistory(data);
     updateGameState(data);
+    showStageHint();
   } catch (error) {
     console.error(error);
     sendButton.disabled = true;
