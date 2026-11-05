@@ -40,7 +40,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   left: 50%;
   bottom: 2vh; /* PNG 아래 투명 여백(약 8%)만큼 발이 바닥 타일 위로 올라옴 */
   height: min(55vh, 520px);
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(var(--foot, 7.1%) - 7.1%)); /* 표정이 바뀌어도 발이 기본 표정 자리에 */
 }
 .landing-page .start-button { position: fixed; right: 24px; bottom: 24px; margin: 0; }
 .start-button {
@@ -390,12 +390,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .alien-expression { display: block; height: 100%; width: auto; transform: translateY(var(--foot, 0)); }
 /* 표정 이미지마다 아래 투명 여백이 달라서, 그만큼 내려 발을 바닥에 맞춘다 */
-.alien-expression[src*="alien_default"] { --foot: 7.1%; }
-.alien-expression[src*="alien_doubt"] { --foot: 3.8%; }
-.alien-expression[src*="alien_convinced"] { --foot: 4.6%; }
-.alien-expression[src*="alien_surprised"] { --foot: 5.3%; }
-.alien-expression[src*="alien_thinking"] { --foot: 3.6%; }
-.alien-expression[src*="alien_joy"] { --foot: 6.4%; }
+.alien-expression[src*="alien_default"], .brand-image[src*="alien_default"] { --foot: 7.1%; }
+.alien-expression[src*="alien_doubt"], .brand-image[src*="alien_doubt"] { --foot: 3.8%; }
+.alien-expression[src*="alien_convinced"], .brand-image[src*="alien_convinced"] { --foot: 4.6%; }
+.alien-expression[src*="alien_surprised"], .brand-image[src*="alien_surprised"] { --foot: 5.3%; }
+.alien-expression[src*="alien_thinking"], .brand-image[src*="alien_thinking"] { --foot: 3.6%; }
+.alien-expression[src*="alien_joy"], .brand-image[src*="alien_joy"] { --foot: 6.4%; }
 
 /* 요리 진행 표시 (위 가운데, 메뉴는 숨김): 4단계 칸 · 재요청 ↻ + 남은 시도. 칸 색 = 서버 판정(verdict).
    왼쪽 위 기록칸·오른쪽 위 타일 패널 사이 */
