@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// Noizilian 학종이 작성기 + 채팅
+// Noizilien 학종이 작성기 + 채팅
 // 1. 색 변환  2. 감각 공식  3. 색·질감 목록과 찾기  4. 타일 그리기  5. 학종이 작성기  6. 채팅
 // ════════════════════════════════════════════════════════════
 
@@ -365,7 +365,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
     current = { color, texture, seed, scores, density: currentDensity, hsv, description: describe(scores) };
   }
 
-  window.noizilian = {
+  window.noizilien = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
     redraw: () => { renderColorCanvas(); update(); }, // 캔버스 해상도를 바꾼 뒤 다시 그리기 (8번)
@@ -450,8 +450,13 @@ function renderTileRecord() {
   }
 }
 
+const JOY_IMAGE = "/assets/images/alien/alien_joy.png";
+const JOY_DELAY_MS = 500; // 판정 표정을 잠깐 보여 준 뒤 기뻐한다
+let joyTimer = 0;
+
 // 가운데 외계인 이미지만 표정으로 교체 (게임 화면엔 글자 없음)
 function showAlien(data) {
+  clearTimeout(joyTimer);
   if (data.image) alienExpr.src = data.image;
 }
 
@@ -639,7 +644,13 @@ function updateGameState(data) {
   refreshUndo();
 
   if (finishedIndex >= 0) {
-    // 끝난 단계 타일을 내밀고(날아가고) 나서야 그 칸을 채우고 다음 포즈로 바꾼다
+    // 단계는 항상 joy로 끝난다: 판정 표정 → joy. 마지막 단계의 data.image는 요리 그림이라 바로 joy
+    if (currentState?.done) alienExpr.src = JOY_IMAGE;
+    else {
+      showAlien(data);
+      joyTimer = setTimeout(() => { alienExpr.src = JOY_IMAGE; }, reduceMotion ? 0 : JOY_DELAY_MS);
+    }
+    // 끝난 단계 타일을 내밀고(날아가고) 나서야 그 칸을 채운다. 표정은 다음 응답까지 joy
     playOffer(finishedIndex, () => {
       renderTileRecord();
       if (currentState?.done) {
@@ -656,7 +667,6 @@ function updateGameState(data) {
         sendButton.disabled = true;
         hideThink();
       } else {
-        showAlien(data); // 그다음 다음 단계 포즈 (첫 추측 타일은 화면에 안 보임)
         updateThink();   // 새 단계 진행 중 → 말풍선 다시
         showStageHint(); // 타일이 다 날아간 뒤에 새 단계 힌트
       }
@@ -707,7 +717,7 @@ restartBtn?.addEventListener("click", () => {
 
 // 보내기(✓): 색·질감 타일만 보낸다. 글은 고정 문자열 "타일" (app.py는 그대로)
 sendButton.addEventListener("click", async () => {
-  const signal = window.noizilian?.getSignal() ?? null;
+  const signal = window.noizilien?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
 
   // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
@@ -767,7 +777,7 @@ undoBtn?.addEventListener("click", () => {
   lastGame = snap.game;
   renderHud(lastGame);
   renderVerdict(lastGame, false);
-  window.noizilian?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
+  window.noizilien?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
   renderTileRecord();
   updateThink();
   refreshUndo();
@@ -958,7 +968,7 @@ function fitCanvases() {
   // shortcut: 색 네모·미리보기는 픽셀마다 다시 계산하므로 너비 1024·256px에서 멈춘다. 끌 때 느리지 않으면 더 키워도 된다
   const color = fitCanvas(document.getElementById("color-canvas"), stageScale, 1024);
   const tile = fitCanvas(document.getElementById("preview-tile"), stageScale, 256);
-  if (color || tile) window.noizilian?.redraw();
+  if (color || tile) window.noizilien?.redraw();
   if (recordCanvas && !resultOverlayEl?.hidden) {
     fitCanvas(recordCanvas, stageScale, 1600);
     drawRecord();
