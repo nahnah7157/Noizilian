@@ -433,6 +433,63 @@ def plating_view(menu: str, hue: float | None, verdict: str | None, game: dict) 
     return {"hue": hue, "abnormal": verdict != "success", "hue_shift": round((hue - base + 180) % 360 - 180, 2)}
 
 
+# ── 레코드 대사용 타일 태그 ─────────────────────────────────
+HUE_WORDS = ((15, "빨강"), (45, "주황"), (70, "노랑"), (170, "초록"), (260, "파랑"), (345, "보라"), (360, "빨강"))
+
+
+def _tile_meaning(entry: dict, metrics: dict) -> str:
+    """지구인 타일의 색·노이즈를 말로. '따뜻한 신호, 주황빛, 노이즈 낮음'"""
+    hue = next(word for limit, word in HUE_WORDS if metrics["hue"] < limit or limit == 360)
+    return f"{describe(entry['scores'])}, {hue}빛, 노이즈 {'높음' if metrics['noise'] >= 50 else '낮음'}"
+
+
+def record_tags(entries: list[dict], menu: str, character: dict) -> list[dict]:
+    """타일마다 {stage, who, verdict, fit, emotion, misread, meaning}.
+
+    브라우저는 판정을 보내지 않으므로 지구인 타일은 색·질감으로 다시 판정한다. 외계인 타일은 바로 앞 지구인 타일에 대한
+    반응이고, 단계가 막 바뀐 첫 타일은 판정 전(start)이다. 표정은 게임 화면과 같은 규칙(판정별 표정, 단계 끝은 joy).
+    """
+    game = character["game"]
+    stage_ids = {stage["name"]: stage["id"] for stage in character["stages"]}
+    tags, last = [], None
+    for entry in entries:
+        stage = stage_ids[entry["stage"]]
+        if entry["who"] == "user":
+            metrics = game_metrics(entry, game)
+            judged = ({"verdict": "success", "closeness": 1.0} if stage == "ingredient"
+                      else judge_stage(stage, metrics, game["rules"][menu][stage], game))
+            last = {"stage": stage, "verdict": judged["verdict"], "fit": judged["closeness"]}
+            tag = {**last, "emotion": None, "meaning": _tile_meaning(entry, metrics)}
+        elif last and last["stage"] == stage:
+            tag = {**last, "emotion": game["verdict_expressions"][last["verdict"]], "meaning": describe(entry["scores"])}
+        else:
+            tag = {"stage": stage, "verdict": "start", "fit": None, "emotion": "joy" if last else "default",
+                   "meaning": describe(entry["scores"])}
+        tags.append({**tag, "who": entry["who"], "misread": False})
+    return tags
+
+
+def pick_misreads(tags: list[dict], success: bool, wrong: int | None = None, rng=random) -> set[int]:
+    """외계인이 잘못 알아들은 타일 번호. 판정이 어긋난 외계인 타일 중 성공 판 1개, 실패 판 2~3개, 없으면 가운데 외계인 타일.
+    understood_index가 들어오면 이 함수만 그 값으로 바꾼다."""
+    alien = [i for i, tag in enumerate(tags) if tag["who"] == "alien"]
+    off = [i for i in alien if tags[i]["verdict"] not in ("success", "start")]
+    if wrong is not None:
+        return set((off + [i for i in alien if i not in off])[:wrong])
+    if not off:
+        return {alien[len(alien) // 2]} if alien else set()
+    return set(rng.sample(off, min(1 if success else rng.randint(2, 3), len(off))))
+
+
+def mark_misreads(tags: list[dict], spots: set[int]) -> None:
+    """오해한 외계인 타일과, 그걸 바로잡는 바로 다음 지구인 타일에 표시한다."""
+    for i in spots:
+        tags[i]["misread"] = True
+        fix = next((j for j in range(i + 1, len(tags)) if tags[j]["who"] == "user"), None)
+        if fix is not None:
+            tags[fix]["misread"] = True
+
+
 # ═══════════════════════════════════════════════════════════════
 # 3. 응답 조립
 # ═══════════════════════════════════════════════════════════════
@@ -543,9 +600,12 @@ class ChatbotService:
     def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool,
                         wrong: int | None = None) -> dict:
         """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
-        entries는 app.parse_record()가 검증한 값. wrong은 단계별 호출 시 넣을 엉뚱한 방법 대사 수."""
-        fallback = (character.get("record") or {}).get("fallback_lines") or {}
-        lines, source = self.generator.record_lines(entries, self.dishes_of(character)[dish_id], fallback, success, wrong)
+        entries는 app.parse_record()가 검증한 값. wrong은 넣을 오해 대사 수(없으면 success로 정한다)."""
+        tags = record_tags(entries, dish_id, character)
+        mark_misreads(tags, pick_misreads(tags, success, wrong))
+        moods = (character.get("record") or {}).get("moods") or ["호기심"]
+        lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags),
+                                                    self.dishes_of(character)[dish_id], success, random.choice(moods))
         alien = [i for i, e in enumerate(entries) if e["who"] == "alien"]
         images, image_source = pick_line_images([lines[i] for i in alien], character)
         image_of = dict(zip(alien, images))

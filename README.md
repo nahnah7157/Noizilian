@@ -120,7 +120,7 @@ Docker를 쓸 때는 `docker compose up --build` → <http://localhost:5001>입�
 | `OPENAI_MODEL` | `gpt-6-luna` |
 | `OPENAI_REASONING_EFFORT` | `none` |
 
-키가 없어도 게임은 끝까지 돌아갑니다. 이때 레코드 대사는 준비된 문구(`config.record.fallback_lines`)로 나오고, 그림은 문장부호 규칙으로만 고릅니다.
+키가 없어도 게임은 끝까지 돌아갑니다. 이때 레코드 대사는 `data/knowledge/record_lines.md`에서 타일 태그(단계·판정·오해 등)로 골라 쓰고, 그림은 문장부호 규칙으로만 고릅니다.
 
 **테스트**
 
