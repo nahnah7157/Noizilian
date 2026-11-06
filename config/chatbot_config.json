@@ -355,8 +355,9 @@
       "memory": 0.3
     },
     "understanding": {
-      "_note": "쌓이는 이해. new = 새 타일의 비중(나머지는 쌓인 값). spread_scale = 타일끼리 다른 정도가 일관성을 깎는 배율",
+      "_note": "쌓이는 이해. new = 새 타일의 비중(나머지는 쌓인 값). 일관성 = 쌓인 신호가 최근 recent장 동안 덜 흔들린 정도, spread_scale = 흔들림이 일관성을 깎는 배율. 쌓인 적합도가 오르는 중이면 감점 없음",
       "new": 0.6,
+      "recent": 3,
       "spread_scale": 2
     },
     "max_attempts": {
@@ -467,26 +468,26 @@
       "retry": "외계인이 고개를 갸웃하며 타일을 한 번 더 기다립니다."
     },
     "rules": {
-      "_note": "요리별 판정 기준표(0~100). hues = 정답 색 구간(방법), size·power = 범위, max_* = 최대치(넘으면 unstable), plating.center = 정답 색 중심",
+      "_note": "요리별 판정 기준표(0~100). hues = 정답 색 구간(방법), size·power = 범위, max_* = 최대치(넘으면 unstable), plating.center = 정답 색 중심, plating.max_roughness = 넘으면 색이 얼룩덜룩(unstable)",
       "pizza": {
         "prep": {"hues": ["green", "indigo"], "size": [30, 65], "max_roughness": 55},
         "cook": {"hues": ["red", "violet"], "power": [40, 75], "max_noise": 55},
-        "plating": {"center": 0}
+        "plating": {"center": 20, "max_roughness": 60}
       },
       "hamburger": {
         "prep": {"hues": ["orange", "yellow"], "size": [45, 80], "max_roughness": 55},
         "cook": {"hues": ["red", "indigo"], "power": [50, 85], "max_noise": 55},
-        "plating": {"center": 90}
+        "plating": {"center": 110, "max_roughness": 60}
       },
       "ramen": {
-        "prep": {"hues": ["blue", "red"], "size": [20, 55], "max_roughness": 55},
+        "prep": {"hues": ["blue", "indigo"], "size": [20, 55], "max_roughness": 55},
         "cook": {"hues": ["blue", "green"], "power": [30, 65], "max_noise": 55},
-        "plating": {"center": 180}
+        "plating": {"center": 200, "max_roughness": 60}
       },
       "omurice": {
         "prep": {"hues": ["red", "violet"], "size": [15, 50], "max_roughness": 55},
         "cook": {"hues": ["yellow", "orange"], "power": [25, 60], "max_noise": 55},
-        "plating": {"center": 270}
+        "plating": {"center": 290, "max_roughness": 60}
       }
     }
   }

@@ -9,7 +9,7 @@ GPT에게는 말투 참고용으로 넘기고, 키가 없거나 실패하면 여
 - 섹션 제목: `## 단계 · 말한 쪽 · 판정`. 세 칸이 아니면 그 섹션은 읽지 않습니다
   - 단계: ingredient / prep / cook / plating
   - 말한 쪽: alien / user
-  - 판정: success / under / over / unstable. start는 단계 첫 외계인 타일(판정 전)
+  - 판정: success / under / over / unstable. start는 단계 첫 외계인 타일(판정 전), method는 정도가 아니라 방법(색)이 틀렸을 때
 - 대사 줄: `- 태그, 태그 | 대사`. 태그가 없으면 `- 대사`
   - 감정(외계인만): doubt / surprised / thinking / convinced / joy
   - misread=짝이름: 외계인은 잘못 알아들은 대사, 지구인은 그걸 바로잡는 대사. 같은 단계에서 짝이름이 같은 두 줄이 이어서 나옵니다
@@ -116,6 +116,23 @@ GPT에게는 말투 참고용으로 넘기고, 키가 없거나 실패하면 여
 - thinking, misread=다르게 | 모르겠어… 일부러… 다 다르게… 썰어…
 - thinking, misread=때리기 | 음… 거칠게… 칼로… 때려… 그런 건가…
 - thinking, misread=눈감기 | 음… 모르겠어… 눈 감고… 썰어…
+
+## prep · alien · method
+> 크기가 아니라 써는 방법(색)이 틀렸을 때
+- doubt | 칼… 이 방향…? 맞아…?
+- doubt | 다른… 모양…? 어떻게…?
+- doubt | 이 색… 다른 방법…?
+- surprised | 엥…?! 이렇게… 자르는 거…?!
+- surprised | 뭐…?! 칼… 다르게…?!
+- surprised | 헉…! 모양이… 달라…!
+
+## prep · user · method
+- 크기는 좋은데 써는 모양이 아니야
+- 자르는 방법이 달라, 다른 칼질을 해 보자
+- 이 재료는 그렇게 썰지 않아
+- 방법을 바꿔야 해, 색을 다시 골라 봐
+- 칼 쓰는 법부터 다시 보여 줄게
+- 그 방법 말고 다른 방법이 어울려
 
 ## prep · user · success
 - 그 크기 딱 좋아, 그대로 계속 썰어
@@ -232,6 +249,23 @@ GPT에게는 말투 참고용으로 넘기고, 키가 없거나 실패하면 여
 - thinking, misread=공중 | 음… 냄비… 흔들어… 공중에… 던져…
 - thinking, misread=노래 | 음… 불… 달래… 노래… 불러…
 
+## cook · alien · method
+> 세기가 아니라 조리법(색)이 틀렸을 때
+- doubt | 불… 이 방법…? 맞아…?
+- doubt | 다른… 익히기…? 어떻게…?
+- doubt | 이 색… 다른 불…?
+- surprised | 엥…?! 이렇게… 익혀…?!
+- surprised | 뭐…?! 불… 다르게…?!
+- surprised | 헉…! 방법이… 달라…!
+
+## cook · user · method
+- 세기는 좋은데 조리법이 달라
+- 이건 그렇게 익히는 음식이 아니야
+- 다른 방법으로 익혀 보자
+- 불을 쓰는 방식을 바꿔 보자
+- 조리법부터 다시 골라 봐
+- 그 방법 말고 다른 조리법이 어울려
+
 ## cook · user · success
 - 불 세기 그대로 유지해, 아주 좋아
 - 냄새 좋다, 이대로 조금만 더 익히자
@@ -333,6 +367,21 @@ GPT에게는 말투 참고용으로 넘기고, 키가 없거나 실패하면 여
 - surprised, misread=던지기 | 이 색…?! 그럼… 하늘 쪽으로… 던져…?!
 - surprised, misread=풀밭 | 색…?! 풀밭에… 담아…?!
 - surprised, misread=얼리기 | 색이…?! 다시… 얼려…?!
+
+## plating · alien · unstable
+> 색이 얼룩덜룩 번질 때
+- thinking | 음… 색이… 번져… 모르겠어…
+- thinking | 머리 복잡해… 얼룩… 왜…
+- thinking | 흠… 고르지… 않아…
+- thinking | 왼쪽… 오른쪽… 색이… 달라…
+- thinking | 더 헷갈려… 접시… 얼룩…
+
+## plating · user · unstable
+- 색이 얼룩덜룩해, 고르게 펴 보자
+- 담은 모양이 어수선해, 차분하게 정리해 줘
+- 조금만 매끈하게 다듬으면 돼
+- 한쪽만 번졌어, 가장자리를 닦아 보자
+- 천천히 담으면 깔끔해져
 
 ## plating · user · success
 - 색이 정말 먹음직스럽다, 그대로 담아 줘

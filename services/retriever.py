@@ -106,7 +106,8 @@ class DemoRetriever:
         pools = []
         for i, tag in enumerate(tags):
             same = [line for line in lines if line.stage == tag["stage"] and line.who == tag["who"]]
+            verdict = "method" if tag.get("reason") == "method" else tag["verdict"]  # 방법이 틀렸으면 정도 대사를 쓰지 않는다
             pools.append(sorted(rng.sample(same, len(same)), reverse=True, key=lambda line: (
-                line.misread == tag["misread"], line.verdict == tag["verdict"], line.emotion == tag["emotion"],
+                line.misread == tag["misread"], line.verdict == verdict, line.emotion == tag["emotion"],
                 similarity[i][line.text] if similarity else 0.0)))
         return pools

@@ -530,7 +530,7 @@ class RecordDialogueTest(unittest.TestCase):
             with self.subTest(line=line.text):
                 self.assertIn(line.stage, STAGES_ORDER)
                 self.assertIn(line.who, ("alien", "user"))
-                self.assertIn(line.verdict, ("start", "success", "under", "over", "unstable"))
+                self.assertIn(line.verdict, ("start", "success", "under", "over", "unstable", "method"))
                 self.assertIn(line.emotion, emotions)
                 self.assertNotIn("지직", line.text)
             if line.misread and line.who == "alien":
@@ -597,6 +597,14 @@ class RecordDialogueTest(unittest.TestCase):
         for bad in ("angry", 3, "_note"):
             with self.subTest(bad=bad):
                 self.assertEqual(self.record([{**alien, "expression": bad}]).status_code, 400)
+
+    def test_wrong_method_uses_method_lines_not_degree_lines(self):
+        tag = {"stage": "prep", "who": "user", "verdict": "under", "reason": "method", "emotion": None, "misread": False, "meaning": "신호"}
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            pool = DemoRetriever().search_lines([tag])[0]
+        self.assertEqual(pool[0].verdict, "method")
+        degree = DemoRetriever().search_lines([{**tag, "reason": "size"}])[0]
+        self.assertEqual(degree[0].verdict, "under")
 
     def test_search_prefers_matching_tags_then_relaxes(self):
         tag = {"stage": "cook", "who": "alien", "verdict": "over", "emotion": "surprised", "misread": True, "meaning": "신호"}
@@ -802,7 +810,8 @@ def metrics_for(menu, stage, verdict):
     m = {"size": 50.0, "roughness": 0.0, "heat": 50.0, "noise": 0.0, "power": 50.0, "sat": 70.0, "hue": 0.0}
     if stage == "plating":
         half = GAME["plating"]["judge_range"]
-        m["hue"] = (rule["center"] + {"success": 0, "under": -half - 1, "over": half + 1}[verdict]) % 360
+        m["hue"] = (rule["center"] + {"success": 0, "under": -half - 1, "over": half + 1, "unstable": 0}[verdict]) % 360
+        m["roughness"] = rule["max_roughness"] + (1 if verdict == "unstable" else 0)
         return m
     m["hue"] = zone_mid(rule["hues"][0])
     key = "size" if stage == "prep" else "power"
@@ -931,8 +940,6 @@ class JudgeTest(unittest.TestCase):
         for menu in RULES:
             for stage in ("prep", "cook", "plating"):
                 for verdict in ("success", "under", "over", "unstable"):
-                    if stage == "plating" and verdict == "unstable":
-                        continue  # 플레이팅은 Hue 범위만 본다 (최대치 항목이 없음)
                     with self.subTest(menu=menu, stage=stage, verdict=verdict):
                         out = judge_stage(stage, metrics_for(menu, stage, verdict), RULES[menu][stage], GAME)
                         self.assertEqual(out["verdict"], verdict)
@@ -950,7 +957,8 @@ class JudgeTest(unittest.TestCase):
 
     def test_pizza_hue_boundaries(self):
         rule = RULES["pizza"]["plating"]
-        expected = {319: "under", 320: "success", 0: "success", 40: "success", 41: "over"}
+        center = rule["center"]
+        expected = {(center - 41) % 360: "under", (center - 40) % 360: "success", center: "success", center + 40: "success", center + 41: "over"}
         for hue, verdict in expected.items():
             with self.subTest(hue=hue):
                 out = judge_stage("plating", {**metrics_for("pizza", "plating", "success"), "hue": hue}, rule, GAME)
@@ -1078,19 +1086,28 @@ class GameFlowTest(unittest.TestCase):
         low, high = (game_metrics(t, GAME)["size"] for t in (under, over))
         new = GAME["understanding"]["new"]
         self.assertAlmostEqual(data["metrics"]["size"], (1 - new) * low + new * high, places=1)
-        self.assertLess(data["understanding"]["consistency"], 1)
 
     def test_hue_accumulates_on_the_circle(self):
         base = metrics_for("pizza", "plating", "success")
         signal = stage_signal([{**base, "hue": 350.0}, {**base, "hue": 10.0}], GAME)
         self.assertLess(abs((signal["hue"] + 180) % 360 - 180), 10)  # 180 근처로 가지 않는다
 
-    def test_consistency_is_one_for_one_tile_and_falls_when_tiles_differ(self):
+    def test_consistency_rewards_correcting_and_falls_when_understanding_shakes(self):
         rule = RULES["pizza"]["prep"]
-        a, b = metrics_for("pizza", "prep", "success"), metrics_for("pizza", "prep", "over")
-        self.assertEqual(consistency([a], rule, GAME), 1)
-        self.assertEqual(consistency([a, a], rule, GAME), 1)
-        self.assertLess(consistency([a, {**b, "size": 100.0, "hue": 180.0}], rule, GAME), 1)
+        good, bad = metrics_for("pizza", "prep", "success"), {**metrics_for("pizza", "prep", "success"), "size": 100.0, "hue": zone_mid("red")}
+        self.assertEqual(consistency("prep", [good], rule, GAME), 1)
+        self.assertEqual(consistency("prep", [good, good], rule, GAME), 1)
+        self.assertEqual(consistency("prep", [bad, good], rule, GAME), 1)  # 고쳐 보내면 손해 보지 않는다
+        self.assertLess(consistency("prep", [good, bad], rule, GAME), 1)  # 맞다가 멀어지면 깎인다
+
+    def test_correcting_a_wrong_tile_raises_rule_confidence(self):
+        service, config, data = self.play({"confidence": self.NEVER})
+        wrong = parse_signal(raw_tile(hsv_color(zone_mid("red")), 0.3, 50))
+        right = parse_signal(game_tile("pizza", "prep", "success"))
+        first = service.play_turn("", "헤슬", config, wrong, data["state"])
+        second = service.play_turn("", "헤슬", config, right, first["state"])
+        self.assertGreater(second["confidence"], first["confidence"])
+        self.assertEqual(second["understanding"]["consistency"], 1)
 
     def test_confidence_is_fit_times_consistency_without_random(self):
         conf = {**self.NEVER, "memory": 0}
@@ -1238,6 +1255,7 @@ class DecideTurnTest(unittest.TestCase):
         self.assertIn("0.4 미만이면 거의 항상 더 묻는다", call["instructions"])
         self.assertIn("pizza · prep", call["instructions"])  # 검색 자료
         self.assertIn("6번째부터는 웬만하면 결정한다", call["instructions"])
+        self.assertIn("첫 타일이어도 넘어간다", call["instructions"])
 
     def wrong_tile(self):
         tile = raw_tile(hsv_color(zone_mid("red")), 0.3, 50)  # 피자 손질 정답(초·남)에서 먼 색

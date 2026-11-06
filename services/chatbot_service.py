@@ -498,11 +498,18 @@ def signal_gap(a: dict, b: dict, rules: dict) -> float:
     return round(sum(parts) / len(parts), 4)
 
 
-def consistency(samples: list[dict], rules: dict, game: dict) -> float:
-    """이번 단계 타일들이 서로 얼마나 비슷한지 (0~1). 그 단계가 보는 항목만 비교한다. 한 장이면 1."""
-    pairs = [signal_gap(a, b, rules) for i, a in enumerate(samples) for b in samples[i + 1:]]
-    spread = sum(pairs) / len(pairs) if pairs else 0.0
-    return round(max(0.0, 1 - spread * game["understanding"]["spread_scale"]), 4)
+def consistency(stage_id: str, samples: list[dict], rules: dict, game: dict) -> float:
+    """쌓인 이해가 안정적인지 (0~1). 타일끼리 비슷한지가 아니라, 쌓인 신호가 최근 몇 장 동안 덜 흔들렸는지를 본다.
+    틀린 타일을 고쳐 보낸 것이 손해가 되지 않게, 쌓인 적합도가 그대로거나 오르는 중이면 감점하지 않는다. 한 장이면 1."""
+    if len(samples) < 2:
+        return 1.0
+    trail = [stage_signal(samples[:i + 1], game) for i in range(len(samples))]
+    fit = lambda signal: judge_stage(stage_id, signal, rules, game)["closeness"]
+    if fit(trail[-1]) >= fit(trail[-2]):
+        return 1.0
+    recent = trail[-game["understanding"]["recent"]:]
+    moves = [signal_gap(a, b, rules) for a, b in zip(recent, recent[1:])]
+    return round(max(0.0, 1 - sum(moves) / len(moves) * game["understanding"]["spread_scale"]), 4)
 
 
 def alien_confidence(previous: float | None, fit: float, steady: float, game: dict) -> float:
@@ -793,7 +800,7 @@ class ChatbotService:
         else:
             tentative = state["menu"]
             rules = game["rules"][tentative][stage["id"]]
-            steady = consistency(samples, rules, game)
+            steady = consistency(stage["id"], samples, rules, game)
             judged = judge_stage(stage["id"], final_metrics, rules, game)
 
         verdict = judged["verdict"]
