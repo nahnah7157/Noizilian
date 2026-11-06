@@ -124,7 +124,7 @@ def parse_state(data, config: dict) -> dict:
 
 
 MAX_STAGE_ATTEMPTS = 20  # config.game.max_attempts보다 넉넉하게 (state 크기 제한)
-MAX_RECORD_ENTRIES = 60  # 4단계 × 최대 주고받기 × 2명보다 넉넉하게
+MAX_RECORD_ENTRIES = 100  # 4단계 × 최대 시도 10번 × 2명 + 첫 타일보다 넉넉하게
 
 
 def parse_record(data, config: dict) -> tuple[str, list[dict]]:

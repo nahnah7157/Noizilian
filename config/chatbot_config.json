@@ -332,7 +332,7 @@
       "plating": "plate"
     },
     "metrics": {
-      "_note": "판정값 0~100 계산. size = 크기 막대(texture.freq: freq_small→0, freq_large→100). roughness·noise = 밀도 막대(texture.oct: oct_min→0, oct_max→100). heat = 논문 따뜻함 점수 wc(-1 따뜻→100, +1 차가움→0, R4). hue = 색을 sRGB로 되돌린 HSV 색상(0~360°)",
+      "_note": "판정값 0~100 계산. size = 크기 막대(texture.freq: freq_small→0, freq_large→100). roughness·noise = 밀도 막대(texture.oct: oct_min→0, oct_max→100). heat = 논문 따뜻함 점수 wc(메뉴 결정용, R4). power = 논문 무거움 점수 hl(-1 무거움→100, 조리 세기·시간, R6). hue·sat = 색을 sRGB로 되돌린 HSV 색상(0~360°)·채도(0~100)",
       "freq_small": 0.9,
       "freq_large": 0.4,
       "oct_min": 1,
@@ -348,20 +348,48 @@
       "warm_low": "omurice"
     },
     "confidence": {
-      "_note": "근접도(closeness, 0~1) = 범위 안이면 1, 벗어난 만큼 falloff(Hue는 hue_falloff)에 걸쳐 0으로. 외계인 확신 = 첫 시도는 목표, 두 번째부터 memory×이전 확신 + (1-memory)×목표. 목표 = (1-bluff)×근접도 + bluff×무작위(타일 seed로 정해짐). bluff가 클수록 성공 여부와 확신이 어긋난다",
-      "threshold": 0.7,
-      "falloff": 25,
-      "hue_falloff": 40,
-      "memory": 0.3,
-      "bluff": 0.2
+      "_note": "적합도(closeness, 0~1) = 범위 안이면 1, 벗어나면 falloff(색상은 hue_falloff)에 걸쳐 코사인 곡선으로 0까지. 규칙 대체 확신 = 쌓인 신호의 적합도 × 일관성, 두 번째부터 memory×이전 확신을 섞는다. 무작위 없음. thresholds[n] = n+1번째 시도의 멈춤 기준(마지막 값이 끝까지 쓰임)",
+      "thresholds": [0.5, 0.25, 0.12, 0.05, 0],
+      "falloff": 40,
+      "hue_falloff": 60,
+      "memory": 0.3
+    },
+    "understanding": {
+      "_note": "쌓이는 이해. new = 새 타일의 비중(나머지는 쌓인 값). spread_scale = 타일끼리 다른 정도가 일관성을 깎는 배율",
+      "new": 0.6,
+      "spread_scale": 2
     },
     "max_attempts": {
-      "prep": 3,
-      "cook": 3,
-      "plating": 3
+      "ingredient": 10,
+      "prep": 10,
+      "cook": 10,
+      "plating": 10
     },
-    "finalize": "last",
-    "_finalize_note": "최대 시도에 닿았을 때 결과 확정 방식. last = 마지막 타일, average = 그 단계에서 보낸 타일 판정값의 평균(Hue는 원형 평균)",
+    "gray_sat": 15,
+    "_gray_note": "채도(0~100)가 이 값 미만이면 색상이 뜻이 없어 어느 구간도 아닌 것으로 본다 (색 적합도 0.5)",
+    "hue_zones": {
+      "_note": "외계인의 색 언어 [앱 설정, 논문 근거 아님]. HSV 색상 7구간. 뜻은 data/knowledge/cooking_rules.md '색 언어'",
+      "red": [338, 18],
+      "orange": [18, 52],
+      "yellow": [52, 88],
+      "green": [88, 150],
+      "blue": [150, 215],
+      "indigo": [215, 275],
+      "violet": [275, 338]
+    },
+    "plating": {
+      "_note": "요리별 정답 색 = rules.*.plating.center. 판정(적합도·성공)은 ± judge_range. 결과 그림은 ± tint_range 안이면 원래 색 그대로, soft까지는 살짝, 더 밖은 이상한 색",
+      "judge_range": 40,
+      "tint_range": 60,
+      "soft": 20
+    },
+    "success": {
+      "_note": "요리 성공 기준 후보. use로 고른다. 시뮬레이션 뒤 확정",
+      "use": "C",
+      "A": {"mean_fit": 0.6},
+      "B": {"min_success": 2},
+      "C": {"mean_fit": 0.8, "plating": true}
+    },
     "verdict_expressions": {
       "success": "convinced",
       "under": "doubt",
@@ -393,98 +421,26 @@
       "retry": "외계인이 고개를 갸웃하며 타일을 한 번 더 기다립니다."
     },
     "rules": {
-      "_note": "요리별 판정 기준표(0~100, Hue는 도). [lo, hi] 범위보다 낮으면 under, 높으면 over, max_* 를 넘으면 unstable. Hue는 원형 범위(lo>hi면 0°를 넘어감). base_hue = 요리 그림의 원래 색상(화면에서 플레이팅 색을 입힐 때 기준)",
+      "_note": "요리별 판정 기준표(0~100). hues = 정답 색 구간(방법), size·power = 범위, max_* = 최대치(넘으면 unstable), plating.center = 정답 색 중심",
       "pizza": {
-        "prep": {
-          "size": [
-            30,
-            65
-          ],
-          "max_roughness": 50
-        },
-        "cook": {
-          "heat": [
-            65,
-            85
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            345,
-            45
-          ]
-        },
-        "base_hue": 28
+        "prep": {"hues": ["green", "indigo"], "size": [30, 65], "max_roughness": 55},
+        "cook": {"hues": ["red", "violet"], "power": [40, 75], "max_noise": 55},
+        "plating": {"center": 0}
       },
       "hamburger": {
-        "prep": {
-          "size": [
-            45,
-            75
-          ],
-          "max_roughness": 45
-        },
-        "cook": {
-          "heat": [
-            55,
-            80
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            15,
-            55
-          ]
-        },
-        "base_hue": 36
+        "prep": {"hues": ["orange", "yellow"], "size": [45, 80], "max_roughness": 55},
+        "cook": {"hues": ["red", "indigo"], "power": [50, 85], "max_noise": 55},
+        "plating": {"center": 90}
       },
       "ramen": {
-        "prep": {
-          "size": [
-            15,
-            45
-          ],
-          "max_roughness": 40
-        },
-        "cook": {
-          "heat": [
-            50,
-            75
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            25,
-            65
-          ]
-        },
-        "base_hue": 30
+        "prep": {"hues": ["blue", "red"], "size": [20, 55], "max_roughness": 55},
+        "cook": {"hues": ["blue", "green"], "power": [30, 65], "max_noise": 55},
+        "plating": {"center": 180}
       },
       "omurice": {
-        "prep": {
-          "size": [
-            10,
-            35
-          ],
-          "max_roughness": 35
-        },
-        "cook": {
-          "heat": [
-            35,
-            60
-          ],
-          "max_noise": 35
-        },
-        "plating": {
-          "hue": [
-            35,
-            65
-          ]
-        },
-        "base_hue": 24
+        "prep": {"hues": ["red", "violet"], "size": [15, 50], "max_roughness": 55},
+        "cook": {"hues": ["yellow", "orange"], "power": [25, 60], "max_noise": 55},
+        "plating": {"center": 270}
       }
     }
   }

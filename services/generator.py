@@ -119,11 +119,10 @@ class DemoGenerator:
     def respond_to_tile(self, stage: dict, dish: dict, character: dict, signal: dict,
                         alien_scores: dict, update: dict, knowledge: list[KnowledgeHit],
                         username: str = "사용자", message: str = "") -> dict:
-        """사용자 타일을 읽고 다음 추측을 정한다. 임시 규칙: 그 단계의 축에서 사용자 쪽으로 절반 다가간다."""
+        """사용자 타일을 읽고 지금 쌓인 이해를 타일로 보여 준다. 판정값과 같은 비율로 누적한다(game.understanding.new)."""
         user = signal["scores"]
-        scores = dict(alien_scores)
-        for axis in stage["axes"]:
-            scores[axis] = round(alien_scores[axis] + 0.5 * (user[axis] - alien_scores[axis]), 3)
+        new = character["game"]["understanding"]["new"]
+        scores = {axis: round(alien_scores[axis] + new * (user[axis] - alien_scores[axis]), 3) for axis in AXES}
         tolerance = (character.get("exchange") or {}).get("match_tolerance", 0.6)
         if update["distance"] >= 2 * tolerance:  # 모든 축이 "아님"으로 읽힐 만큼 멀다
             expression = "surprised"

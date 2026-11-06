@@ -285,7 +285,7 @@ function renderTile(canvas, color, tex, seed) {
 // 색상 선택: X=채도(C*), Y=밝기(L*), 슬라이더=색상각(h). 서버는 이 L/C/h값을 받는다.
 // 질감: freq(크기)와 밀도(0~1)를 슬라이더로 선택. 밀도는 oct/pers/lac를 선형 변환한다 [앱 설정].
 
-let seed = 42;
+let seed = Math.floor(Math.random() * 2 ** 31); // 타일 그림용. 세션마다 달라지고 판정에는 쓰지 않는다
 let current = null;
 let currentHue = 0, currentSat = 0.7, currentVal = 0.85; // 오른쪽 선택기 상태(HSV)
 let currentDensity = 0.5;

@@ -299,40 +299,45 @@ def judge_dish(final_scores: dict, dish: dict, result: dict | None = None) -> di
 # ═══════════════════════════════════════════════════════════════
 
 VERDICTS = ("success", "under", "over", "unstable")
-GAME_METRICS = ("size", "roughness", "heat", "noise", "hue")
+GAME_METRICS = ("size", "roughness", "heat", "noise", "power", "sat", "hue")
 # /api/start·/api/chat 응답에 추가되는 필드 (기존 필드는 그대로)
 GAME_RESPONSE_KEYS = ("menu", "menu_image", "stage_number", "stage_name", "verdict", "confidence", "retry",
-                      "attempts_left", "alien_message", "plating", "metrics")
+                      "attempts_left", "alien_message", "plating", "metrics", "understanding")
 
 
 def _clamp100(value: float) -> float:
     return round(max(0.0, min(100.0, value)), 2)
 
 
-def hsv_hue(color: dict) -> float:
-    """CIELAB L·C·h를 sRGB로 되돌려 화면 색 선택기와 같은 HSV 색상(0~360°)을 구한다. 회색이면 0."""
+def hsv_of(color: dict) -> tuple[float, float]:
+    """CIELAB L·C·h를 sRGB로 되돌려 화면 색 선택기와 같은 HSV의 (색상 0~360°, 채도 0~100)을 구한다. 회색이면 색상 0."""
     import colorsys
 
     gamma = lambda v: 12.92 * v if v <= 0.0031308 else 1.055 * max(v, 0) ** (1 / 2.4) - 0.055
     rgb = [max(0.0, min(1.0, gamma(v))) for v in _linear_rgb(color["L"], color["C"], color["h"])]
-    return round(colorsys.rgb_to_hsv(*rgb)[0] * 360 % 360, 2)
+    hue, saturation, _ = colorsys.rgb_to_hsv(*rgb)
+    return round(hue * 360 % 360, 2), round(saturation * 100, 2)
 
 
 def game_metrics(signal: dict, game: dict) -> dict:
-    """타일 한 장의 판정값. size = 손질 크기, roughness = 거침, heat = 조리 온도감, noise = 노이즈 불안정성, hue = 플레이팅 색.
+    """타일 한 장의 판정값. size = 손질 크기, roughness = 거침, noise = 불 안정, power = 조리 세기·시간(무거울수록 셈, R6),
+    heat = 온도감(메뉴 결정용), hue·sat = 색상·채도. 색상은 외계인의 색 언어(방법)이고, 정도는 논문 공식 점수를 쓴다.
 
     크기 막대는 freq, 밀도 막대는 oct·pers·lac을 함께 움직이므로 거침과 노이즈는 같은 밀도 값이다.
     둘은 다른 단계(손질 / 조리)에서 판정하므로 한 단계 안에서 겹치지 않는다.
     """
     m = game["metrics"]
     tex = signal["texture"]
+    hue, saturation = hsv_of(signal["color"])
     density = (tex["oct"] - m["oct_min"]) / (m["oct_max"] - m["oct_min"]) * 100
     return {
         "size": _clamp100((m["freq_small"] - tex["freq"]) / (m["freq_small"] - m["freq_large"]) * 100),
         "roughness": _clamp100(density),
         "heat": _clamp100((1 - signal["scores"]["wc"]) / 2 * 100),  # wc 음수 = 따뜻함 (R4)
         "noise": _clamp100(density),
-        "hue": hsv_hue(signal["color"]),
+        "power": _clamp100((1 - signal["scores"]["hl"]) / 2 * 100),  # hl 음수 = 무거움
+        "sat": saturation,
+        "hue": hue,
     }
 
 
@@ -357,62 +362,119 @@ def _hue_check(hue: float, lo: float, hi: float) -> tuple[str | None, float]:
     return ("under", before) if before < after else ("over", after)
 
 
+def soft_fit(gap: float, falloff: float) -> float:
+    """범위에서 벗어난 거리 → 적합도. 범위 안 1, falloff만큼 벗어나면 0, 그 사이는 코사인 곡선으로 부드럽게 줄어든다."""
+    return 0.5 * (1 + math.cos(math.pi * min(max(gap, 0.0) / falloff, 1.0)))
+
+
+def hue_zone(hue: float, game: dict) -> str:
+    """색상이 속한 구간 이름 (빨·주·노·초·파·남·보). 외계인의 색 언어 [앱 설정]."""
+    return next(name for name, (lo, hi) in _zones(game).items() if hue_in_range(hue, lo, hi))
+
+
+def _zones(game: dict) -> dict:
+    return {k: v for k, v in game["hue_zones"].items() if not k.startswith("_")}
+
+
 def judge_stage(stage_id: str, metrics: dict, rules: dict, game: dict) -> dict:
-    """한 단계 판정. rules = config.game.rules[메뉴][단계] 예: {"size": [30, 65], "max_roughness": 50}.
+    """한 단계 판정. rules = config.game.rules[메뉴][단계] 예: {"hues": ["green"], "size": [30, 65], "max_roughness": 55}.
 
     우선순위: 거침·노이즈가 최대치를 넘으면 unstable → 범위보다 낮으면 under / 높으면 over → 아니면 success.
-    closeness(0~1)는 성공 조건에 얼마나 가까운지. 플레이팅은 범위를 벗어나면 abnormal.
+    closeness(0~1)는 연속 적합도로 항목 중 가장 낮은 값. reason은 판정을 낸 항목(method/size/power/density/color).
+    같은 판정값이면 항상 같은 결과다. 플레이팅은 범위를 벗어나면 abnormal.
     """
     conf = game["confidence"]
-    unstable, ranged, closeness = None, None, []
+    unstable, ranged, reason, closeness = False, None, None, []
     for key, value in rules.items():
         if key.startswith("max_"):
             excess = metrics[key[4:]] - value
-            closeness.append(1 - max(0.0, excess) / conf["falloff"])
-            if excess > 0 and unstable is None:
-                unstable = "unstable"
-        elif key == "hue":
-            verdict, gap = _hue_check(metrics["hue"], *value)
-            closeness.append(1 - gap / conf["hue_falloff"])
-            ranged = ranged or verdict
+            closeness.append(soft_fit(excess, conf["falloff"]))
+            unstable = unstable or excess > 0
+        elif key == "hues":
+            if metrics["sat"] < game["gray_sat"]:  # 회색은 색상이 뜻이 없다: 어느 구간도 아님
+                verdict, gap, fit = "under", 0.0, 0.5
+            else:
+                zones = _zones(game)
+                verdict, gap = min((_hue_check(metrics["hue"], *zones[name]) for name in value), key=lambda c: c[1])
+                fit = soft_fit(gap, conf["hue_falloff"])
+            closeness.append(fit)
+            if verdict and not ranged:
+                ranged, reason = verdict, "method"
+        elif key == "center":
+            half = game["plating"]["judge_range"]
+            verdict, gap = _hue_check(metrics["hue"], (value - half) % 360, (value + half) % 360)
+            closeness.append(soft_fit(gap, conf["hue_falloff"]))
+            if verdict and not ranged:
+                ranged, reason = verdict, "color"
         else:
             lo, hi = value
             gap = lo - metrics[key] if metrics[key] < lo else metrics[key] - hi if metrics[key] > hi else 0.0
-            closeness.append(1 - gap / conf["falloff"])
-            ranged = ranged or ("under" if metrics[key] < lo else "over" if metrics[key] > hi else None)
-    verdict = unstable or ranged or "success"
-    out = {"verdict": verdict, "closeness": round(max(0.0, min(closeness or [1.0])), 4)}
+            closeness.append(soft_fit(gap, conf["falloff"]))
+            if gap and not ranged:
+                ranged, reason = ("under" if metrics[key] < lo else "over"), key
+    verdict = "unstable" if unstable else ranged or "success"
+    out = {"verdict": verdict, "closeness": round(min(closeness or [1.0]), 4),
+           "reason": "density" if unstable else reason}
     if stage_id == "plating":
         out["abnormal"] = verdict != "success"
     return out
 
 
-def average_metrics(samples: list[dict]) -> dict:
-    """여러 타일 판정값의 평균. Hue는 원형 평균."""
-    avg = {k: round(sum(s[k] for s in samples) / len(samples), 2) for k in GAME_METRICS if k != "hue"}
-    x = sum(math.cos(math.radians(s["hue"])) for s in samples)
-    y = sum(math.sin(math.radians(s["hue"])) for s in samples)
-    avg["hue"] = round(math.degrees(math.atan2(y, x)) % 360, 2)
-    return avg
+def stage_signal(samples: list[dict], game: dict) -> dict:
+    """이번 단계 타일들이 쌓인 신호. 새 타일에 무게를 두고(game.understanding.new) 누적한다. 색상은 원형 평균."""
+    new = game["understanding"]["new"]
+    signal = samples[0]
+    for sample in samples[1:]:
+        mixed = {k: round((1 - new) * signal[k] + new * sample[k], 2) for k in GAME_METRICS if k != "hue"}
+        x = (1 - new) * math.cos(math.radians(signal["hue"])) + new * math.cos(math.radians(sample["hue"]))
+        y = (1 - new) * math.sin(math.radians(signal["hue"])) + new * math.sin(math.radians(sample["hue"]))
+        signal = {**mixed, "hue": round(math.degrees(math.atan2(y, x)) % 360, 2)}
+    return signal
 
 
-def alien_confidence(previous: float | None, closeness: float, game: dict, seed: int, salt: str) -> float:
-    """외계인의 확신. 근접도를 따라가되 bluff만큼 근거 없이 흔들린다(틀린 조리에 자신만만할 수 있다).
+def consistency(samples: list[dict], rules: dict, game: dict) -> float:
+    """이번 단계 타일들이 서로 얼마나 비슷한지 (0~1). 그 단계가 보는 항목만 비교한다. 한 장이면 1."""
+    keys = [k.replace("max_", "") for k in rules if k not in ("hues", "center")]
+    use_hue = "hues" in rules or "center" in rules
+
+    def apart(a: dict, b: dict) -> float:
+        parts = [abs(a[k] - b[k]) / 100 for k in keys]
+        if use_hue:
+            parts.append(abs((a["hue"] - b["hue"] + 180) % 360 - 180) / 180)
+        return sum(parts) / len(parts)
+
+    pairs = [apart(a, b) for i, a in enumerate(samples) for b in samples[i + 1:]]
+    spread = sum(pairs) / len(pairs) if pairs else 0.0
+    return round(max(0.0, 1 - spread * game["understanding"]["spread_scale"]), 4)
+
+
+def alien_confidence(previous: float | None, fit: float, steady: float, game: dict) -> float:
+    """규칙 대체 때 외계인의 확신 = 쌓인 신호의 적합도 × 일관성. 무작위 없음: 같은 이력이면 같은 값.
     previous = 같은 단계의 직전 확신(첫 시도면 None → 이전 확신을 섞지 않는다)."""
     conf = game["confidence"]
-    wobble = random.Random(f"{seed}:{salt}").random()  # 같은 타일·같은 시도면 같은 값 (재현 가능)
-    target = (1 - conf["bluff"]) * closeness + conf["bluff"] * wobble
+    target = fit * steady
     value = target if previous is None else conf["memory"] * previous + (1 - conf["memory"]) * target
     return round(max(0.0, min(1.0, value)), 4)
 
 
+def stop_threshold(attempts: int, game: dict) -> float:
+    """이 시도에서 멈출 확신 기준. 시도가 늘수록 낮아져서 대화가 끝없이 길어지지 않는다."""
+    steps = game["confidence"]["thresholds"]
+    return steps[min(attempts, len(steps)) - 1]
+
+
 def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> dict:
-    """세 판정 단계가 모두 success(플레이팅 정상)면 성공. 기존 result 필드(success, distance, per_stage, image)도 채운다."""
+    """요리 성공 여부는 config.game.success의 기준으로 정한다. 단계 진행과 별개다. 기존 result 필드는 그대로 채운다."""
     from .image_selector import _url
 
     judged = {k: v for k, v in verdicts.items() if k != "ingredient"}
     failed = {k: 0.0 if v["verdict"] == "success" else 1.0 for k, v in judged.items()}
-    success = bool(judged) and not any(failed.values())
+    fits = [judge_stage(k, v["metrics"], game["rules"][menu][k], game)["closeness"] for k, v in judged.items()]
+    mean_fit = round(sum(fits) / len(fits), 4) if fits else 0.0
+    rule = game["success"][game["success"]["use"]]
+    success = (bool(judged) and mean_fit >= rule.get("mean_fit", 0)
+               and len(judged) - sum(failed.values()) >= rule.get("min_success", 0)
+               and (not rule.get("plating") or not failed.get("plating")))
     plating = verdicts.get("plating", {})
     return {
         "success": success,
@@ -421,16 +483,21 @@ def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> di
         "image": _url(dishes[menu]["images"]["success" if success else "fail"]),
         "menu": menu,
         "verdicts": {k: v["verdict"] for k, v in judged.items()},
+        "fit": mean_fit,
         "plating": plating_view(menu, plating.get("metrics", {}).get("hue"), plating.get("verdict"), game),
     }
 
 
 def plating_view(menu: str, hue: float | None, verdict: str | None, game: dict) -> dict | None:
-    """화면용 플레이팅 색. hue_shift = 요리 그림 원래 색(base_hue)에서 돌릴 각도(-180~180)."""
+    """화면용 플레이팅 색. hue_shift = 요리 그림을 돌릴 각도(-180~180). 판정 범위(judge_range)와는 따로 쓴다.
+    tint_range 안이면 0(원래 색 그대로), 바로 밖(soft)은 벗어난 만큼만 살짝, 더 밖이면 정답 중심에서 떨어진 만큼 이상한 색."""
     if hue is None:
         return None
-    base = game["rules"][menu].get("base_hue", 0)
-    return {"hue": hue, "abnormal": verdict != "success", "hue_shift": round((hue - base + 180) % 360 - 180, 2)}
+    rule = game["plating"]
+    off = (hue - game["rules"][menu]["plating"]["center"] + 180) % 360 - 180
+    past = abs(off) - rule["tint_range"]
+    shift = 0.0 if past <= 0 else math.copysign(past, off) if past <= rule["soft"] else off
+    return {"hue": hue, "abnormal": verdict != "success", "hue_shift": round(shift, 2)}
 
 
 # ── 레코드 대사용 타일 태그 ─────────────────────────────────
@@ -616,8 +683,8 @@ class ChatbotService:
         """사용자 타일 한 장을 판정하고, 확신·진행 상태와 외계인의 다음 타일·표정·행동 묘사를 돌려준다.
 
         1. 1단계(재료 선정): 첫 타일의 색 온도·노이즈로 메뉴를 정하고 바로 손질로 (조리 판정에는 쓰지 않음)
-        2. 손질·조리·플레이팅: 판정값(game_metrics) → judge_stage → 외계인 확신(alien_confidence)
-           확신이 기준 이상이면 다음 단계, 미만이면 같은 단계 재요청(retry). 최대 시도에 닿으면 결과 확정
+        2. 손질·조리·플레이팅: 타일이 쌓인 신호(stage_signal)를 judge_stage로 판정 → 외계인 확신(alien_confidence)
+           확신이 기준 이상이면 다음 단계, 미만이면 같은 단계 재요청(retry). 최대 시도에 닿으면 쌓인 신호로 결과 확정
         3. 마지막 단계가 끝나면 세 단계 판정으로 요리 결과(judge_menu_result)
         외계인 추측 타일(alien.scores)은 화면 기록·레코드용으로 2부 규칙(update_confidence)에 따라 계속 움직인다.
         """
@@ -639,23 +706,21 @@ class ChatbotService:
             menu = decide_menu(metrics, game)
             new_state.update(menu=menu, dish=menu)
             judged, confidence, advance, reason = {"verdict": "success", "closeness": 1.0}, 1.0, True, "menu"
-            final_metrics = metrics
+            final_metrics, steady = metrics, 1.0
         else:
             menu = state["menu"]
             rules = game["rules"][menu][stage["id"]]
-            judged = judge_stage(stage["id"], metrics, rules, game)
-            confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], game, signal["seed"],
-                                          f"{stage['id']}:{attempts}")
-            if confidence >= game["confidence"]["threshold"]:
+            samples = new_state["stage_metrics"] + [metrics]
+            final_metrics = stage_signal(samples, game)
+            steady = consistency(samples, rules, game)
+            judged = judge_stage(stage["id"], final_metrics, rules, game)
+            confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], steady, game)
+            if confidence >= stop_threshold(attempts, game):
                 advance, reason = True, "confident"
             elif attempts >= self._max_attempts(game, stage["id"]):
                 advance, reason = True, "max_reached"
             else:
                 advance, reason = False, None
-            final_metrics = metrics
-            if reason == "max_reached" and game.get("finalize") == "average":
-                final_metrics = average_metrics(new_state["stage_metrics"] + [metrics])
-                judged = {**judge_stage(stage["id"], final_metrics, rules, game), "closeness": judged["closeness"]}
 
         verdict = judged["verdict"]
         dish = dishes[new_state["dish"]]
@@ -685,7 +750,9 @@ class ChatbotService:
                                  alien_scores=alien["scores"])
         else:
             current, current_index = stage, index
-            alien = self.generator.respond_to_tile(stage, dish, character, signal, state["alien_scores"],
+            # 외계인 타일 = 지금까지 쌓인 이해. 단계의 첫 타일은 받은 그대로에서 시작한다
+            understood = state["alien_scores"] if attempts > 1 else signal["scores"]
+            alien = self.generator.respond_to_tile(stage, dish, character, signal, understood,
                                                    update, knowledge, username, user_message)
             alien = {**alien, "expression": game["verdict_expressions"][verdict]}  # 판정에 따른 외계인 반응
             new_state["stage_metrics"].append(metrics)
@@ -703,7 +770,8 @@ class ChatbotService:
             "dish": {"id": new_state["dish"], "name": dish["name"]},
             "result": result,
             "update": update,
-            "metrics": final_metrics,  # 판정값 0~100·Hue (개발 확인용)
+            "metrics": final_metrics,  # 쌓인 판정값 0~100·Hue (개발 확인용)
+            "understanding": {"fit": judged["closeness"], "consistency": steady, "reason": judged.get("reason")},
             **self._game_view(character, index, menu, verdict, confidence, not advance,
                               max(0, self._max_attempts(game, stage["id"]) - attempts), message, plating),
         }
