@@ -680,6 +680,81 @@ class RecordDialogueTest(unittest.TestCase):
         self.assertEqual(source, "openai_failed:RuntimeError")
         self.assertEqual(lines, [pools[0][0].text, pools[0][1].text])
 
+    def run_lines(self, tags, texts, fixes=None):
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [[l for l in load_record_lines() if l.stage == "cook" and l.who == t["who"]] for t in tags]
+        fixes = fixes or {}
+        paired = set(fixes) | {i + 1 for i in fixes}
+        items = [{"tile": i, "who": t["who"], "text": "" if i in paired else x} for i, (t, x) in enumerate(zip(tags, texts))]
+        written = [{"alien_tile": i, "alien_text": texts[i], "fix_text": fix} for i, fix in fixes.items()]
+        calls = []
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", fake_openai({"items": items, "pairs": written}, calls=calls)):
+            lines, self.source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, False, "허세")
+        return lines, calls[0], pools
+
+    def misread_tags(self):
+        tag = lambda who, misread, emotion: {"stage": "cook", "who": who, "verdict": "under", "fit": 0.5, "emotion": emotion, "misread": misread, "meaning": "신호"}
+        return [tag("user", False, None), tag("alien", True, "doubt"), tag("user", True, None)]
+
+    def test_misread_and_fix_are_written_as_one_pair(self):
+        lines, call, _ = self.run_lines(self.misread_tags(), ["불이 약해", "불 끄고… 불어…?", ""], {1: "입으로 불면 식어"})
+        self.assertEqual(lines, ["불이 약해", "불 끄고… 불어…?", "입으로 불면 식어"])
+        sent = json.loads(call["input"])
+        self.assertEqual((sent["language"], sent["pair_tiles"]), ("한국어", [1]))
+        self.assertTrue(sent["tiles"][1]["write_in_pairs"])
+        self.assertEqual(sent["tiles"][2]["examples"], [])  # 다른 오해 예시를 넘기지 않는다
+        schema = call["text"]["format"]["schema"]["properties"]
+        self.assertEqual((schema["items"]["minItems"], schema["pairs"]["minItems"], schema["pairs"]["maxItems"]), (3, 1, 1))
+        self.assertLessEqual(call["max_output_tokens"], 2400)
+        self.assertTrue(call["instructions"].startswith("모든 대사는 반드시 한국어"))
+        self.assertIn("뜨거워…! 이거… 맞아…!", call["instructions"][:120])
+        self.assertIn("15자", call["instructions"])
+        self.assertIn("25자", call["instructions"])
+
+    def test_empty_fix_replaces_both_lines_with_an_example_pair(self):
+        lines, _, _ = self.run_lines(self.misread_tags(), ["불이 약해", "불 끄고… 불어…?", ""], {1: ""})
+        by_text = {l.text: l for l in load_record_lines()}
+        self.assertEqual(by_text[lines[1]].pair, by_text[lines[2]].pair)
+        self.assertTrue(by_text[lines[1]].pair)
+
+    def test_missing_pair_falls_back_to_examples(self):
+        tags = self.misread_tags()
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [[l for l in load_record_lines() if l.stage == "cook" and l.who == t["who"]] for t in tags]
+        answer = {"items": [{"tile": i, "who": t["who"], "text": "불이 약해"} for i, t in enumerate(tags)], "pairs": []}
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", fake_openai(answer)), self.assertLogs("services.generator", "ERROR"):
+            _, source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, False, "허세")
+        self.assertEqual(source, "openai_failed:RuntimeError")
+
+    def test_mostly_foreign_answer_is_reported_as_failed(self):
+        tags = self.tags_of(["under", "under"])
+        self.run_lines(tags, ["火を弱く", "こわい", "皿に", "불… 이거…?"])
+        self.assertEqual(self.source, "openai_failed:too_many_replaced")
+        self.run_lines(tags, ["불이 약해", "불… 맞아…?", "조금만 더", "皿に"])
+        self.assertEqual(self.source, "openai")
+
+    def test_only_the_foreign_line_is_replaced(self):
+        for bad in ("공중に 던지지 마", "불을 弱하게 해", "불을 low로 해"):
+            with self.subTest(bad=bad):
+                tags = self.tags_of(["under"])
+                lines, _, pools = self.run_lines(tags, [bad, "이 불… 이거…?"])
+                self.assertIn(lines[0], {l.text for l in pools[0]})
+                self.assertEqual(lines[1], "이 불… 이거…?")
+
+    def test_question_rule_replaces_only_the_alien_line(self):
+        tags = self.tags_of(["under"])
+        tags[1]["emotion"] = "thinking"
+        lines, _, pools = self.run_lines(tags, ["불이 약해?", "음… 맞아…?"])
+        self.assertEqual(lines[0], "불이 약해?")  # 지구인은 물음표 규칙 대상이 아니다
+        self.assertNotIn("?", lines[1])
+        tags[1]["emotion"] = "doubt"
+        self.assertEqual(self.run_lines(tags, ["불이 약해", "음… 맞아…?"])[0][1], "음… 맞아…?")
+
+    def test_replacing_a_misread_line_replaces_its_fix_with_the_pair(self):
+        lines, _, pools = self.run_lines(self.misread_tags(), ["불이 약해", "火… 불어…?", ""], {1: "입으로 불면 식어"})  # 외국어가 섞인 짝
+        by_text = {l.text: l for l in load_record_lines()}
+        self.assertEqual(by_text[lines[1]].pair, by_text[lines[2]].pair)
+
     def test_openai_failure_falls_back_to_examples(self):
         tags = self.tags_of(["under"])
         entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]

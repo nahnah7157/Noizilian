@@ -58,9 +58,10 @@
   - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
   - 4단계 호출 제한: app.py llm_allowed(메모리, lock). 환경 변수 LLM_PER_IP_PER_10MIN·RECORD_PER_IP_PER_10MIN·LLM_DAILY_LIMIT. 넘으면 use_llm=False로 규칙 대체(rule_limited). 판 로그는 GAME_LOG=1
   - 레코드 대기: 마지막 응답(state.done)을 받는 즉시 chatbot.js requestRecord가 요청한다. GPT 입력은 타일마다 예시 3개 번호만 넣고 글은 examples 목록에 한 번만
+  - 레코드 GPT 응답: items(모든 타일) + pairs(오해 대사와 바로잡는 대사를 한 묶음, 개수 고정). 짝 타일은 pairs로 덮어쓴다. 외국어·물음표 위반·빈칸은 그 줄만 예시로, 짝은 둘 다 예시 짝으로 교체(_clean_lines). 절반 넘게 교체되면 source=openai_failed:too_many_replaced
   - 키 없는 대사: 태그 reason이 method면 record_lines.md의 method 섹션(방법이 틀렸을 때)을 쓴다
   - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 121개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 128개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 진행 중에는 한국어 설명 없음. 결과·결론 화면과 다음에 만들 인트로·미션은 짧은 문구 허용). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
