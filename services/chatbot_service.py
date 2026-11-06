@@ -16,7 +16,7 @@ import math
 import random
 
 from .generator import DemoGenerator
-from .image_selector import DemoImageSelector, pick_line_images
+from .image_selector import DemoImageSelector, _url, pick_line_images
 from .retriever import DemoRetriever
 
 
@@ -303,7 +303,7 @@ GAME_METRICS = ("size", "roughness", "heat", "noise", "power", "sat", "hue")
 # /api/start·/api/chat 응답에 추가되는 필드 (기존 필드는 그대로)
 GAME_RESPONSE_KEYS = ("menu", "menu_image", "stage_number", "stage_name", "verdict", "confidence", "retry",
                       "attempts_left", "alien_message", "plating", "metrics", "understanding",
-                      "ingredient", "ingredients", "menu_scores")
+                      "ingredient", "ingredients", "menu_scores", "decision_source")
 
 
 def _clamp100(value: float) -> float:
@@ -484,18 +484,20 @@ def stage_signal(samples: list[dict], game: dict) -> dict:
     return signal
 
 
+def _rule_keys(rules: dict) -> list[str]:
+    """그 단계가 보는 판정값 이름."""
+    return ["hue" if k in ("hues", "center") else k.replace("max_", "") for k in rules]
+
+
+def signal_gap(a: dict, b: dict, rules: dict) -> float:
+    """두 판정값이 그 단계 기준으로 얼마나 다른지 (0~1)."""
+    parts = [abs((a["hue"] - b["hue"] + 180) % 360 - 180) / 180 if k == "hue" else abs(a[k] - b[k]) / 100 for k in _rule_keys(rules)]
+    return round(sum(parts) / len(parts), 4)
+
+
 def consistency(samples: list[dict], rules: dict, game: dict) -> float:
     """이번 단계 타일들이 서로 얼마나 비슷한지 (0~1). 그 단계가 보는 항목만 비교한다. 한 장이면 1."""
-    keys = [k.replace("max_", "") for k in rules if k not in ("hues", "center")]
-    use_hue = "hues" in rules or "center" in rules
-
-    def apart(a: dict, b: dict) -> float:
-        parts = [abs(a[k] - b[k]) / 100 for k in keys]
-        if use_hue:
-            parts.append(abs((a["hue"] - b["hue"] + 180) % 360 - 180) / 180)
-        return sum(parts) / len(parts)
-
-    pairs = [apart(a, b) for i, a in enumerate(samples) for b in samples[i + 1:]]
+    pairs = [signal_gap(a, b, rules) for i, a in enumerate(samples) for b in samples[i + 1:]]
     spread = sum(pairs) / len(pairs) if pairs else 0.0
     return round(max(0.0, 1 - spread * game["understanding"]["spread_scale"]), 4)
 
@@ -517,8 +519,6 @@ def stop_threshold(attempts: int, game: dict) -> float:
 
 def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> dict:
     """요리 성공 여부는 config.game.success의 기준으로 정한다. 단계 진행과 별개다. 기존 result 필드는 그대로 채운다."""
-    from .image_selector import _url
-
     judged = {k: v for k, v in verdicts.items() if k != "ingredient"}
     failed = {k: 0.0 if v["verdict"] == "success" else 1.0 for k, v in judged.items()}
     fits = [judge_stage(k, v["metrics"], game["rules"][menu][k], game)["closeness"] for k, v in judged.items()]
@@ -565,42 +565,52 @@ def _tile_meaning(entry: dict, metrics: dict, game: dict) -> str:
 
 
 def record_tags(entries: list[dict], menu: str, character: dict) -> list[dict]:
-    """타일마다 {stage, who, verdict, fit, emotion, misread, meaning}.
+    """타일마다 {stage, who, verdict, reason, fit, emotion, misread, meaning}.
 
-    브라우저는 판정을 보내지 않으므로 지구인 타일은 색·질감으로 다시 판정한다. 외계인 타일은 바로 앞 지구인 타일에 대한
-    반응이고, 단계가 막 바뀐 첫 타일은 판정 전(start)이다. 표정은 게임 화면과 같은 규칙(판정별 표정, 단계 끝은 joy).
+    브라우저는 판정을 보내지 않으므로 지구인 타일이 쌓인 신호를 색·질감으로 다시 판정한다. 외계인 타일은 바로 앞 지구인 타일에 대한
+    반응이고, 단계가 막 바뀐 첫 타일은 판정 전(start)이다. 표정은 게임 때 나온 표정(entry.expression)을 쓰고, 없으면 규칙 표정.
     """
     game = character["game"]
     stage_ids = {stage["name"]: stage["id"] for stage in character["stages"]}
-    tags, last = [], None
+    tags, last, samples = [], None, {}
     for entry in entries:
         stage = stage_ids[entry["stage"]]
         if entry["who"] == "user":
             metrics = game_metrics(entry, game)
+            samples.setdefault(stage, []).append(metrics)
             judged = ({"verdict": "success", "closeness": 1.0} if stage == "ingredient"
-                      else judge_stage(stage, metrics, game["rules"][menu][stage], game))
-            last = {"stage": stage, "verdict": judged["verdict"], "fit": judged["closeness"]}
+                      else judge_stage(stage, stage_signal(samples[stage], game), game["rules"][menu][stage], game))
+            last = {"stage": stage, "verdict": judged["verdict"], "reason": judged.get("reason"), "fit": judged["closeness"]}
             tag = {**last, "emotion": None,
                    "meaning": _tile_meaning({**entry, "reads_ingredient": stage == "ingredient"}, metrics, game)}
         elif last and last["stage"] == stage:
-            tag = {**last, "emotion": game["verdict_expressions"][last["verdict"]], "meaning": describe(entry["scores"])}
+            tag = {**last, "emotion": entry.get("expression") or game["verdict_expressions"][last["verdict"]],
+                   "meaning": describe(entry["scores"])}
         else:
-            tag = {"stage": stage, "verdict": "start", "fit": None, "emotion": "joy" if last else "default",
+            tag = {"stage": stage, "verdict": "start", "reason": None, "fit": None,
+                   "emotion": entry.get("expression") or ("joy" if last else "default"),
                    "meaning": describe(entry["scores"])}
         tags.append({**tag, "who": entry["who"], "misread": False})
     return tags
 
 
-def pick_misreads(tags: list[dict], success: bool, wrong: int | None = None, rng=random) -> set[int]:
-    """외계인이 잘못 알아들은 타일 번호. 판정이 어긋난 외계인 타일 중 성공 판 1개, 실패 판 2~3개, 없으면 가운데 외계인 타일.
-    understood_index가 들어오면 이 함수만 그 값으로 바꾼다."""
+def pick_misreads(tags: list[dict], wrong: int | None = None) -> set[int]:
+    """외계인이 잘못 알아들은 타일 번호. 단계를 넘길 때 쌓인 신호의 판정이 success가 아니면 오해다.
+    그 단계 마지막 지구인 타일 바로 뒤 외계인 타일(마지막 단계면 바로 앞)에 표시한다.
+    어긋난 단계가 없으면 단계 중간에 쌓인 판정이 어긋났던 첫 순간을 "잠깐 잘못 알아들었다가 바로잡은 장면"으로 쓴다. 그것도 없으면 오해 없음."""
     alien = [i for i, tag in enumerate(tags) if tag["who"] == "alien"]
-    off = [i for i in alien if tags[i]["verdict"] not in ("success", "start")]
     if wrong is not None:
+        off = [i for i in alien if tags[i]["verdict"] not in ("success", "start")]
         return set((off + [i for i in alien if i not in off])[:wrong])
-    if not off:
-        return {alien[len(alien) // 2]} if alien else set()
-    return set(rng.sample(off, min(1 if success else rng.randint(2, 3), len(off))))
+    last = {tag["stage"]: i for i, tag in enumerate(tags) if tag["who"] == "user"}
+    spots = set()
+    for i in last.values():
+        if tags[i]["verdict"] != "success":
+            spots |= {next((j for j in (i + 1, i - 1) if j in alien), None)} - {None}
+    if spots:
+        return spots
+    return {next((i + 1 for i, tag in enumerate(tags) if tag["who"] == "user" and tag["verdict"] != "success"
+                  and i + 1 in alien), None)} - {None}
 
 
 def mark_misreads(tags: list[dict], spots: set[int]) -> None:
@@ -683,8 +693,6 @@ class ChatbotService:
                    confidence: float, retry: bool, attempts_left: int, message: str, plating: dict | None) -> dict:
         """요리 게임 규칙으로 추가된 응답 필드. 기존 필드(stage 객체 등)는 그대로 두고 옆에 붙인다.
         stage_number·stage_name·verdict는 "방금 보낸 타일을 판정한 단계" 기준이다 (stage 객체는 지금 진행할 단계)."""
-        from .image_selector import _url
-
         game = character["game"]
         stage_id = character["stages"][judged_index]["id"]
         dishes = self.dishes_of(character)
@@ -712,7 +720,7 @@ class ChatbotService:
         alien = self.generator.first_guess(stage, dish, character)
         state = {"dish": dish_id, "menu": None, "stage_index": 0, "exchange_count": 0, "confidence": 0.0,
                  "alien_scores": alien["scores"], "finals": {}, "verdicts": {}, "stage_metrics": [], "ingredients": [],
-                 "done": False}
+                 "overconfident_advances": 0, "done": False}
         return {
             "reply": alien["reply"],
             "image": self.image_selector.select(alien["reply"], character, stage=stage, expression=alien["expression"]),
@@ -730,13 +738,16 @@ class ChatbotService:
         """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
         entries는 app.parse_record()가 검증한 값. wrong은 넣을 오해 대사 수(없으면 success로 정한다)."""
         tags = record_tags(entries, dish_id, character)
-        mark_misreads(tags, pick_misreads(tags, success, wrong))
+        mark_misreads(tags, pick_misreads(tags, wrong))
         moods = (character.get("record") or {}).get("moods") or ["호기심"]
         lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags),
                                                     self.dishes_of(character)[dish_id], success, random.choice(moods))
-        alien = [i for i, e in enumerate(entries) if e["who"] == "alien"]
-        images, image_source = pick_line_images([lines[i] for i in alien], character)
-        image_of = dict(zip(alien, images))
+        # 게임 때 표정을 아는 타일은 그 표정 그림, 모르는 타일만 대사로 고른다
+        unknown = [i for i, e in enumerate(entries) if e["who"] == "alien" and not e.get("expression")]
+        images, image_source = pick_line_images([lines[i] for i in unknown], character)
+        image_of = dict(zip(unknown, images))
+        image_of |= {i: _url(character["expressions"][e["expression"]]["image"])
+                     for i, e in enumerate(entries) if e["who"] == "alien" and e.get("expression")}
         return {"lines": [{"text": line, "image": image_of.get(i)} for i, line in enumerate(lines)],
                 "source": source, "image_source": image_source}
 
@@ -744,8 +755,9 @@ class ChatbotService:
         """사용자 타일 한 장을 판정하고, 확신·진행 상태와 외계인의 다음 타일·표정·행동 묘사를 돌려준다.
 
         1. 1단계(재료 선정): 타일 하나 = 재료 하나로 쌓고 메뉴 후보 점수를 갱신. 확신하면 1위 메뉴로 확정하고 손질로 (조리 판정에는 쓰지 않음)
-        2. 손질·조리·플레이팅: 타일이 쌓인 신호(stage_signal)를 judge_stage로 판정 → 외계인 확신(alien_confidence)
-           확신이 기준 이상이면 다음 단계, 미만이면 같은 단계 재요청(retry). 최대 시도에 닿으면 쌓인 신호로 결과 확정
+        2. 손질·조리·플레이팅: 타일이 쌓인 신호(stage_signal)를 judge_stage로 판정
+        3. 확신·멈춤은 AI가 정한다(generator.decide_turn). 실패하면 규칙 대체(alien_confidence·stop_threshold).
+           안 넘어가면 같은 단계 재요청(retry). 최대 시도에 닿으면 넘어가고, 단계 결과는 항상 쌓인 신호를 규칙으로 판정
         3. 마지막 단계가 끝나면 세 단계 판정으로 요리 결과(judge_menu_result)
         외계인 추측 타일(alien.scores)은 화면 기록·레코드용으로 2부 규칙(update_confidence)에 따라 계속 움직인다.
         """
@@ -763,46 +775,72 @@ class ChatbotService:
         new_state = {**state, "finals": dict(state["finals"]), "verdicts": dict(state["verdicts"]),
                      "stage_metrics": list(state["stage_metrics"])}
 
+        samples = new_state["stage_metrics"] + [metrics]
+        final_metrics = stage_signal(samples, game)
+        ingredient = candidates = None
         if stage["id"] == "ingredient":
+            rules = {"hues": [], "max_roughness": 0}  # 재료 단계는 색과 무늬만 비교한다
             ingredient = read_ingredient(signal, game)
             ingredient_ids = state["ingredients"] + ([ingredient["id"]] if ingredient else [])
-            samples = new_state["stage_metrics"] + [metrics]
-            final_metrics = stage_signal(samples, game)
             candidates = menu_scores(ingredient_ids, final_metrics, game)
-            top, fit, steady = menu_choice(candidates, attempts, ingredient_ids, game)
+            tentative, fit, steady = menu_choice(candidates, attempts, ingredient_ids, game)
             judged = {"verdict": "success", "closeness": fit, "reason": None}
-            confidence = alien_confidence(state["confidence"] if attempts > 1 else None, fit, steady, game)
             new_state["ingredients"] = ingredient_ids
-            if confidence >= stop_threshold(attempts, game):
-                advance, reason = True, "confident"
-            elif attempts >= self._max_attempts(game, stage["id"]):
-                advance, reason = True, "max_reached"
-            else:
-                advance, reason = False, None
-            menu = top if advance else None  # 화면이 menu로 1단계 칸을 칠하므로 확정 전에는 비워 둔다
-            if advance:
-                new_state.update(menu=top, dish=top)
         else:
-            menu = state["menu"]
-            rules = game["rules"][menu][stage["id"]]
-            samples = new_state["stage_metrics"] + [metrics]
-            final_metrics = stage_signal(samples, game)
+            tentative = state["menu"]
+            rules = game["rules"][tentative][stage["id"]]
             steady = consistency(samples, rules, game)
             judged = judge_stage(stage["id"], final_metrics, rules, game)
-            confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], steady, game)
-            if confidence >= stop_threshold(attempts, game):
-                advance, reason = True, "confident"
-            elif attempts >= self._max_attempts(game, stage["id"]):
-                advance, reason = True, "max_reached"
-            else:
-                advance, reason = False, None
 
         verdict = judged["verdict"]
-        dish = dishes[top if stage["id"] == "ingredient" else new_state["dish"]]
+        dish = dishes[tentative]
         stage_name = game["stage_names"][stage["id"]]
-        knowledge = self.retriever.search(f"{menu or top} {stage_name} {verdict}" if stage["id"] == "ingredient"
-                                          else f"{menu} {stage_name} {verdict}")
-        message = self.generator.act(stage, dish, character, verdict, confidence, not advance, knowledge, menu)
+        knowledge = self.retriever.search(f"{tentative} {stage_name} {verdict}")
+        rule_confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], steady, game)
+        rule_advance = rule_confidence >= stop_threshold(attempts, game)
+        limit = self._max_attempts(game, stage["id"])
+        final_turn = attempts >= limit
+        expression = (("convinced" if rule_confidence >= 0.4 else "doubt") if stage["id"] == "ingredient"
+                      else game["verdict_expressions"][verdict])
+        rule = {"confidence": rule_confidence, "advance": rule_advance, "expression": expression,
+                "action": self.generator.act(stage, dish, character, verdict, not (rule_advance or final_turn))}
+        view = {
+            "stage": stage["name"],
+            "attempt": attempts,
+            "tiles_seen": len(samples),
+            "attempts_left": limit - attempts,
+            "final": final_turn,
+            "patience": round(1 - (attempts - 1) / max(1, limit - 1), 2),
+            "previous_confidence": state["confidence"] if attempts > 1 else None,
+            "rule_confidence": rule_confidence,
+            "understanding": {
+                "signal": {k: final_metrics[k] for k in GAME_METRICS if k in _rule_keys(rules)},
+                "hue_zone": hue_zone(final_metrics["hue"], game),
+                "fit": judged["closeness"],
+                "verdict": verdict,
+                "reason": judged.get("reason"),
+                "consistency": steady if len(samples) > 1 else "비교 불가",
+                "change": signal_gap(stage_signal(samples[:-1], game), final_metrics, rules) if len(samples) > 1 else 0.0,
+            },
+            **({"ingredient": ingredient and ingredient["name"], "ingredients": self._ingredient_names(ingredient_ids, game),
+                "menu_scores": candidates} if stage["id"] == "ingredient" else {"menu": dish["name"]}),
+        }
+        decision = self.generator.decide_turn(stage, dish, character, view, rule, knowledge)
+        # 자신만만한 오답은 재미지만 한 판에 몇 번까지만. 다 쓰면 서버가 넘어가지 못하게 막는다
+        limits = game["overconfident"]
+        if (decision["decision_source"] == "openai" and decision["advance"] and not final_turn
+                and stage["id"] != "ingredient" and judged["closeness"] < limits["fit_below"]):
+            if state["overconfident_advances"] >= limits["max_per_game"]:
+                decision = {**decision, "advance": False, "decision_source": "openai_capped"}
+            else:
+                new_state["overconfident_advances"] = state["overconfident_advances"] + 1
+        confidence = decision["confidence"]
+        advance = decision["advance"] or final_turn  # 10번째는 AI 판단과 무관하게 넘어간다. 결과는 쌓인 신호로 판정
+        reason = None if not advance else "confident" if decision["advance"] else "max_reached"
+        message = decision["action"]
+        menu = tentative if advance or stage["id"] != "ingredient" else None  # 화면이 menu로 1단계 칸을 칠한다
+        if advance and stage["id"] == "ingredient":
+            new_state.update(menu=tentative, dish=tentative)
         result = None
 
         if advance:
@@ -820,8 +858,8 @@ class ChatbotService:
             else:
                 current_index = index + 1
                 current = stages[current_index]
-                alien = self.generator.first_guess(current, dish, character, previous=stage,
-                                                   reason="max_reached" if reason == "max_reached" else "confident")
+                alien = {**self.generator.first_guess(current, dish, character, previous=stage, reason=reason),
+                         "expression": decision["expression"]}
                 new_state.update(stage_index=current_index, exchange_count=0, confidence=0.0,
                                  alien_scores=alien["scores"])
         else:
@@ -830,10 +868,9 @@ class ChatbotService:
             understood = state["alien_scores"] if attempts > 1 else signal["scores"]
             alien = self.generator.respond_to_tile(stage, dish, character, signal, understood,
                                                    update, knowledge, username, user_message)
-            alien = {**alien, "expression": game["verdict_expressions"][verdict]}  # 판정에 따른 외계인 반응
+            alien = {**alien, "expression": decision["expression"]}
             if stage["id"] == "ingredient":  # 쌓인 재료 중 대표 재료의 색으로 응답한다
-                alien = {**alien, "scores": ingredient_scores(ingredient_ids, top, game) or alien["scores"],
-                         "expression": "convinced" if confidence >= 0.4 else "doubt"}
+                alien = {**alien, "scores": ingredient_scores(ingredient_ids, tentative, game) or alien["scores"]}
             new_state["stage_metrics"].append(metrics)
             new_state.update(exchange_count=attempts, confidence=confidence, alien_scores=alien["scores"])
 
@@ -851,6 +888,7 @@ class ChatbotService:
             "update": update,
             "metrics": final_metrics,  # 쌓인 판정값 0~100·Hue (개발 확인용)
             "understanding": {"fit": judged["closeness"], "consistency": steady, "reason": judged.get("reason")},
+            "decision_source": decision["decision_source"],
             "ingredients": self._ingredient_names(new_state["ingredients"], game),
             **({"ingredient": ingredient and ingredient["name"], "menu_scores": candidates} if stage["id"] == "ingredient" else {}),
             **self._game_view(character, index, menu, verdict, confidence, not advance,

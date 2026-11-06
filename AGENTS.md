@@ -46,14 +46,18 @@
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-11-07)
-- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1·2단계 완료, 3 decide_turn → 4 호출 제한 → 5 시뮬레이션·실제 10판
+- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1~3단계 완료, 4 호출 제한 → 5 시뮬레이션·실제 10판
   - 1단계 규칙: judge_stage 연속 적합도(soft_fit, 코사인), reason(method/size/power/density/color), 손질=색상·크기·밀도, 조리=색상·무거움(power, hl)·밀도(wc 뺌), 플레이팅=요리별 center(판정 ±40, 결과 그림 색은 ±60 안이면 그대로). seed·bluff·finalize 제거, seed는 그림용으로 세션마다 새로
   - 규칙 대체 확신 = 쌓인 적합도 × 일관성(이전 확신과 섞음), 멈춤 기준 confidence.thresholds는 시도마다 낮아져 규칙 경로는 5번 안에 끝남. max_attempts 네 단계 10, MAX_RECORD_ENTRIES 100
   - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상)
   - 2단계 재료 선정: 타일 하나 = 재료 하나(read_ingredient: 색상 구간 + 거침칸 + 밝기). 메뉴 후보 = 재료 목록 일치 수 + 기존 온도·노이즈 매핑(aux 0.5). 규칙 대체 확신 = 1·2위 차이 × 1위에 맞은 타일 비율. 외계인은 대표 재료의 색으로 응답. menu는 확정 때만 채움(chatbot.js가 1단계 칸을 칠함)
   - 파(국물·물) 재료는 네 메뉴 모두에 있고 남(면)은 라멘 고유. 무작위로 눌러도 메뉴가 쏠리지 않게 남 구간을 좁혔다(225~265)
+  - 3단계 AI 판단: generator.decide_turn이 타일마다 한 번 {confidence, advance, expression, action}을 정함(8초, 재시도 없음, max_output_tokens 200). 실패·키 없음·config.game.llm_decide 꺼짐이면 규칙 대체. 응답 decision_source. 10번째는 final=true로 묻고 답과 무관하게 넘어감. 단계 결과는 항상 쌓인 신호를 규칙으로 판정. 표정은 판정 표정 또는 convinced만 허용
+  - 자신만만한 오답 제한: AI가 쌓인 적합도 0.3 미만에서 넘어가면 state.overconfident_advances에 세고 한 판 2번까지. 다 쓰면 서버가 advance=false, decision_source=openai_capped (config.game.overconfident). 재료 단계와 10번째는 안 셈
+  - 레코드: 태그는 쌓인 신호 기준, 표정·그림은 게임 때 표정(history의 expression, 없으면 규칙). 오해 = 단계가 끝날 때 쌓인 판정이 success가 아님, 어긋난 단계가 없으면 중간에 어긋났던 첫 순간(pick_misreads). 타일 48개 넘으면 최근 48개만 GPT, 앞쪽은 예시 대사
+  - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
   - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 92개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 112개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 진행 중에는 한국어 설명 없음. 결과·결론 화면과 다음에 만들 인트로·미션은 짧은 문구 허용). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
@@ -103,11 +107,11 @@
   - 확신 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 쌓인 신호로 확정
   - main(#10 feat/layout, #11 feat/panel-size)과 합침(11/4): 가로 화면은 팀원 배치(외계인 바닥, 타일 패널 오른쪽 위, 결과 화면 스테이지)를 따르고 진행 표시는 위 가운데로. 세로 화면은 외계인을 배경 창에 고정하는 이쪽 배치를 유지(팀원의 세로 결과 화면 규칙은 그대로)
   - 왼쪽 아래 ? (세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
-  - 외계인 표정 = verdict_expressions, 행동 묘사 alien_message = config.game.messages (llm_messages=true면 OpenAI가 cooking_rules.md 검색 자료로 생성. 타일마다 3~6초 걸려 11/4에 꺼 둠). 화면에 글로는 안 보임
+  - 외계인 표정·행동 묘사 alien_message는 decide_turn이 정하고, 규칙 대체 때는 verdict_expressions·config.game.messages. 행동 묘사는 화면에 글로 안 보임
   - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색·재요청 ↻+남은 시도 점. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 완료: 레코드 대사 태그·검색 (data/knowledge/record_lines.md, retriever.search_lines, generator.record_lines, chatbot_service.py record_tags·pick_misreads, config.record.moods) — fallback_lines 삭제
   - 브라우저는 판정을 보내지 않아 서버가 색·질감으로 다시 판정함(record_tags). chatbot.js·app.py 안 고침. 외계인 타일은 앞 지구인 타일의 판정, 단계 첫 타일은 start
-  - 오해: pick_misreads 하나가 정함(판정이 어긋난 외계인 타일 중 성공 판 1개·실패 판 2~3개, 없으면 가운데). 바로 다음 지구인 타일이 바로잡음. 팀원의 understood_index가 들어오면 이 함수만 바꿀 것
+  - 오해: pick_misreads 하나가 정함(기준은 위 "진행 중" 참고). 바로 다음 지구인 타일이 바로잡음
   - 검색: 단계·말한 쪽이 같은 예시를 오해 > 판정 > 감정 순으로 정렬, 같은 순위는 임베딩 유사도(키 없으면 무작위). record_lines.md는 매번 읽어서 고치면 바로 반영
   - GPT: 타일마다 판정·적합도·오해·표정·의미·예시 5개를 넘기고, 판마다 기분 하나. 응답의 타일 번호·말한 쪽이 입력과 다르면 전부 예시 대사로(칸 밀림 방지), 판 안 같은 대사는 그 줄만 예시로 교체
   - 다양성: 예시 264줄, 기분 10가지. 지시문에서 물음표는 doubt·surprised만, 외계인 대사 모양을 바꿔 가며, 지구인은 한 문장으로 제한

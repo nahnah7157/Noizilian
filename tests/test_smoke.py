@@ -4,10 +4,13 @@
 """
 
 import json
+import os
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+os.environ["OPENAI_API_KEY"] = ""  # .env의 실제 키로 OpenAI를 부르지 않게 (load_dotenv는 있는 값을 덮지 않는다). AI 경로는 mock으로 시험
 
 from app import app
 from services.chatbot_service import (
@@ -419,7 +422,7 @@ class CookingFlowTest(unittest.TestCase):
         self.assertTrue(data["stage"]["advanced"])
         self.assertEqual(state["stage_index"], 2)
         self.assertEqual(state["verdicts"]["prep"]["verdict"], data["verdict"])
-        face = "joy" if data["stage"]["reason"] == "confident" else "thinking"
+        face = GAME["verdict_expressions"][data["verdict"]]  # 넘어갈 때도 판정 표정 (화면이 0.5초 뒤 joy로 바꾼다)
         self.assertEqual(data["image"], "/" + CONFIG["expressions"][face]["image"])
 
     def test_full_game_ends_with_dish_image(self):
@@ -553,20 +556,47 @@ class RecordDialogueTest(unittest.TestCase):
                          [("start", "default"), ("start", "default"), ("over", None), ("over", game["verdict_expressions"]["over"])])
         self.assertLess(tags[2]["fit"], 1)
         self.assertEqual(tags[3]["fit"], tags[2]["fit"])
+        chosen = record_tags([hot, {**alien, "expression": "convinced"}], "ramen", CONFIG)
+        self.assertEqual(chosen[1]["emotion"], "convinced")  # 게임 때 AI가 고른 표정을 쓴다
         self.assertIn("노이즈 낮음", tags[2]["meaning"])
 
-    def test_misreads_prefer_off_verdicts_and_fixing_tile_follows(self):
-        tags = self.tags_of(["success", "under", "over", "unstable", "success"])
-        off = {3, 5, 7}
-        self.assertEqual(len(pick_misreads(tags, True)), 1)
-        self.assertLessEqual(pick_misreads(tags, True), off)
-        failed = pick_misreads(tags, False)
-        self.assertIn(len(failed), (2, 3))
-        self.assertLessEqual(failed, off)
-        # 어긋난 타일이 없으면 가운데 외계인 타일 하나
-        self.assertEqual(pick_misreads(self.tags_of(["success"] * 3), False), {3})
-        mark_misreads(tags, {3})
-        self.assertEqual([i for i, t in enumerate(tags) if t["misread"]], [3, 4])
+    def test_misread_is_a_stage_that_ended_off_target(self):
+        tag = lambda who, stage, verdict: {"who": who, "stage": stage, "verdict": verdict, "misread": False}
+        tags = [tag("alien", "ingredient", "start"), tag("user", "ingredient", "success"),
+                tag("alien", "prep", "start"), tag("user", "prep", "over"), tag("alien", "prep", "over"), tag("user", "prep", "under"),
+                tag("alien", "cook", "start"), tag("user", "cook", "success"),
+                tag("alien", "plating", "start"), tag("user", "plating", "over")]
+        # 손질은 under로 끝나 바로 뒤 외계인 타일, 마지막 단계는 뒤가 없어 바로 앞 타일. 조리는 맞아서 오해 없음
+        spots = pick_misreads(tags)
+        self.assertEqual(spots, {6, 8})
+        mark_misreads(tags, spots)
+        self.assertEqual([i for i, t in enumerate(tags) if t["misread"]], [6, 7, 8, 9])
+        self.assertEqual(pick_misreads(self.tags_of(["success"] * 3)), set())
+
+    def test_clean_stages_use_a_mid_stage_slip_as_the_misread(self):
+        tag = lambda who, stage, verdict: {"who": who, "stage": stage, "verdict": verdict, "misread": False}
+        tags = [tag("alien", "prep", "start"), tag("user", "prep", "over"), tag("alien", "prep", "over"), tag("user", "prep", "success"),
+                tag("alien", "cook", "start"), tag("user", "cook", "success")]
+        spots = pick_misreads(tags)  # 단계 끝 판정은 모두 success지만 중간에 over였던 순간이 있다
+        self.assertEqual(spots, {2})
+        mark_misreads(tags, spots)
+        self.assertEqual([i for i, t in enumerate(tags) if t["misread"]], [2, 3])  # 다음 타일이 바로잡는다
+
+    def test_game_expression_decides_the_tag_and_picture(self):
+        alien = {"who": "alien", "stage": "prep", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "prep", "message": "타일", "signal": game_tile("pizza", "prep", "over")}
+        data = self.client.post("/api/record", json={"dish": "pizza", "success": True, "entries": [
+            {**alien, "expression": "surprised"}, user, {**alien, "expression": "convinced"}, user, alien]}).get_json()
+        pictures = [l["image"] for l in data["lines"]]
+        self.assertEqual(pictures[0], "/" + CONFIG["expressions"]["surprised"]["image"])
+        self.assertEqual(pictures[2], "/" + CONFIG["expressions"]["convinced"]["image"])
+        self.assertTrue(pictures[4])  # 표정이 없으면 지금처럼 대사로 고른다
+
+    def test_bad_expression_is_rejected(self):
+        alien = {"who": "alien", "stage": "prep", "message": "", "scores": {a: 0.0 for a in AXES}}
+        for bad in ("angry", 3, "_note"):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.record([{**alien, "expression": bad}]).status_code, 400)
 
     def test_search_prefers_matching_tags_then_relaxes(self):
         tag = {"stage": "cook", "who": "alien", "verdict": "over", "emotion": "surprised", "misread": True, "meaning": "신호"}
@@ -664,7 +694,7 @@ class RecordDialogueTest(unittest.TestCase):
     def test_wrong_count_controls_misreads(self):
         tags = self.tags_of(["success"] * 3)
         for n in (0, 2):
-            self.assertEqual(len(pick_misreads(tags, True, n)), n)
+            self.assertEqual(len(pick_misreads(tags, n)), n)
 
     def test_rejects_bad_entries(self):
         for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
@@ -1099,6 +1129,215 @@ class GameFlowTest(unittest.TestCase):
         self.assertTrue(data["stage"]["advanced"])
 
 
+def fake_openai(answer=None, error=None, calls=None):
+    """responses.create만 흉내 내는 OpenAI. answer는 그대로 output_text가 되고, error가 있으면 그 오류를 낸다."""
+    class Client:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.responses = self
+
+        def create(self, **kwargs):
+            if calls is not None:
+                calls.append({**kwargs, "client": self.kwargs})
+            if error:
+                raise error
+            return SimpleNamespace(status="completed", output_text=answer if isinstance(answer, str) else json.dumps(answer))
+    return Client
+
+
+class DecideTurnTest(unittest.TestCase):
+    """AI 경로. OpenAI는 전부 mock이다."""
+    STAY = {"confidence": 0.2, "advance": False, "expression": "doubt", "action": "외계인이 재료를 다시 살핍니다."}
+    GO = {"confidence": 0.9, "advance": True, "expression": "convinced", "action": "외계인이 자신만만하게 칼을 듭니다."}
+
+    def setUp(self):
+        self.service = ChatbotService()
+        confident = copy.deepcopy(CONFIG)
+        confident["game"]["llm_decide"] = False
+        confident["game"]["confidence"]["thresholds"] = [0]
+        self.state = self.service.play_turn("", "헤슬", confident, parse_signal(game_tile("pizza")),
+                                            self.service.start(CONFIG, "pizza")["state"])["state"]
+
+    def turn(self, tile, answer=None, error=None, config=CONFIG, state=None, calls=None):
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", fake_openai(answer, error, calls)):
+            return self.service.play_turn("", "헤슬", config, parse_signal(tile), state or self.state)
+
+    def test_ai_stops_the_stage_even_when_the_rule_would_not(self):
+        data = self.turn(game_tile("pizza", "prep", "over"), self.GO)
+        self.assertTrue(data["stage"]["advanced"])
+        self.assertEqual((data["decision_source"], data["confidence"], data["reply"]), ("openai", 0.9, self.GO["action"]))
+        # 자신만만하게 넘어가도 단계 결과는 쌓인 신호를 규칙으로 판정한다
+        self.assertEqual(data["state"]["verdicts"]["prep"]["verdict"], "over")
+
+    def test_ai_keeps_asking_even_when_the_rule_would_stop(self):
+        data = self.turn(game_tile("pizza", "prep", "success"), {**self.STAY, "expression": "convinced"})
+        self.assertFalse(data["stage"]["advanced"])
+        self.assertTrue(data["retry"])
+        self.assertEqual(data["state"]["exchange_count"], 1)
+        self.assertEqual(data["state"]["confidence"], 0.2)
+
+    def test_format_errors_fall_back_to_rule(self):
+        for bad in ("JSON 아님", {"advance": True}, {**self.GO, "confidence": 2}, {**self.GO, "confidence": True}, {**self.GO, "advance": "yes"}):
+            with self.subTest(bad=str(bad)[:30]), self.assertLogs("services.generator", "ERROR"):
+                self.assertEqual(self.turn(game_tile("pizza", "prep", "over"), bad)["decision_source"], "rule")
+
+    def test_timeout_falls_back_to_rule(self):
+        with self.assertLogs("services.generator", "ERROR"):
+            data = self.turn(game_tile("pizza", "prep", "over"), error=TimeoutError())
+        self.assertEqual(data["decision_source"], "rule")
+        self.assertIsInstance(data["reply"], str)
+
+    def test_no_key_or_switch_off_uses_rule_without_calling(self):
+        calls = []
+        off = copy.deepcopy(CONFIG)
+        off["game"]["llm_decide"] = False
+        self.assertEqual(self.turn(game_tile("pizza", "prep"), self.GO, config=off, calls=calls)["decision_source"], "rule")
+        self.assertEqual(self.service.play_turn("", "헤슬", CONFIG, parse_signal(game_tile("pizza", "prep")), self.state)["decision_source"], "rule")
+        self.assertEqual(calls, [])
+
+    def test_tenth_tile_asks_for_a_final_judgement_and_moves_on(self):
+        calls = []
+        state = self.state
+        for _ in range(GAME["max_attempts"]["prep"]):
+            data = self.turn(game_tile("pizza", "prep", "under"), self.STAY, state=state, calls=calls)
+            state = data["state"]
+        self.assertTrue(json.loads(calls[-1]["input"])["final"])
+        self.assertFalse(json.loads(calls[0]["input"])["final"])
+        self.assertEqual((data["stage"]["advanced"], data["stage"]["reason"]), (True, "max_reached"))
+        self.assertEqual(state["verdicts"]["prep"]["verdict"], "under")  # 자동 성공 아님
+
+    def test_expression_must_follow_the_verdict_or_be_confident(self):
+        tile = game_tile("pizza", "prep", "over")
+        data = self.turn(tile, {**self.STAY, "expression": "joy"})
+        self.assertEqual(data["alien"]["expression"], GAME["verdict_expressions"]["over"])  # 어기면 규칙 표정
+        data = self.turn(tile, {**self.STAY, "expression": "convinced"})
+        self.assertEqual(data["alien"]["expression"], "convinced")  # 틀렸지만 자신만만은 허용
+
+    def test_blank_action_uses_prepared_text(self):
+        data = self.turn(game_tile("pizza", "prep", "over"), {**self.STAY, "action": "  "})
+        self.assertEqual(data["decision_source"], "openai")
+        self.assertTrue(data["reply"])
+
+    def test_call_stays_within_limits_and_gets_the_understanding(self):
+        calls = []
+        data = self.turn(game_tile("pizza", "prep", "over"), self.STAY, calls=calls)
+        data = self.turn(game_tile("pizza", "prep", "success"), self.STAY, state=data["state"], calls=calls)
+        call = calls[-1]
+        self.assertEqual(call["client"], {"timeout": 8.0, "max_retries": 0})
+        self.assertLessEqual(call["max_output_tokens"], 200)
+        self.assertEqual(set(call["text"]["format"]["schema"]["properties"]), {"confidence", "advance", "expression", "action"})
+        view = json.loads(call["input"])
+        self.assertEqual((view["attempt"], view["attempts_left"], view["previous_confidence"]), (2, 8, 0.2))
+        self.assertLess(view["patience"], 1)
+        self.assertEqual(set(view["understanding"]), {"signal", "hue_zone", "fit", "verdict", "reason", "consistency", "change"})
+        self.assertGreater(view["understanding"]["change"], 0)
+        self.assertEqual(view["tiles_seen"], 2)
+        self.assertIsInstance(view["rule_confidence"], float)
+        self.assertIsInstance(view["understanding"]["consistency"], float)
+        self.assertEqual(json.loads(calls[0]["input"])["understanding"]["consistency"], "비교 불가")  # 한 장은 안정됐다는 뜻이 아니다
+        self.assertIn("0.4 미만이면 거의 항상 더 묻는다", call["instructions"])
+        self.assertIn("pizza · prep", call["instructions"])  # 검색 자료
+        self.assertIn("6번째부터는 웬만하면 결정한다", call["instructions"])
+
+    def wrong_tile(self):
+        tile = raw_tile(hsv_color(zone_mid("red")), 0.3, 50)  # 피자 손질 정답(초·남)에서 먼 색
+        self.assertLess(judge_stage("prep", game_metrics(parse_signal(tile), GAME), RULES["pizza"]["prep"], GAME)["closeness"], 0.3)
+        return tile
+
+    def test_overconfident_advance_is_counted_and_then_capped(self):
+        data = self.turn(self.wrong_tile(), self.GO)
+        self.assertEqual((data["decision_source"], data["state"]["overconfident_advances"]), ("openai", 1))
+        self.assertTrue(data["stage"]["advanced"])
+        capped = {**self.state, "overconfident_advances": GAME["overconfident"]["max_per_game"]}
+        data = self.turn(self.wrong_tile(), self.GO, state=capped)
+        self.assertEqual(data["decision_source"], "openai_capped")
+        self.assertFalse(data["stage"]["advanced"])
+        self.assertTrue(data["retry"])
+        self.assertEqual(data["state"]["overconfident_advances"], GAME["overconfident"]["max_per_game"])
+
+    def test_good_tiles_and_staying_do_not_count_as_overconfident(self):
+        self.assertEqual(self.turn(game_tile("pizza", "prep", "success"), self.GO)["state"]["overconfident_advances"], 0)
+        self.assertEqual(self.turn(self.wrong_tile(), self.STAY)["state"]["overconfident_advances"], 0)
+
+    def test_tenth_tile_moves_on_even_when_the_cap_is_used_up(self):
+        state = {**self.state, "overconfident_advances": GAME["overconfident"]["max_per_game"],
+                 "exchange_count": GAME["max_attempts"]["prep"] - 1}
+        data = self.turn(self.wrong_tile(), self.GO, state=state)
+        self.assertTrue(data["stage"]["advanced"])
+        self.assertEqual(data["decision_source"], "openai")
+
+    def test_bad_overconfident_count_is_rejected(self):
+        client = app.test_client()
+        state = client.post("/api/start", json={}).get_json()["state"]
+        for bad in (-1, 99, True, "1"):
+            with self.subTest(bad=bad):
+                r = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza"),
+                                                   "state": {**state, "overconfident_advances": bad}})
+                self.assertEqual(r.get_json()["error"]["code"], "invalid_state")
+
+    def test_ingredient_stage_asks_ai_with_candidates(self):
+        calls = []
+        state = self.service.start(CONFIG, "pizza")["state"]
+        data = self.turn(game_tile("ramen"), self.STAY, state=state, calls=calls)
+        view = json.loads(calls[0]["input"])
+        self.assertEqual((view["ingredient"], view["ingredients"]), ("면", ["면"]))
+        self.assertEqual(max(view["menu_scores"], key=view["menu_scores"].get), "ramen")
+        self.assertIsNone(data["menu"])
+        data = self.turn(game_tile("ramen"), self.GO, state=data["state"])
+        self.assertEqual((data["menu"], data["state"]["stage_index"]), ("ramen", 1))
+
+
+class RecordCallsTest(unittest.TestCase):
+    """키가 있으면 대사(responses)와 임베딩이 실제로 불리는지. OpenAI는 mock."""
+
+    def test_lines_and_embeddings_are_called_with_a_key(self):
+        alien = {"who": "alien", "stage": "prep", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "prep", "message": "타일", "signal": game_tile("pizza", "prep")}
+        calls = {"lines": 0, "embed": 0}
+
+        class Client:
+            def __init__(self, **_):
+                self.responses = self.embeddings = self
+
+            def create(self, **kwargs):
+                if "input" in kwargs and isinstance(kwargs["input"], list):
+                    calls["embed"] += 1
+                    return SimpleNamespace(data=[SimpleNamespace(embedding=[1.0, 0.5]) for _ in kwargs["input"]])
+                calls["lines"] += 1
+                who = [t["who"] for t in json.loads(kwargs["input"])["tiles"]]
+                items = [{"tile": i, "who": w, "text": f"대사 {i}…"} for i, w in enumerate(who)]
+                return SimpleNamespace(status="completed", output_text=json.dumps({"items": items}))
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", Client):
+            data = app.test_client().post("/api/record", json={"dish": "pizza", "success": True, "entries": [alien, user, alien]}).get_json()
+        self.assertEqual((data["source"], data["image_source"]), ("openai", "openai"))
+        self.assertEqual(calls["lines"], 1)
+        self.assertEqual(calls["embed"], 2)  # 예시 검색 + 대사 그림
+
+    def test_long_record_sends_only_recent_tiles_to_gpt(self):
+        tags = [{"stage": "cook", "who": w, "verdict": "under", "fit": 0.5, "emotion": None, "misread": False, "meaning": "신호"}
+                for _ in range(40) for w in ("user", "alien")]
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [load_record_lines()] * len(tags)
+        seen = {}
+
+        class Client:
+            def __init__(self, **_):
+                self.responses = self
+
+            def create(self, **kwargs):
+                tiles = json.loads(kwargs["input"])["tiles"]
+                seen["tiles"] = len(tiles)
+                items = [{"tile": t["tile"], "who": t["who"], "text": f"새 대사 {t['tile']}"} for t in tiles]
+                return SimpleNamespace(status="completed", output_text=json.dumps({"items": items}))
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", Client):
+            lines, source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, True, "허세")
+        self.assertEqual((source, seen["tiles"], len(lines)), ("openai", 48, 80))
+        self.assertTrue(lines[-1].startswith("새 대사"))
+        self.assertFalse(lines[0].startswith("새 대사"))
+
+
 class GameResponseTest(unittest.TestCase):
     OLD_KEYS = {"reply", "image", "sources", "alien", "state", "stage", "dish", "result"}
 
@@ -1109,7 +1348,7 @@ class GameResponseTest(unittest.TestCase):
         for name, data in (("start", start), ("chat", chat)):
             with self.subTest(name=name):
                 self.assertTrue(self.OLD_KEYS <= set(data))
-                self.assertTrue(set(GAME_RESPONSE_KEYS) - {"metrics", "understanding", "ingredient", "ingredients", "menu_scores"} <= set(data))
+                self.assertTrue(set(GAME_RESPONSE_KEYS) - {"metrics", "understanding", "ingredient", "ingredients", "menu_scores", "decision_source"} <= set(data))
                 self.assertEqual(set(data["stage"]), {"id", "name", "index", "total", "hint", "advanced", "reason"})
                 self.assertEqual(set(data["alien"]), {"scores", "word", "expression", "reading"})
                 self.assertIsInstance(data["reply"], str)

@@ -110,6 +110,9 @@ def parse_state(data, config: dict) -> dict:
     known = {i["id"] for i in config["game"]["ingredients"]}
     if not isinstance(ingredients, list) or len(ingredients) > MAX_STAGE_ATTEMPTS or not set(ingredients) <= known:
         raise ValueError("ingredients가 올바르지 않습니다.")
+    overconfident = data.get("overconfident_advances", 0)
+    if isinstance(overconfident, bool) or not isinstance(overconfident, int) or not 0 <= overconfident <= len(stages):
+        raise ValueError("overconfident_advances가 올바르지 않습니다.")
     stage_metrics = data.get("stage_metrics", [])
     if not isinstance(stage_metrics, list) or len(stage_metrics) > MAX_STAGE_ATTEMPTS:
         raise ValueError("stage_metrics가 올바르지 않습니다.")
@@ -124,6 +127,7 @@ def parse_state(data, config: dict) -> dict:
         "verdicts": clean_verdicts,
         "stage_metrics": [metrics(m, "stage_metrics") for m in stage_metrics],
         "ingredients": ingredients,
+        "overconfident_advances": overconfident,
         "done": False,
     }
 
@@ -157,6 +161,11 @@ def parse_record(data, config: dict) -> tuple[str, list[dict]]:
                     isinstance(v, (int, float)) and not isinstance(v, bool) and -1 <= v <= 1 for v in scores.values()):
                 raise ValueError(f"외계인 타일에는 {', '.join(AXES)} 점수(-1~1)가 모두 필요합니다.")
             item["scores"] = {a: float(scores[a]) for a in AXES}
+            expression = entry.get("expression")  # 게임 때 나온 표정 (없으면 서버가 규칙으로 정한다)
+            if expression is not None:
+                if expression not in config["expressions"] or str(expression).startswith("_"):
+                    raise ValueError("외계인 타일의 표정이 올바르지 않습니다.")
+                item["expression"] = expression
         else:
             raise ValueError("who는 user 또는 alien이어야 합니다.")
         clean.append(item)

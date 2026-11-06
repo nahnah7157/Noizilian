@@ -755,7 +755,7 @@ resultNextBtn?.addEventListener("click", () => {
 
 function addAlienToHistory(data) {
   if (data.alien?.scores && data.stage) {
-    history.push({ who: "alien", stage: data.stage.id, message: data.alien.word || "", scores: data.alien.scores });
+    history.push({ who: "alien", stage: data.stage.id, message: data.alien.word || "", scores: data.alien.scores, expression: data.alien.expression });
   }
 }
 
@@ -1004,8 +1004,8 @@ async function showRecord() {
       body: JSON.stringify({
         dish: currentDishId,
         success: resultSuccess,
-        entries: history.map(({ who, stage, message, signal, scores }) =>
-          who === "user" ? { who, stage, message, signal } : { who, stage, message, scores }),
+        entries: history.map(({ who, stage, message, signal, scores, expression }) =>
+          who === "user" ? { who, stage, message, signal } : { who, stage, message, scores, expression }),
       }),
     });
     const data = await response.json();
