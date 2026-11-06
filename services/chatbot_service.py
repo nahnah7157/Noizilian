@@ -12,11 +12,14 @@
 3. ChatbotService: 검색 → 생성 → 이미지 선택 → 응답 조립
 """
 
+import json
+import logging
 import math
+import os
 import random
 
 from .generator import DemoGenerator
-from .image_selector import DemoImageSelector, pick_line_images
+from .image_selector import DemoImageSelector, _url, pick_line_images
 from .retriever import DemoRetriever
 
 
@@ -299,40 +302,46 @@ def judge_dish(final_scores: dict, dish: dict, result: dict | None = None) -> di
 # ═══════════════════════════════════════════════════════════════
 
 VERDICTS = ("success", "under", "over", "unstable")
-GAME_METRICS = ("size", "roughness", "heat", "noise", "hue")
+GAME_METRICS = ("size", "roughness", "heat", "noise", "power", "sat", "hue")
 # /api/start·/api/chat 응답에 추가되는 필드 (기존 필드는 그대로)
 GAME_RESPONSE_KEYS = ("menu", "menu_image", "stage_number", "stage_name", "verdict", "confidence", "retry",
-                      "attempts_left", "alien_message", "plating", "metrics")
+                      "attempts_left", "alien_message", "plating", "metrics", "understanding",
+                      "ingredient", "ingredients", "menu_scores", "decision_source")
 
 
 def _clamp100(value: float) -> float:
     return round(max(0.0, min(100.0, value)), 2)
 
 
-def hsv_hue(color: dict) -> float:
-    """CIELAB L·C·h를 sRGB로 되돌려 화면 색 선택기와 같은 HSV 색상(0~360°)을 구한다. 회색이면 0."""
+def hsv_of(color: dict) -> tuple[float, float, float]:
+    """CIELAB L·C·h를 sRGB로 되돌려 화면 색 선택기와 같은 HSV의 (색상 0~360°, 채도 0~100, 밝기 0~100)을 구한다. 회색이면 색상 0."""
     import colorsys
 
     gamma = lambda v: 12.92 * v if v <= 0.0031308 else 1.055 * max(v, 0) ** (1 / 2.4) - 0.055
     rgb = [max(0.0, min(1.0, gamma(v))) for v in _linear_rgb(color["L"], color["C"], color["h"])]
-    return round(colorsys.rgb_to_hsv(*rgb)[0] * 360 % 360, 2)
+    hue, saturation, value = colorsys.rgb_to_hsv(*rgb)
+    return round(hue * 360 % 360, 2), round(saturation * 100, 2), round(value * 100, 2)
 
 
 def game_metrics(signal: dict, game: dict) -> dict:
-    """타일 한 장의 판정값. size = 손질 크기, roughness = 거침, heat = 조리 온도감, noise = 노이즈 불안정성, hue = 플레이팅 색.
+    """타일 한 장의 판정값. size = 손질 크기, roughness = 거침, noise = 불 안정, power = 조리 세기·시간(무거울수록 셈, R6),
+    heat = 온도감(메뉴 결정용), hue·sat = 색상·채도. 색상은 외계인의 색 언어(방법)이고, 정도는 논문 공식 점수를 쓴다.
 
     크기 막대는 freq, 밀도 막대는 oct·pers·lac을 함께 움직이므로 거침과 노이즈는 같은 밀도 값이다.
     둘은 다른 단계(손질 / 조리)에서 판정하므로 한 단계 안에서 겹치지 않는다.
     """
     m = game["metrics"]
     tex = signal["texture"]
+    hue, saturation, _ = hsv_of(signal["color"])
     density = (tex["oct"] - m["oct_min"]) / (m["oct_max"] - m["oct_min"]) * 100
     return {
         "size": _clamp100((m["freq_small"] - tex["freq"]) / (m["freq_small"] - m["freq_large"]) * 100),
         "roughness": _clamp100(density),
         "heat": _clamp100((1 - signal["scores"]["wc"]) / 2 * 100),  # wc 음수 = 따뜻함 (R4)
         "noise": _clamp100(density),
-        "hue": hsv_hue(signal["color"]),
+        "power": _clamp100((1 - signal["scores"]["hl"]) / 2 * 100),  # hl 음수 = 무거움
+        "sat": saturation,
+        "hue": hue,
     }
 
 
@@ -342,6 +351,57 @@ def decide_menu(metrics: dict, game: dict) -> str:
     warm = "warm" if metrics["heat"] >= rule["warm_min"] else "cool"
     noise = "high" if metrics["noise"] >= rule["noise_min"] else "low"
     return rule[f"{warm}_{noise}"]
+
+
+def grain_of(roughness: float, game: dict) -> str:
+    """밀도(0~100) → 무늬 거침칸."""
+    grains = {k: v for k, v in game["grain"].items() if not k.startswith("_")}
+    return next(name for name, rule in grains.items() if roughness <= rule["max"])
+
+
+def read_ingredient(signal: dict, game: dict) -> dict | None:
+    """타일 하나 → 재료 하나. 색상 구간 + 거침칸, 같은 칸에 여럿이면 밝기가 가까운 재료.
+    그 칸에 재료가 없으면 같은 구간에서 가장 가까운 칸을 쓴다. 회색은 색 언어가 없어서 None."""
+    hue, saturation, value = hsv_of(signal["color"])
+    if saturation < game["gray_sat"]:
+        return None
+    roughness = game_metrics(signal, game)["roughness"]
+    grains = list(k for k in game["grain"] if not k.startswith("_"))
+    want = grains.index(grain_of(roughness, game))
+    zone = [i for i in game["ingredients"] if i["zone"] == hue_zone(hue, game)]
+    return min(zone, key=lambda i: (abs(grains.index(i["grain"]) - want), abs(i["value"] - value)))
+
+
+def menu_scores(ingredient_ids: list[str], signal: dict, game: dict) -> dict:
+    """메뉴 후보 점수: 쌓인 재료가 메뉴 재료 목록에 맞은 수 + 기존 따뜻·차가움 × 노이즈 매핑(보조)."""
+    menus = {i["id"]: i["menus"] for i in game["ingredients"]}
+    scores = {menu: 0.0 for menu in game["rules"] if not menu.startswith("_")}
+    for ingredient_id in ingredient_ids:
+        for menu in menus[ingredient_id]:
+            scores[menu] += 1
+    scores[decide_menu(signal, game)] += game["ingredient_rule"]["aux"]
+    return scores
+
+
+def menu_choice(scores: dict, tiles: int, ingredient_ids: list[str], game: dict) -> tuple[str, float, float]:
+    """(1위 메뉴, 1·2위 점수 차로 본 적합도, 1위에 맞은 타일 비율). 동점이면 config 순서."""
+    rule = game["ingredient_rule"]
+    top, second = sorted(scores, key=scores.get, reverse=True)[:2]
+    menus = {i["id"]: i["menus"] for i in game["ingredients"]}
+    matched = sum(top in menus[ingredient_id] for ingredient_id in ingredient_ids)
+    return top, round(min(1.0, (scores[top] - scores[second]) / rule["margin_full"]), 4), round(matched / tiles, 4)
+
+
+def ingredient_scores(ingredient_ids: list[str], menu: str, game: dict) -> dict | None:
+    """외계인이 내밀 타일 = 쌓인 재료 중 메뉴에 맞는 대표 재료(가장 많이 온 재료, 같으면 최근)의 감각 점수."""
+    known = {i["id"]: i for i in game["ingredients"]}
+    fits = [i for i in ingredient_ids if menu in known[i]["menus"]] or ingredient_ids
+    if not fits:
+        return None
+    best = known[max(reversed(fits), key=fits.count)]
+    density = game["grain"][best["grain"]]["density"]
+    texture = {"oct": 1 + 11 * density, "freq": 0.65, "pers": 0.4 + 0.4 * density, "lac": 1.8 + 1.4 * density}
+    return scores_of(best["color"], texture)
 
 
 def hue_in_range(hue: float, lo: float, hi: float) -> bool:
@@ -357,62 +417,126 @@ def _hue_check(hue: float, lo: float, hi: float) -> tuple[str | None, float]:
     return ("under", before) if before < after else ("over", after)
 
 
+def soft_fit(gap: float, falloff: float) -> float:
+    """범위에서 벗어난 거리 → 적합도. 범위 안 1, falloff만큼 벗어나면 0, 그 사이는 코사인 곡선으로 부드럽게 줄어든다."""
+    return 0.5 * (1 + math.cos(math.pi * min(max(gap, 0.0) / falloff, 1.0)))
+
+
+def hue_zone(hue: float, game: dict) -> str:
+    """색상이 속한 구간 이름 (빨·주·노·초·파·남·보). 외계인의 색 언어 [앱 설정]."""
+    return next(name for name, (lo, hi) in _zones(game).items() if hue_in_range(hue, lo, hi))
+
+
+def _zones(game: dict) -> dict:
+    return {k: v for k, v in game["hue_zones"].items() if not k.startswith("_")}
+
+
 def judge_stage(stage_id: str, metrics: dict, rules: dict, game: dict) -> dict:
-    """한 단계 판정. rules = config.game.rules[메뉴][단계] 예: {"size": [30, 65], "max_roughness": 50}.
+    """한 단계 판정. rules = config.game.rules[메뉴][단계] 예: {"hues": ["green"], "size": [30, 65], "max_roughness": 55}.
 
     우선순위: 거침·노이즈가 최대치를 넘으면 unstable → 범위보다 낮으면 under / 높으면 over → 아니면 success.
-    closeness(0~1)는 성공 조건에 얼마나 가까운지. 플레이팅은 범위를 벗어나면 abnormal.
+    closeness(0~1)는 연속 적합도로 항목 중 가장 낮은 값. reason은 판정을 낸 항목(method/size/power/density/color).
+    같은 판정값이면 항상 같은 결과다. 플레이팅은 범위를 벗어나면 abnormal.
     """
     conf = game["confidence"]
-    unstable, ranged, closeness = None, None, []
+    unstable, ranged, reason, closeness = False, None, None, []
     for key, value in rules.items():
         if key.startswith("max_"):
             excess = metrics[key[4:]] - value
-            closeness.append(1 - max(0.0, excess) / conf["falloff"])
-            if excess > 0 and unstable is None:
-                unstable = "unstable"
-        elif key == "hue":
-            verdict, gap = _hue_check(metrics["hue"], *value)
-            closeness.append(1 - gap / conf["hue_falloff"])
-            ranged = ranged or verdict
+            closeness.append(soft_fit(excess, conf["falloff"]))
+            unstable = unstable or excess > 0
+        elif key == "hues":
+            if metrics["sat"] < game["gray_sat"]:  # 회색은 색상이 뜻이 없다: 어느 구간도 아님
+                verdict, gap, fit = "under", 0.0, 0.5
+            else:
+                zones = _zones(game)
+                verdict, gap = min((_hue_check(metrics["hue"], *zones[name]) for name in value), key=lambda c: c[1])
+                fit = soft_fit(gap, conf["hue_falloff"])
+            closeness.append(fit)
+            if verdict and not ranged:
+                ranged, reason = verdict, "method"
+        elif key == "center":
+            half = game["plating"]["judge_range"]
+            verdict, gap = _hue_check(metrics["hue"], (value - half) % 360, (value + half) % 360)
+            closeness.append(soft_fit(gap, conf["hue_falloff"]))
+            if verdict and not ranged:
+                ranged, reason = verdict, "color"
         else:
             lo, hi = value
             gap = lo - metrics[key] if metrics[key] < lo else metrics[key] - hi if metrics[key] > hi else 0.0
-            closeness.append(1 - gap / conf["falloff"])
-            ranged = ranged or ("under" if metrics[key] < lo else "over" if metrics[key] > hi else None)
-    verdict = unstable or ranged or "success"
-    out = {"verdict": verdict, "closeness": round(max(0.0, min(closeness or [1.0])), 4)}
+            closeness.append(soft_fit(gap, conf["falloff"]))
+            if gap and not ranged:
+                ranged, reason = ("under" if metrics[key] < lo else "over"), key
+    verdict = "unstable" if unstable else ranged or "success"
+    out = {"verdict": verdict, "closeness": round(min(closeness or [1.0]), 4),
+           "reason": "density" if unstable else reason}
     if stage_id == "plating":
         out["abnormal"] = verdict != "success"
     return out
 
 
-def average_metrics(samples: list[dict]) -> dict:
-    """여러 타일 판정값의 평균. Hue는 원형 평균."""
-    avg = {k: round(sum(s[k] for s in samples) / len(samples), 2) for k in GAME_METRICS if k != "hue"}
-    x = sum(math.cos(math.radians(s["hue"])) for s in samples)
-    y = sum(math.sin(math.radians(s["hue"])) for s in samples)
-    avg["hue"] = round(math.degrees(math.atan2(y, x)) % 360, 2)
-    return avg
+def stage_signal(samples: list[dict], game: dict) -> dict:
+    """이번 단계 타일들이 쌓인 신호. 새 타일에 무게를 두고(game.understanding.new) 누적한다. 색상은 원형 평균."""
+    new = game["understanding"]["new"]
+    signal = samples[0]
+    for sample in samples[1:]:
+        mixed = {k: round((1 - new) * signal[k] + new * sample[k], 2) for k in GAME_METRICS if k != "hue"}
+        x = (1 - new) * math.cos(math.radians(signal["hue"])) + new * math.cos(math.radians(sample["hue"]))
+        y = (1 - new) * math.sin(math.radians(signal["hue"])) + new * math.sin(math.radians(sample["hue"]))
+        signal = {**mixed, "hue": round(math.degrees(math.atan2(y, x)) % 360, 2)}
+    return signal
 
 
-def alien_confidence(previous: float | None, closeness: float, game: dict, seed: int, salt: str) -> float:
-    """외계인의 확신. 근접도를 따라가되 bluff만큼 근거 없이 흔들린다(틀린 조리에 자신만만할 수 있다).
+def _rule_keys(rules: dict) -> list[str]:
+    """그 단계가 보는 판정값 이름."""
+    return ["hue" if k in ("hues", "center") else k.replace("max_", "") for k in rules]
+
+
+def signal_gap(a: dict, b: dict, rules: dict) -> float:
+    """두 판정값이 그 단계 기준으로 얼마나 다른지 (0~1)."""
+    parts = [abs((a["hue"] - b["hue"] + 180) % 360 - 180) / 180 if k == "hue" else abs(a[k] - b[k]) / 100 for k in _rule_keys(rules)]
+    return round(sum(parts) / len(parts), 4)
+
+
+def consistency(stage_id: str, samples: list[dict], rules: dict, game: dict) -> float:
+    """쌓인 이해가 안정적인지 (0~1). 타일끼리 비슷한지가 아니라, 쌓인 신호가 최근 몇 장 동안 덜 흔들렸는지를 본다.
+    틀린 타일을 고쳐 보낸 것이 손해가 되지 않게, 쌓인 적합도가 그대로거나 오르는 중이면 감점하지 않는다. 한 장이면 1."""
+    if len(samples) < 2:
+        return 1.0
+    trail = [stage_signal(samples[:i + 1], game) for i in range(len(samples))]
+    fit = lambda signal: judge_stage(stage_id, signal, rules, game)["closeness"]
+    if fit(trail[-1]) >= fit(trail[-2]):
+        return 1.0
+    recent = trail[-game["understanding"]["recent"]:]
+    moves = [signal_gap(a, b, rules) for a, b in zip(recent, recent[1:])]
+    return round(max(0.0, 1 - sum(moves) / len(moves) * game["understanding"]["spread_scale"]), 4)
+
+
+def alien_confidence(previous: float | None, fit: float, steady: float, game: dict) -> float:
+    """규칙 대체 때 외계인의 확신 = 쌓인 신호의 적합도 × 일관성. 무작위 없음: 같은 이력이면 같은 값.
     previous = 같은 단계의 직전 확신(첫 시도면 None → 이전 확신을 섞지 않는다)."""
     conf = game["confidence"]
-    wobble = random.Random(f"{seed}:{salt}").random()  # 같은 타일·같은 시도면 같은 값 (재현 가능)
-    target = (1 - conf["bluff"]) * closeness + conf["bluff"] * wobble
+    target = fit * steady
     value = target if previous is None else conf["memory"] * previous + (1 - conf["memory"]) * target
     return round(max(0.0, min(1.0, value)), 4)
 
 
-def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> dict:
-    """세 판정 단계가 모두 success(플레이팅 정상)면 성공. 기존 result 필드(success, distance, per_stage, image)도 채운다."""
-    from .image_selector import _url
+def stop_threshold(attempts: int, game: dict) -> float:
+    """이 시도에서 멈출 확신 기준. 시도가 늘수록 낮아져서 대화가 끝없이 길어지지 않는다."""
+    steps = game["confidence"]["thresholds"]
+    return steps[min(attempts, len(steps)) - 1]
 
+
+def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> dict:
+    """요리 성공 여부는 config.game.success의 기준으로 정한다. 단계 진행과 별개다. 기존 result 필드는 그대로 채운다."""
     judged = {k: v for k, v in verdicts.items() if k != "ingredient"}
     failed = {k: 0.0 if v["verdict"] == "success" else 1.0 for k, v in judged.items()}
-    success = bool(judged) and not any(failed.values())
+    fits = [judge_stage(k, v["metrics"], game["rules"][menu][k], game)["closeness"] for k, v in judged.items()]
+    mean_fit = round(sum(fits) / len(fits), 4) if fits else 0.0
+    rule = game["success"][game["success"]["use"]]
+    success = (bool(judged) and mean_fit >= rule.get("mean_fit", 0)
+               and len(judged) - sum(failed.values()) >= rule.get("min_success", 0)
+               and (not rule.get("plating") or not failed.get("plating")))
     plating = verdicts.get("plating", {})
     return {
         "success": success,
@@ -421,64 +545,82 @@ def judge_menu_result(menu: str, verdicts: dict, game: dict, dishes: dict) -> di
         "image": _url(dishes[menu]["images"]["success" if success else "fail"]),
         "menu": menu,
         "verdicts": {k: v["verdict"] for k, v in judged.items()},
+        "fit": mean_fit,
         "plating": plating_view(menu, plating.get("metrics", {}).get("hue"), plating.get("verdict"), game),
     }
 
 
 def plating_view(menu: str, hue: float | None, verdict: str | None, game: dict) -> dict | None:
-    """화면용 플레이팅 색. hue_shift = 요리 그림 원래 색(base_hue)에서 돌릴 각도(-180~180)."""
+    """화면용 플레이팅 색. hue_shift = 요리 그림을 돌릴 각도(-180~180). 판정 범위(judge_range)와는 따로 쓴다.
+    tint_range 안이면 0(원래 색 그대로), 바로 밖(soft)은 벗어난 만큼만 살짝, 더 밖이면 정답 중심에서 떨어진 만큼 이상한 색."""
     if hue is None:
         return None
-    base = game["rules"][menu].get("base_hue", 0)
-    return {"hue": hue, "abnormal": verdict != "success", "hue_shift": round((hue - base + 180) % 360 - 180, 2)}
+    rule = game["plating"]
+    off = (hue - game["rules"][menu]["plating"]["center"] + 180) % 360 - 180
+    past = abs(off) - rule["tint_range"]
+    shift = 0.0 if past <= 0 else math.copysign(past, off) if past <= rule["soft"] else off
+    return {"hue": hue, "abnormal": verdict != "success", "hue_shift": round(shift, 2)}
 
 
 # ── 레코드 대사용 타일 태그 ─────────────────────────────────
 HUE_WORDS = ((15, "빨강"), (45, "주황"), (70, "노랑"), (170, "초록"), (260, "파랑"), (345, "보라"), (360, "빨강"))
 
 
-def _tile_meaning(entry: dict, metrics: dict) -> str:
-    """지구인 타일의 색·노이즈를 말로. '따뜻한 신호, 주황빛, 노이즈 낮음'"""
+def _tile_meaning(entry: dict, metrics: dict, game: dict) -> str:
+    """지구인 타일의 색·노이즈를 말로. '따뜻한 신호, 주황빛, 노이즈 낮음'. 재료 준비 단계면 뜻하는 재료도."""
     hue = next(word for limit, word in HUE_WORDS if metrics["hue"] < limit or limit == 360)
-    return f"{describe(entry['scores'])}, {hue}빛, 노이즈 {'높음' if metrics['noise'] >= 50 else '낮음'}"
+    text = f"{describe(entry['scores'])}, {hue}빛, 노이즈 {'높음' if metrics['noise'] >= 50 else '낮음'}"
+    ingredient = read_ingredient(entry, game) if entry.get("reads_ingredient") else None
+    return f"{text}, 재료: {ingredient['name']}" if ingredient else text
 
 
 def record_tags(entries: list[dict], menu: str, character: dict) -> list[dict]:
-    """타일마다 {stage, who, verdict, fit, emotion, misread, meaning}.
+    """타일마다 {stage, who, verdict, reason, fit, emotion, misread, meaning}.
 
-    브라우저는 판정을 보내지 않으므로 지구인 타일은 색·질감으로 다시 판정한다. 외계인 타일은 바로 앞 지구인 타일에 대한
-    반응이고, 단계가 막 바뀐 첫 타일은 판정 전(start)이다. 표정은 게임 화면과 같은 규칙(판정별 표정, 단계 끝은 joy).
+    브라우저는 판정을 보내지 않으므로 지구인 타일이 쌓인 신호를 색·질감으로 다시 판정한다. 외계인 타일은 바로 앞 지구인 타일에 대한
+    반응이고, 단계가 막 바뀐 첫 타일은 판정 전(start)이다. 표정은 게임 때 나온 표정(entry.expression)을 쓰고, 없으면 규칙 표정.
     """
     game = character["game"]
     stage_ids = {stage["name"]: stage["id"] for stage in character["stages"]}
-    tags, last = [], None
+    tags, last, samples = [], None, {}
     for entry in entries:
         stage = stage_ids[entry["stage"]]
         if entry["who"] == "user":
             metrics = game_metrics(entry, game)
+            samples.setdefault(stage, []).append(metrics)
             judged = ({"verdict": "success", "closeness": 1.0} if stage == "ingredient"
-                      else judge_stage(stage, metrics, game["rules"][menu][stage], game))
-            last = {"stage": stage, "verdict": judged["verdict"], "fit": judged["closeness"]}
-            tag = {**last, "emotion": None, "meaning": _tile_meaning(entry, metrics)}
+                      else judge_stage(stage, stage_signal(samples[stage], game), game["rules"][menu][stage], game))
+            last = {"stage": stage, "verdict": judged["verdict"], "reason": judged.get("reason"), "fit": judged["closeness"]}
+            tag = {**last, "emotion": None,
+                   "meaning": _tile_meaning({**entry, "reads_ingredient": stage == "ingredient"}, metrics, game)}
         elif last and last["stage"] == stage:
-            tag = {**last, "emotion": game["verdict_expressions"][last["verdict"]], "meaning": describe(entry["scores"])}
+            tag = {**last, "emotion": entry.get("expression") or game["verdict_expressions"][last["verdict"]],
+                   "meaning": describe(entry["scores"])}
         else:
-            tag = {"stage": stage, "verdict": "start", "fit": None, "emotion": "joy" if last else "default",
+            tag = {"stage": stage, "verdict": "start", "reason": None, "fit": None,
+                   "emotion": entry.get("expression") or ("joy" if last else "default"),
                    "meaning": describe(entry["scores"])}
         tags.append({**tag, "who": entry["who"], "misread": False})
     return tags
 
 
-def pick_misreads(tags: list[dict], success: bool, wrong: int | None = None, rng=random) -> set[int]:
-    """외계인이 잘못 알아들은 타일 번호. 판정이 어긋난 외계인 타일 중 성공 판 1개, 실패 판 2~3개, 없으면 가운데 외계인 타일.
-    understood_index가 들어오면 이 함수만 그 값으로 바꾼다."""
+def pick_misreads(tags: list[dict], wrong: int | None = None) -> set[int]:
+    """외계인이 잘못 알아들은 타일 번호. 단계를 넘길 때 쌓인 신호의 판정이 success가 아니면 오해다.
+    그 단계 마지막 지구인 타일 바로 뒤 외계인 타일(마지막 단계면 바로 앞)에 표시한다.
+    어긋난 단계가 없으면 단계 중간에 쌓인 판정이 어긋났던 첫 순간을 "잠깐 잘못 알아들었다가 바로잡은 장면"으로 쓴다. 그것도 없으면 오해 없음."""
     alien = [i for i, tag in enumerate(tags) if tag["who"] == "alien"]
-    off = [i for i in alien if tags[i]["verdict"] not in ("success", "start")]
     if wrong is not None:
+        off = [i for i in alien if tags[i]["verdict"] not in ("success", "start")]
         return set((off + [i for i in alien if i not in off])[:wrong])
-    if not off:
-        return {alien[len(alien) // 2]} if alien else set()
-    return set(rng.sample(off, min(1 if success else rng.randint(2, 3), len(off))))
+    last = {tag["stage"]: i for i, tag in enumerate(tags) if tag["who"] == "user"}
+    spots = set()
+    for i in last.values():
+        if tags[i]["verdict"] != "success":
+            spots |= {next((j for j in (i + 1, i - 1) if j in alien), None)} - {None}
+    if spots:
+        return spots
+    return {next((i + 1 for i, tag in enumerate(tags) if tag["who"] == "user" and tag["verdict"] != "success"
+                  and i + 1 in alien), None)} - {None}
 
 
 def mark_misreads(tags: list[dict], spots: set[int]) -> None:
@@ -549,15 +691,18 @@ class ChatbotService:
 
     @staticmethod
     def _max_attempts(game: dict, stage_id: str) -> int:
-        """단계당 최대 시도 횟수 (config.game.max_attempts). 1단계(메뉴 선택)는 한 번."""
-        return 1 if stage_id == "ingredient" else int((game.get("max_attempts") or {}).get(stage_id, 3))
+        """단계당 최대 시도 횟수 (config.game.max_attempts)."""
+        return int((game.get("max_attempts") or {}).get(stage_id, 10))
+
+    @staticmethod
+    def _ingredient_names(ingredient_ids: list[str], game: dict) -> list[str]:
+        names = {i["id"]: i["name"] for i in game["ingredients"]}
+        return [names[i] for i in ingredient_ids]
 
     def _game_view(self, character: dict, judged_index: int, menu: str | None, verdict: str | None,
                    confidence: float, retry: bool, attempts_left: int, message: str, plating: dict | None) -> dict:
         """요리 게임 규칙으로 추가된 응답 필드. 기존 필드(stage 객체 등)는 그대로 두고 옆에 붙인다.
         stage_number·stage_name·verdict는 "방금 보낸 타일을 판정한 단계" 기준이다 (stage 객체는 지금 진행할 단계)."""
-        from .image_selector import _url
-
         game = character["game"]
         stage_id = character["stages"][judged_index]["id"]
         dishes = self.dishes_of(character)
@@ -584,7 +729,8 @@ class ChatbotService:
         stage = stages[0]
         alien = self.generator.first_guess(stage, dish, character)
         state = {"dish": dish_id, "menu": None, "stage_index": 0, "exchange_count": 0, "confidence": 0.0,
-                 "alien_scores": alien["scores"], "finals": {}, "verdicts": {}, "stage_metrics": [], "done": False}
+                 "alien_scores": alien["scores"], "finals": {}, "verdicts": {}, "stage_metrics": [], "ingredients": [],
+                 "overconfident_advances": 0, "done": False}
         return {
             "reply": alien["reply"],
             "image": self.image_selector.select(alien["reply"], character, stage=stage, expression=alien["expression"]),
@@ -598,26 +744,31 @@ class ChatbotService:
         }
 
     def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool,
-                        wrong: int | None = None) -> dict:
+                        wrong: int | None = None, use_llm: bool = True) -> dict:
         """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
         entries는 app.parse_record()가 검증한 값. wrong은 넣을 오해 대사 수(없으면 success로 정한다)."""
         tags = record_tags(entries, dish_id, character)
-        mark_misreads(tags, pick_misreads(tags, success, wrong))
+        mark_misreads(tags, pick_misreads(tags, wrong))
         moods = (character.get("record") or {}).get("moods") or ["호기심"]
-        lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags),
-                                                    self.dishes_of(character)[dish_id], success, random.choice(moods))
-        alien = [i for i, e in enumerate(entries) if e["who"] == "alien"]
-        images, image_source = pick_line_images([lines[i] for i in alien], character)
-        image_of = dict(zip(alien, images))
+        lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags, use_llm=use_llm),
+                                                    self.dishes_of(character)[dish_id], success, random.choice(moods), use_llm)
+        # 게임 때 표정을 아는 타일은 그 표정 그림, 모르는 타일만 대사로 고른다
+        unknown = [i for i, e in enumerate(entries) if e["who"] == "alien" and not e.get("expression")]
+        images, image_source = pick_line_images([lines[i] for i in unknown], character, use_llm)
+        image_of = dict(zip(unknown, images))
+        image_of |= {i: _url(character["expressions"][e["expression"]]["image"])
+                     for i, e in enumerate(entries) if e["who"] == "alien" and e.get("expression")}
         return {"lines": [{"text": line, "image": image_of.get(i)} for i, line in enumerate(lines)],
                 "source": source, "image_source": image_source}
 
-    def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict) -> dict:
+    def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict,
+                  use_llm: bool = True) -> dict:
         """사용자 타일 한 장을 판정하고, 확신·진행 상태와 외계인의 다음 타일·표정·행동 묘사를 돌려준다.
 
-        1. 1단계(재료 선정): 첫 타일의 색 온도·노이즈로 메뉴를 정하고 바로 손질로 (조리 판정에는 쓰지 않음)
-        2. 손질·조리·플레이팅: 판정값(game_metrics) → judge_stage → 외계인 확신(alien_confidence)
-           확신이 기준 이상이면 다음 단계, 미만이면 같은 단계 재요청(retry). 최대 시도에 닿으면 결과 확정
+        1. 1단계(재료 선정): 타일 하나 = 재료 하나로 쌓고 메뉴 후보 점수를 갱신. 확신하면 1위 메뉴로 확정하고 손질로 (조리 판정에는 쓰지 않음)
+        2. 손질·조리·플레이팅: 타일이 쌓인 신호(stage_signal)를 judge_stage로 판정
+        3. 확신·멈춤은 AI가 정한다(generator.decide_turn). 실패하면 규칙 대체(alien_confidence·stop_threshold).
+           안 넘어가면 같은 단계 재요청(retry). 최대 시도에 닿으면 넘어가고, 단계 결과는 항상 쌓인 신호를 규칙으로 판정
         3. 마지막 단계가 끝나면 세 단계 판정으로 요리 결과(judge_menu_result)
         외계인 추측 타일(alien.scores)은 화면 기록·레코드용으로 2부 규칙(update_confidence)에 따라 계속 움직인다.
         """
@@ -635,33 +786,76 @@ class ChatbotService:
         new_state = {**state, "finals": dict(state["finals"]), "verdicts": dict(state["verdicts"]),
                      "stage_metrics": list(state["stage_metrics"])}
 
+        samples = new_state["stage_metrics"] + [metrics]
+        final_metrics = stage_signal(samples, game)
+        ingredient = candidates = None
         if stage["id"] == "ingredient":
-            menu = decide_menu(metrics, game)
-            new_state.update(menu=menu, dish=menu)
-            judged, confidence, advance, reason = {"verdict": "success", "closeness": 1.0}, 1.0, True, "menu"
-            final_metrics = metrics
+            rules = {"hues": [], "max_roughness": 0}  # 재료 단계는 색과 무늬만 비교한다
+            ingredient = read_ingredient(signal, game)
+            ingredient_ids = state["ingredients"] + ([ingredient["id"]] if ingredient else [])
+            candidates = menu_scores(ingredient_ids, final_metrics, game)
+            tentative, fit, steady = menu_choice(candidates, attempts, ingredient_ids, game)
+            judged = {"verdict": "success", "closeness": fit, "reason": None}
+            new_state["ingredients"] = ingredient_ids
         else:
-            menu = state["menu"]
-            rules = game["rules"][menu][stage["id"]]
-            judged = judge_stage(stage["id"], metrics, rules, game)
-            confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], game, signal["seed"],
-                                          f"{stage['id']}:{attempts}")
-            if confidence >= game["confidence"]["threshold"]:
-                advance, reason = True, "confident"
-            elif attempts >= self._max_attempts(game, stage["id"]):
-                advance, reason = True, "max_reached"
-            else:
-                advance, reason = False, None
-            final_metrics = metrics
-            if reason == "max_reached" and game.get("finalize") == "average":
-                final_metrics = average_metrics(new_state["stage_metrics"] + [metrics])
-                judged = {**judge_stage(stage["id"], final_metrics, rules, game), "closeness": judged["closeness"]}
+            tentative = state["menu"]
+            rules = game["rules"][tentative][stage["id"]]
+            steady = consistency(stage["id"], samples, rules, game)
+            judged = judge_stage(stage["id"], final_metrics, rules, game)
 
         verdict = judged["verdict"]
-        dish = dishes[new_state["dish"]]
+        dish = dishes[tentative]
         stage_name = game["stage_names"][stage["id"]]
-        knowledge = self.retriever.search(f"{menu} {stage_name} {verdict}")
-        message = self.generator.act(stage, dish, character, verdict, confidence, not advance, knowledge, menu)
+        knowledge = self.retriever.search(f"{tentative} {stage_name} {verdict}")
+        rule_confidence = alien_confidence(state["confidence"] if attempts > 1 else None, judged["closeness"], steady, game)
+        rule_advance = rule_confidence >= stop_threshold(attempts, game)
+        limit = self._max_attempts(game, stage["id"])
+        final_turn = attempts >= limit
+        expression = (("convinced" if rule_confidence >= 0.4 else "doubt") if stage["id"] == "ingredient"
+                      else game["verdict_expressions"][verdict])
+        rule = {"confidence": rule_confidence, "advance": rule_advance, "expression": expression,
+                "action": self.generator.act(stage, dish, character, verdict, not (rule_advance or final_turn))}
+        view = {
+            "stage": stage["name"],
+            "attempt": attempts,
+            "tiles_seen": len(samples),
+            "attempts_left": limit - attempts,
+            "final": final_turn,
+            "patience": round(1 - (attempts - 1) / max(1, limit - 1), 2),
+            "previous_confidence": state["confidence"] if attempts > 1 else None,
+            "rule_confidence": rule_confidence,
+            "understanding": {
+                "signal": {k: final_metrics[k] for k in GAME_METRICS if k in _rule_keys(rules)},
+                "hue_zone": hue_zone(final_metrics["hue"], game),
+                "fit": judged["closeness"],
+                "verdict": verdict,
+                "reason": judged.get("reason"),
+                "consistency": steady if len(samples) > 1 else "비교 불가",
+                "change": signal_gap(stage_signal(samples[:-1], game), final_metrics, rules) if len(samples) > 1 else 0.0,
+            },
+            **({"ingredient": ingredient and ingredient["name"], "ingredients": self._ingredient_names(ingredient_ids, game),
+                "menu_scores": candidates} if stage["id"] == "ingredient" else {"menu": dish["name"]}),
+        }
+        decision = self.generator.decide_turn(stage, dish, character, view, rule, knowledge, use_llm)
+        # 자신만만한 오답은 재미지만 한 판에 몇 번까지만. 다 쓰면 서버가 넘어가지 못하게 막는다
+        limits = game["overconfident"]
+        if (decision["decision_source"] == "openai" and decision["advance"] and not final_turn
+                and stage["id"] != "ingredient" and judged["closeness"] < limits["fit_below"]):
+            if state["overconfident_advances"] >= limits["max_per_game"]:
+                decision = {**decision, "advance": False, "decision_source": "openai_capped"}
+            else:
+                new_state["overconfident_advances"] = state["overconfident_advances"] + 1
+        confidence = decision["confidence"]
+        advance = decision["advance"] or final_turn  # 10번째는 AI 판단과 무관하게 넘어간다. 결과는 쌓인 신호로 판정
+        reason = None if not advance else "confident" if decision["advance"] else "max_reached"
+        if os.getenv("GAME_LOG") == "1":  # 측정용. 기본 로그 수준에서도 보이게 warning으로 남긴다
+            logging.getLogger(__name__).warning("game %s", json.dumps({
+                "stage": stage["id"], "attempt": attempts, "fit": judged["closeness"], "consistency": steady,
+                "confidence": confidence, "decision_source": decision["decision_source"], "advance": advance}))
+        message = decision["action"]
+        menu = tentative if advance or stage["id"] != "ingredient" else None  # 화면이 menu로 1단계 칸을 칠한다
+        if advance and stage["id"] == "ingredient":
+            new_state.update(menu=tentative, dish=tentative)
         result = None
 
         if advance:
@@ -679,15 +873,19 @@ class ChatbotService:
             else:
                 current_index = index + 1
                 current = stages[current_index]
-                alien = self.generator.first_guess(current, dish, character, previous=stage,
-                                                   reason="max_reached" if reason == "max_reached" else "confident")
+                alien = {**self.generator.first_guess(current, dish, character, previous=stage, reason=reason),
+                         "expression": decision["expression"]}
                 new_state.update(stage_index=current_index, exchange_count=0, confidence=0.0,
                                  alien_scores=alien["scores"])
         else:
             current, current_index = stage, index
-            alien = self.generator.respond_to_tile(stage, dish, character, signal, state["alien_scores"],
+            # 외계인 타일 = 지금까지 쌓인 이해. 단계의 첫 타일은 받은 그대로에서 시작한다
+            understood = state["alien_scores"] if attempts > 1 else signal["scores"]
+            alien = self.generator.respond_to_tile(stage, dish, character, signal, understood,
                                                    update, knowledge, username, user_message)
-            alien = {**alien, "expression": game["verdict_expressions"][verdict]}  # 판정에 따른 외계인 반응
+            alien = {**alien, "expression": decision["expression"]}
+            if stage["id"] == "ingredient":  # 쌓인 재료 중 대표 재료의 색으로 응답한다
+                alien = {**alien, "scores": ingredient_scores(ingredient_ids, tentative, game) or alien["scores"]}
             new_state["stage_metrics"].append(metrics)
             new_state.update(exchange_count=attempts, confidence=confidence, alien_scores=alien["scores"])
 
@@ -700,10 +898,14 @@ class ChatbotService:
             "alien": self._alien_view(alien),
             "state": new_state,
             "stage": self._stage_view(current, current_index, len(stages), advance, reason),
-            "dish": {"id": new_state["dish"], "name": dish["name"]},
+            "dish": {"id": new_state["dish"], "name": dishes[new_state["dish"]]["name"]},
             "result": result,
             "update": update,
-            "metrics": final_metrics,  # 판정값 0~100·Hue (개발 확인용)
+            "metrics": final_metrics,  # 쌓인 판정값 0~100·Hue (개발 확인용)
+            "understanding": {"fit": judged["closeness"], "consistency": steady, "reason": judged.get("reason")},
+            "decision_source": decision["decision_source"],
+            "ingredients": self._ingredient_names(new_state["ingredients"], game),
+            **({"ingredient": ingredient and ingredient["name"], "menu_scores": candidates} if stage["id"] == "ingredient" else {}),
             **self._game_view(character, index, menu, verdict, confidence, not advance,
                               max(0, self._max_attempts(game, stage["id"]) - attempts), message, plating),
         }

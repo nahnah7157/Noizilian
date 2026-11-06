@@ -56,10 +56,20 @@
         </div>
       </section>
     </main>
-    <!-- 결과 화면도 같은 스테이지 방식: 배경·음식·레코드가 같은 좌표를 쓴다 -->
+    <!-- 결과 화면도 같은 스테이지 방식: 배경·음식·레코드가 같은 좌표를 쓴다. 세 장(data-screen): dish 요리 → record 레코드 → end 결론 카드 -->
     <div id="result-overlay" class="result-overlay" hidden>
-      <div class="result-content stage">
+      <div class="result-content stage" data-screen="dish">
         <img id="result-image" src="" alt="요리 결과">
+        <img id="result-alien" src="" alt="외계인">
+        <p id="record-status" class="record-status" hidden>외계인이 신호를 보내는 중이에요</p>
+        <section id="result-card" class="result-card" aria-label="결론">
+          <p>이 레코드는 외계인의 고향 별로 보내졌습니다.</p>
+          <p id="card-dish"></p>
+          <p id="card-count"></p>
+          <p id="card-style"></p>
+          <p class="card-closing">말이 통하지 않아도, 우리는 색과 질감으로 통했다.</p>
+        </section>
+        <button id="result-next" class="start-button">다음 ▶</button>
         <button id="restart-btn" class="start-button">다시 하기</button>
         <figure class="record">
           <div class="record-disc">

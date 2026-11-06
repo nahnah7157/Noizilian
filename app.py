@@ -2,10 +2,14 @@
 
 import json
 import os
+import threading
+import time
+from collections import deque
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from services import ChatbotService
 from services.chatbot_service import AXES, GAME_METRICS, GAME_RESPONSE_KEYS, VERDICTS, parse_signal
@@ -22,7 +26,35 @@ app = Flask(
     static_folder=None if IS_VERCEL else "public",
     static_url_path=None if IS_VERCEL else "",
 )
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)  # Render 뒤에서 request.remote_addr가 실제 접속 주소가 되게
 chatbot = ChatbotService()
+
+# 호출 횟수 제한: 메모리에 세므로 worker 1개 기준이고 재시작하면 초기화된다. 넘으면 오류 없이 그 요청만 규칙으로 대체
+LIMIT_WINDOW = 600
+limit_lock = threading.Lock()
+ip_calls: dict[tuple[str, str], deque] = {}
+daily_calls = {"day": "", "count": 0}
+
+
+def llm_allowed(kind: str, per_ip_env: str, per_ip_default: int) -> bool:
+    """이번 요청이 OpenAI를 불러도 되는지. kind별 IP 10분 한도와 전체 하루 한도(LLM_DAILY_LIMIT)를 함께 본다."""
+    now = time.time()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    per_ip = int(os.getenv(per_ip_env, per_ip_default))
+    per_day = int(os.getenv("LLM_DAILY_LIMIT", 1500))
+    with limit_lock:
+        if daily_calls["day"] != day:
+            daily_calls.update(day=day, count=0)
+        for key in [k for k, calls in ip_calls.items() if not calls or calls[-1] <= now - LIMIT_WINDOW]:
+            del ip_calls[key]
+        calls = ip_calls.setdefault((kind, request.remote_addr or "unknown"), deque())
+        while calls and calls[0] <= now - LIMIT_WINDOW:
+            calls.popleft()
+        if len(calls) >= per_ip or daily_calls["count"] >= per_day:
+            return False
+        calls.append(now)
+        daily_calls["count"] += 1
+        return True
 
 
 def asset_url(filename: str) -> str:
@@ -106,6 +138,13 @@ def parse_state(data, config: dict) -> dict:
             raise ValueError(f"verdicts.{k}가 올바르지 않습니다.")
         clean_verdicts[k] = {"verdict": v["verdict"], "metrics": metrics(v.get("metrics"), f"verdicts.{k}.metrics"),
                              **({"abnormal": v["abnormal"]} if "abnormal" in v else {})}
+    ingredients = data.get("ingredients", [])
+    known = {i["id"] for i in config["game"]["ingredients"]}
+    if not isinstance(ingredients, list) or len(ingredients) > MAX_STAGE_ATTEMPTS or not set(ingredients) <= known:
+        raise ValueError("ingredients가 올바르지 않습니다.")
+    overconfident = data.get("overconfident_advances", 0)
+    if isinstance(overconfident, bool) or not isinstance(overconfident, int) or not 0 <= overconfident <= len(stages):
+        raise ValueError("overconfident_advances가 올바르지 않습니다.")
     stage_metrics = data.get("stage_metrics", [])
     if not isinstance(stage_metrics, list) or len(stage_metrics) > MAX_STAGE_ATTEMPTS:
         raise ValueError("stage_metrics가 올바르지 않습니다.")
@@ -119,12 +158,14 @@ def parse_state(data, config: dict) -> dict:
         "finals": {k: scores(v, f"finals.{k}") for k, v in finals.items()},
         "verdicts": clean_verdicts,
         "stage_metrics": [metrics(m, "stage_metrics") for m in stage_metrics],
+        "ingredients": ingredients,
+        "overconfident_advances": overconfident,
         "done": False,
     }
 
 
 MAX_STAGE_ATTEMPTS = 20  # config.game.max_attempts보다 넉넉하게 (state 크기 제한)
-MAX_RECORD_ENTRIES = 60  # 4단계 × 최대 주고받기 × 2명보다 넉넉하게
+MAX_RECORD_ENTRIES = 100  # 4단계 × 최대 시도 10번 × 2명 + 첫 타일보다 넉넉하게
 
 
 def parse_record(data, config: dict) -> tuple[str, list[dict]]:
@@ -152,6 +193,11 @@ def parse_record(data, config: dict) -> tuple[str, list[dict]]:
                     isinstance(v, (int, float)) and not isinstance(v, bool) and -1 <= v <= 1 for v in scores.values()):
                 raise ValueError(f"외계인 타일에는 {', '.join(AXES)} 점수(-1~1)가 모두 필요합니다.")
             item["scores"] = {a: float(scores[a]) for a in AXES}
+            expression = entry.get("expression")  # 게임 때 나온 표정 (없으면 서버가 규칙으로 정한다)
+            if expression is not None:
+                if expression not in config["expressions"] or str(expression).startswith("_"):
+                    raise ValueError("외계인 타일의 표정이 올바르지 않습니다.")
+                item["expression"] = expression
         else:
             raise ValueError("who는 user 또는 alien이어야 합니다.")
         clean.append(item)
@@ -221,7 +267,10 @@ def api_chat():
 
     try:
         if state is not None:
-            response = chatbot.play_turn(message, username, config, signal, state)
+            # 키가 없거나 AI 판단을 껐으면 호출이 없으므로 세지 않는다
+            calls_llm = bool(os.getenv("OPENAI_API_KEY")) and config["game"].get("llm_decide")
+            use_llm = not calls_llm or llm_allowed("chat", "LLM_PER_IP_PER_10MIN", 40)
+            response = chatbot.play_turn(message, username, config, signal, state, use_llm=use_llm)
         else:
             response = chatbot.generate_response(message, username, config, signal=signal)
         if not isinstance(response, dict) or not isinstance(response.get("reply"), str):
@@ -275,7 +324,8 @@ def api_record():
     except ValueError as error:
         return error_response("invalid_record", str(error), 400)
     try:
-        return jsonify(chatbot.record_dialogue(config, dish, entries, success, wrong))
+        use_llm = not os.getenv("OPENAI_API_KEY") or llm_allowed("record", "RECORD_PER_IP_PER_10MIN", 5)
+        return jsonify(chatbot.record_dialogue(config, dish, entries, success, wrong, use_llm=use_llm))
     except Exception:
         app.logger.exception("레코드 대사 생성 실패")
         return error_response("record_failed", "레코드 대사를 만들지 못했습니다.", 500)

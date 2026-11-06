@@ -332,7 +332,7 @@
       "plating": "plate"
     },
     "metrics": {
-      "_note": "판정값 0~100 계산. size = 크기 막대(texture.freq: freq_small→0, freq_large→100). roughness·noise = 밀도 막대(texture.oct: oct_min→0, oct_max→100). heat = 논문 따뜻함 점수 wc(-1 따뜻→100, +1 차가움→0, R4). hue = 색을 sRGB로 되돌린 HSV 색상(0~360°)",
+      "_note": "판정값 0~100 계산. size = 크기 막대(texture.freq: freq_small→0, freq_large→100). roughness·noise = 밀도 막대(texture.oct: oct_min→0, oct_max→100). heat = 논문 따뜻함 점수 wc(메뉴 결정용, R4). power = 논문 무거움 점수 hl(-1 무거움→100, 조리 세기·시간, R6). hue·sat = 색을 sRGB로 되돌린 HSV 색상(0~360°)·채도(0~100)",
       "freq_small": 0.9,
       "freq_large": 0.4,
       "oct_min": 1,
@@ -348,28 +348,103 @@
       "warm_low": "omurice"
     },
     "confidence": {
-      "_note": "근접도(closeness, 0~1) = 범위 안이면 1, 벗어난 만큼 falloff(Hue는 hue_falloff)에 걸쳐 0으로. 외계인 확신 = 첫 시도는 목표, 두 번째부터 memory×이전 확신 + (1-memory)×목표. 목표 = (1-bluff)×근접도 + bluff×무작위(타일 seed로 정해짐). bluff가 클수록 성공 여부와 확신이 어긋난다",
-      "threshold": 0.7,
-      "falloff": 25,
-      "hue_falloff": 40,
-      "memory": 0.3,
-      "bluff": 0.2
+      "_note": "적합도(closeness, 0~1) = 범위 안이면 1, 벗어나면 falloff(색상은 hue_falloff)에 걸쳐 코사인 곡선으로 0까지. 규칙 대체 확신 = 쌓인 신호의 적합도 × 일관성, 두 번째부터 memory×이전 확신을 섞는다. 무작위 없음. thresholds[n] = n+1번째 시도의 멈춤 기준(마지막 값이 끝까지 쓰임)",
+      "thresholds": [0.5, 0.25, 0.12, 0.05, 0],
+      "falloff": 40,
+      "hue_falloff": 60,
+      "memory": 0.3
+    },
+    "understanding": {
+      "_note": "쌓이는 이해. new = 새 타일의 비중(나머지는 쌓인 값). 일관성 = 쌓인 신호가 최근 recent장 동안 덜 흔들린 정도, spread_scale = 흔들림이 일관성을 깎는 배율. 쌓인 적합도가 오르는 중이면 감점 없음",
+      "new": 0.6,
+      "recent": 3,
+      "spread_scale": 2
     },
     "max_attempts": {
-      "prep": 3,
-      "cook": 3,
-      "plating": 3
+      "ingredient": 10,
+      "prep": 10,
+      "cook": 10,
+      "plating": 10
     },
-    "finalize": "last",
-    "_finalize_note": "최대 시도에 닿았을 때 결과 확정 방식. last = 마지막 타일, average = 그 단계에서 보낸 타일 판정값의 평균(Hue는 원형 평균)",
+    "grain": {
+      "_note": "재료를 가르는 무늬 거침칸. max = 밀도(roughness) 상한, density = 그 칸 대표 무늬의 밀도(0~1). 외계인 색 언어 [앱 설정]",
+      "smooth": {"max": 33, "density": 0.15},
+      "mid": {"max": 66, "density": 0.5},
+      "rough": {"max": 100, "density": 0.85}
+    },
+    "ingredient_rule": {
+      "_note": "메뉴 후보 점수 = 메뉴 재료 목록에 맞은 타일 수 + 기존 따뜻·차가움 × 노이즈 매핑(aux, 보조). 규칙 대체 확신 = min(1, 1·2위 점수 차 / margin_full) × 1위에 맞은 타일 비율",
+      "aux": 0.5,
+      "margin_full": 2
+    },
+    "ingredients": [
+      {"id": "chashu", "name": "차슈", "zone": "red", "grain": "smooth", "value": 75, "color": {"L": 50.99, "C": 47.49, "h": 35.54}, "menus": ["ramen"]},
+      {"id": "pepperoni", "name": "페퍼로니", "zone": "red", "grain": "mid", "value": 75, "color": {"L": 42.24, "C": 70.69, "h": 33.77}, "menus": ["pizza"]},
+      {"id": "patty", "name": "패티", "zone": "red", "grain": "rough", "value": 45, "color": {"L": 26.61, "C": 38.91, "h": 23.58}, "menus": ["hamburger"]},
+      {"id": "dough", "name": "반죽", "zone": "orange", "grain": "smooth", "value": 95, "color": {"L": 86.73, "C": 31.6, "h": 86.55}, "menus": ["pizza"]},
+      {"id": "bun", "name": "번", "zone": "orange", "grain": "mid", "value": 85, "color": {"L": 68.69, "C": 51.95, "h": 73.4}, "menus": ["hamburger"]},
+      {"id": "rice", "name": "밥", "zone": "orange", "grain": "rough", "value": 95, "color": {"L": 90.71, "C": 24.54, "h": 95.32}, "menus": ["omurice"]},
+      {"id": "egg", "name": "달걀", "zone": "yellow", "grain": "smooth", "value": 95, "color": {"L": 91.57, "C": 77.33, "h": 102.18}, "menus": ["ramen", "omurice"]},
+      {"id": "mozzarella", "name": "모차렐라", "zone": "yellow", "grain": "mid", "value": 98, "color": {"L": 96.7, "C": 37.76, "h": 107.25}, "menus": ["pizza"]},
+      {"id": "cheddar", "name": "체더치즈", "zone": "yellow", "grain": "rough", "value": 95, "color": {"L": 88.42, "C": 83.93, "h": 98.16}, "menus": ["hamburger"]},
+      {"id": "onion", "name": "양파", "zone": "green", "grain": "smooth", "value": 85, "color": {"L": 82.55, "C": 36.94, "h": 130.56}, "menus": ["omurice"]},
+      {"id": "pea", "name": "완두콩", "zone": "green", "grain": "smooth", "value": 45, "color": {"L": 42.26, "C": 54.54, "h": 138.49}, "menus": ["omurice"]},
+      {"id": "lettuce", "name": "양상추", "zone": "green", "grain": "mid", "value": 85, "color": {"L": 78.59, "C": 78.49, "h": 131.59}, "menus": ["hamburger"]},
+      {"id": "scallion", "name": "대파", "zone": "green", "grain": "mid", "value": 60, "color": {"L": 56.89, "C": 57.57, "h": 135.32}, "menus": ["ramen"]},
+      {"id": "basil", "name": "바질", "zone": "green", "grain": "mid", "value": 35, "color": {"L": 33.12, "C": 37.37, "h": 146.26}, "menus": ["pizza"]},
+      {"id": "tomato", "name": "토마토", "zone": "green", "grain": "rough", "value": 85, "color": {"L": 78.74, "C": 81.31, "h": 129.05}, "menus": ["hamburger"]},
+      {"id": "carrot", "name": "당근", "zone": "green", "grain": "rough", "value": 60, "color": {"L": 58.17, "C": 46.87, "h": 132.27}, "menus": ["omurice"]},
+      {"id": "mushroom", "name": "버섯", "zone": "green", "grain": "rough", "value": 35, "color": {"L": 35.46, "C": 19.26, "h": 138.3}, "menus": ["pizza"]},
+      {"id": "broth", "name": "육수", "zone": "blue", "grain": "smooth", "value": 80, "color": {"L": 72.28, "C": 24.78, "h": 217.55}, "menus": ["ramen"]},
+      {"id": "rice_water", "name": "밥 물", "zone": "blue", "grain": "smooth", "value": 45, "color": {"L": 42.39, "C": 12.31, "h": 227.99}, "menus": ["omurice"]},
+      {"id": "dough_water", "name": "반죽 물", "zone": "blue", "grain": "mid", "value": 80, "color": {"L": 74.48, "C": 26.32, "h": 206.65}, "menus": ["pizza"]},
+      {"id": "patty_water", "name": "패티 반죽 물", "zone": "blue", "grain": "mid", "value": 40, "color": {"L": 31.03, "C": 19.28, "h": 256.56}, "menus": ["hamburger"]},
+      {"id": "wash_water", "name": "쌀뜨물", "zone": "blue", "grain": "rough", "value": 80, "color": {"L": 75.25, "C": 17.65, "h": 216.53}, "menus": ["omurice"]},
+      {"id": "nori", "name": "김", "zone": "blue", "grain": "rough", "value": 25, "color": {"L": 18.77, "C": 13.86, "h": 246.07}, "menus": ["ramen"]},
+      {"id": "noodle", "name": "면", "zone": "indigo", "grain": "smooth", "value": 85, "color": {"L": 54.22, "C": 56.07, "h": 296.5}, "menus": ["ramen"]},
+      {"id": "ketchup", "name": "케첩", "zone": "violet", "grain": "smooth", "value": 80, "color": {"L": 46.32, "C": 65.81, "h": 1.85}, "menus": ["omurice"]},
+      {"id": "sauce", "name": "소스", "zone": "violet", "grain": "mid", "value": 60, "color": {"L": 40.68, "C": 63.95, "h": 327.57}, "menus": ["hamburger"]},
+      {"id": "tomato_sauce", "name": "토마토소스", "zone": "violet", "grain": "rough", "value": 70, "color": {"L": 42.9, "C": 63.67, "h": 342.73}, "menus": ["pizza"]}
+    ],
+    "_ingredients_note": "타일 → 색상 구간(zone) + 거침칸(grain)으로 재료 하나. 같은 칸에 여럿이면 밝기(value)가 가까운 재료. color는 대표 색(CIELAB). 면·육수는 거침칸이 비면 같은 구간의 가까운 칸을 쓴다. 외계인의 색 언어 [앱 설정, 논문 근거 아님]",
+    "gray_sat": 15,
+    "_gray_note": "채도(0~100)가 이 값 미만이면 색상이 뜻이 없어 어느 구간도 아닌 것으로 본다 (색 적합도 0.5)",
+    "hue_zones": {
+      "_note": "외계인의 색 언어 [앱 설정, 논문 근거 아님]. HSV 색상 7구간. 뜻은 data/knowledge/cooking_rules.md '색 언어'",
+      "red": [338, 18],
+      "orange": [18, 52],
+      "yellow": [52, 88],
+      "green": [88, 150],
+      "blue": [150, 225],
+      "indigo": [225, 265],
+      "violet": [265, 338]
+    },
+    "plating": {
+      "_note": "요리별 정답 색 = rules.*.plating.center. 판정(적합도·성공)은 ± judge_range. 결과 그림은 ± tint_range 안이면 원래 색 그대로, soft까지는 살짝, 더 밖은 이상한 색",
+      "judge_range": 40,
+      "tint_range": 60,
+      "soft": 20
+    },
+    "success": {
+      "_note": "요리 성공 기준 후보. use로 고른다. 시뮬레이션 뒤 확정",
+      "use": "C",
+      "A": {"mean_fit": 0.6},
+      "B": {"min_success": 2},
+      "C": {"mean_fit": 0.8, "plating": true}
+    },
     "verdict_expressions": {
       "success": "convinced",
       "under": "doubt",
       "over": "surprised",
       "unstable": "thinking"
     },
-    "llm_messages": false,
-    "_llm_note": "true면 OpenAI 키가 있을 때 외계인 행동 묘사(alien_message)를 생성한다(타일마다 3~6초 더 걸림). 지금은 화면에 글로 안 보여서 꺼 둠 → messages 문구를 바로 씀",
+    "overconfident": {
+      "_note": "자신만만한 오답 제한. AI가 쌓인 적합도 fit_below 미만에서 넘어가면 한 번으로 세고, 한 판에 max_per_game번까지만 허용한다. 재료 단계는 적합도의 뜻이 달라서 세지 않고, 10번째 강제 진행도 세지 않는다",
+      "fit_below": 0.3,
+      "max_per_game": 2
+    },
+    "llm_decide": true,
+    "_llm_note": "true면 OpenAI 키가 있을 때 외계인의 확신·멈춤·표정·행동을 타일마다 AI가 정한다(generator.decide_turn). 끄거나 실패하면 규칙 대체",
     "messages": {
       "select": "외계인이 타일을 보더니 {dish}을(를) 만들기로 정합니다.",
       "prep": {
@@ -393,98 +468,26 @@
       "retry": "외계인이 고개를 갸웃하며 타일을 한 번 더 기다립니다."
     },
     "rules": {
-      "_note": "요리별 판정 기준표(0~100, Hue는 도). [lo, hi] 범위보다 낮으면 under, 높으면 over, max_* 를 넘으면 unstable. Hue는 원형 범위(lo>hi면 0°를 넘어감). base_hue = 요리 그림의 원래 색상(화면에서 플레이팅 색을 입힐 때 기준)",
+      "_note": "요리별 판정 기준표(0~100). hues = 정답 색 구간(방법), size·power = 범위, max_* = 최대치(넘으면 unstable), plating.center = 정답 색 중심, plating.max_roughness = 넘으면 색이 얼룩덜룩(unstable)",
       "pizza": {
-        "prep": {
-          "size": [
-            30,
-            65
-          ],
-          "max_roughness": 50
-        },
-        "cook": {
-          "heat": [
-            65,
-            85
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            345,
-            45
-          ]
-        },
-        "base_hue": 28
+        "prep": {"hues": ["green", "indigo"], "size": [30, 65], "max_roughness": 55},
+        "cook": {"hues": ["red", "violet"], "power": [40, 75], "max_noise": 55},
+        "plating": {"center": 20, "max_roughness": 60}
       },
       "hamburger": {
-        "prep": {
-          "size": [
-            45,
-            75
-          ],
-          "max_roughness": 45
-        },
-        "cook": {
-          "heat": [
-            55,
-            80
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            15,
-            55
-          ]
-        },
-        "base_hue": 36
+        "prep": {"hues": ["orange", "yellow"], "size": [45, 80], "max_roughness": 55},
+        "cook": {"hues": ["red", "indigo"], "power": [50, 85], "max_noise": 55},
+        "plating": {"center": 110, "max_roughness": 60}
       },
       "ramen": {
-        "prep": {
-          "size": [
-            15,
-            45
-          ],
-          "max_roughness": 40
-        },
-        "cook": {
-          "heat": [
-            50,
-            75
-          ],
-          "max_noise": 40
-        },
-        "plating": {
-          "hue": [
-            25,
-            65
-          ]
-        },
-        "base_hue": 30
+        "prep": {"hues": ["blue", "indigo"], "size": [20, 55], "max_roughness": 55},
+        "cook": {"hues": ["blue", "green"], "power": [30, 65], "max_noise": 55},
+        "plating": {"center": 200, "max_roughness": 60}
       },
       "omurice": {
-        "prep": {
-          "size": [
-            10,
-            35
-          ],
-          "max_roughness": 35
-        },
-        "cook": {
-          "heat": [
-            35,
-            60
-          ],
-          "max_noise": 35
-        },
-        "plating": {
-          "hue": [
-            35,
-            65
-          ]
-        },
-        "base_hue": 24
+        "prep": {"hues": ["red", "violet"], "size": [15, 50], "max_roughness": 55},
+        "cook": {"hues": ["yellow", "orange"], "power": [25, 60], "max_noise": 55},
+        "plating": {"center": 290, "max_roughness": 60}
       }
     }
   }

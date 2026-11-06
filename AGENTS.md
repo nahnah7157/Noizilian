@@ -9,6 +9,8 @@
 - 네 단계에서 확정된 타일이 요리 목표와 가까우면 성공, 멀면 실패 이미지 (햄버거·오므라이스·피자·라멘)
 - 외계인 표정 이미지: alien_default·doubt·convinced·surprised·thinking·joy (config.expressions, 고르는 규칙은 generator.py). 단계가 끝나면 판정 표정을 0.5초 보여 준 뒤 항상 joy로 바뀌고 다음 응답까지 유지(chatbot.js updateGameState). 배경: images/background/bg_* (단계별, style.css body[data-stage])
 - 감각 규칙: Lucassen, Gevers, Gijsenij (2011) "Texture Affects Color Emotion" Table III. 근거는 data/knowledge/paper_rules.md의 R1~R15
+- 색 언어 [앱 설정, 논문 근거 아님]: 색상 7구간(빨주노초파남보)은 종류·방법, 밝기·무늬는 정도. 뜻은 cooking_rules.md '색 언어', 숫자는 config.game.hue_zones·rules
+- 쌓이는 이해: 외계인은 타일 하나를 고르지 않고 받은 타일이 쌓여 이해가 만들어진다(chatbot_service.stage_signal). 단계 결과는 쌓인 신호를 규칙으로 판정
 
 ## 스택
 - Frontend: HTML/CSS/JS (templates/, public/assets/). 빌드 도구 없음
@@ -43,24 +45,39 @@
   - 단계 id(ingredient/prep/cook/plating)는 화면 배경·기록칸·레코드가 쓰므로 바꾸지 않는다. 화면용 이름은 config.game.stage_names
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-11-05)
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 67개
+## 현재 진행 상황 (2026-11-07)
+- 완료: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 실제 10판 측정까지 끝남
+  - 1단계 규칙: judge_stage 연속 적합도(soft_fit, 코사인), reason(method/size/power/density/color), 손질=색상·크기·밀도, 조리=색상·무거움(power, hl)·밀도(wc 뺌), 플레이팅=요리별 center(판정 ±40, 결과 그림 색은 ±60 안이면 그대로)+밀도(max_roughness 60, 넘으면 unstable). seed·bluff·finalize 제거, seed는 그림용으로 세션마다 새로
+  - 규칙 대체 확신 = 쌓인 적합도 × 일관성(이전 확신과 섞음). 일관성은 쌓인 신호가 최근 3장 동안 덜 흔들린 정도이고, 쌓인 적합도가 오르는 중이면 감점 없음(틀린 타일을 고쳐 보내면 손해가 없게), 멈춤 기준 confidence.thresholds는 시도마다 낮아져 규칙 경로는 5번 안에 끝남. max_attempts 네 단계 10, MAX_RECORD_ENTRIES 100
+  - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상)
+  - 2단계 재료 선정: 타일 하나 = 재료 하나(read_ingredient: 색상 구간 + 거침칸 + 밝기). 메뉴 후보 = 재료 목록 일치 수 + 기존 온도·노이즈 매핑(aux 0.5). 규칙 대체 확신 = 1·2위 차이 × 1위에 맞은 타일 비율. 외계인은 대표 재료의 색으로 응답. menu는 확정 때만 채움(chatbot.js가 1단계 칸을 칠함)
+  - 파(국물·물) 재료는 네 메뉴 모두에 있고 남(면)은 라멘 고유. 무작위로 눌러도 메뉴가 쏠리지 않게 남 구간을 좁혔다(225~265)
+  - 3단계 AI 판단: generator.decide_turn이 타일마다 한 번 {confidence, advance, expression, action}을 정함(8초, 재시도 없음, max_output_tokens 200). 실패·키 없음·config.game.llm_decide 꺼짐이면 규칙 대체. 응답 decision_source. 10번째는 final=true로 묻고 답과 무관하게 넘어감. 단계 결과는 항상 쌓인 신호를 규칙으로 판정. 표정은 판정 표정 또는 convinced만 허용
+  - 자신만만한 오답 제한: AI가 쌓인 적합도 0.3 미만에서 넘어가면 state.overconfident_advances에 세고 한 판 2번까지. 다 쓰면 서버가 advance=false, decision_source=openai_capped (config.game.overconfident). 재료 단계와 10번째는 안 셈
+  - 레코드: 태그는 쌓인 신호 기준, 표정·그림은 게임 때 표정(history의 expression, 없으면 규칙). 오해 = 단계가 끝날 때 쌓인 판정이 success가 아님, 어긋난 단계가 없으면 중간에 어긋났던 첫 순간(pick_misreads). 타일 48개 넘으면 최근 48개만 GPT, 앞쪽은 예시 대사
+  - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
+  - 4단계 호출 제한: app.py llm_allowed(메모리, lock). 환경 변수 LLM_PER_IP_PER_10MIN·RECORD_PER_IP_PER_10MIN·LLM_DAILY_LIMIT. 넘으면 use_llm=False로 규칙 대체(rule_limited). 판 로그는 GAME_LOG=1
+  - 레코드 대기: 마지막 응답(state.done)을 받는 즉시 chatbot.js requestRecord가 요청한다. GPT 입력은 타일마다 예시 3개 번호만 넣고 글은 examples 목록에 한 번만
+  - 레코드 GPT 응답: items(모든 타일) + pairs(오해 대사와 바로잡는 대사를 한 묶음, 개수 고정). 짝 타일은 pairs로 덮어쓴다. 외국어·물음표 위반·빈칸은 그 줄만 예시로, 짝은 둘 다 예시 짝으로 교체(_clean_lines). 절반 넘게 교체되면 source=openai_failed:too_many_replaced
+  - 키 없는 대사: 태그 reason이 method면 record_lines.md의 method 섹션(방법이 틀렸을 때)을 쓴다
+  - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 128개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
-  - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 화면에 한국어 설명 없음). 보내기는 message="타일" 고정(app.py 안 건드림)
+  - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 진행 중에는 한국어 설명 없음. 결과·결론 화면과 다음에 만들 인트로·미션은 짧은 문구 허용). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
   - 왼쪽: 기록 2줄(윗줄 외계인+머리 아이콘·4단계 / 아랫줄 나+흰 원·4단계), 현재 단계 칸 하이라이트·교환마다 갱신(단계 끝나면 마지막 타일 고정). 큰 미리보기. 되돌리기(↺ 파랑)·보내기(✓ 초록) 아이콘 버튼. "패턴 바꾸기" 제거
 - 완료: 결과 화면 골든 레코드 교체 (chat.html, style.css, chatbot.js 7번, image_selector.py, app.py)
   - golden_record_cut.png를 원본 기호를 지운 깨끗한 원판으로 교체
-  - 주고받은 타일을 나선 홈에 순서대로 새김(타일 무늬). 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사 ② 외계인 대사면 그림. (한때 넣었던 무작위 기호·3음 소리는 11/4에 뺌)
+  - (화면 구성은 아래 "결과 화면 세 장 흐름"이 최신) 주고받은 타일을 나선 홈에 순서대로 새김(타일 무늬). 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사 ② 외계인 대사면 그림. (한때 넣었던 무작위 기호·3음 소리는 11/4에 뺌)
   - POST /api/record: OpenAI가 paper_rules.md 기준으로 타일마다 재료·손질·조리·플레이팅 대사를 만들고(generator.record_lines), 외계인 대사는 config.record.line_images 설명과 OpenAI 임베딩(text-embedding-3-small)으로 비교해 외계인 3장 중 그림을 고름(image_selector.pick_line_images). 키 없으면 data/knowledge/record_lines.md에서 고름
   - 요리 결과(success)를 /api/record에 함께 보내, 실패면 엉뚱한 요리 방법 대화를 여러 번, 성공이어도 한 번 넣음 (아래 "레코드 대사 태그" 참고)
-  - 대화 순서: 12시에서 시작해 시계방향, 한 바퀴(12타일)마다 안쪽 홈으로 이어짐
+  - 대화 순서: 12시에서 시작해 시계방향, 한 바퀴마다 안쪽 홈으로 이어짐
   - 논문 근거 문장과 결과 화면 외계인 대사(result-line)는 표시 안 함
 - 완료: 외계인 대사 제거. config의 greeting·stages[].alien_line·result.success_line/fail_line 삭제, persona.speaking_style을 "말하지 않음"으로. generator.py의 "…지직" 대사 삭제 → alien.word는 항상 ""(형식 유지), reply는 괄호 지문만(화면에 안 보임). judge_dish 결과의 line 삭제
 - 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
   - 표정: 시작 default / 단계 확신 통과·요리 성공 joy / 횟수 차서 통과·요리 실패 thinking / 교환 중엔 아주 다르면 surprised, 확신이 내려가면 thinking, 오르면 확신 0.4 이상 convinced 아니면 doubt. 단계별 포즈(alien_cute_a/b/c) 제거
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
-  - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것), 레코드는 x 1330·아래 끝 y 860·지름 560. 세로 화면은 배경을 115%로 키워 테이블을 내리고 레코드는 창 쪽, 음식은 테이블 가운데. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
+  - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
   - 이름 정하기 화면(detail.html): bg_default 전체 배경, 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
   - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기·보내기(✓)를 패널 하나(.signal-dock)로 합침
@@ -80,29 +97,33 @@
   - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 방금 보낸 타일(없으면 "…"), 확신이 오를수록 빨리 깜박임(--think). 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile)
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
+- 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶"(③만 "다시 하기"), 짧은 페이드(모션 줄이기면 즉시)
+  - ① 요리(x 600·y 840 그대로) + 외계인(x 1330·발 y 860). 그림 경로는 chatbot.js RESULT_ALIEN 상수. 세로 화면은 ①에서만 요리 28%·외계인 74%
+  - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
+  - ③ 결론 카드. 레코드는 같은 요소를 CSS로 카드 안에 옮김. 소통 결과는 history로 계산(renderConclusion)
+  - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
+  - 콘솔 시험: 게임을 끝낸 뒤 noizilien.showResult({success, image, plating:{hue_shift}})
 - 완료: 시작 화면 외계인 (index.html, style.css): 표정 6장을 1.5초마다 바꿈. 불러온 그림만 돌리고, 발 위치는 --foot로 고정. 모션 줄이기면 멈춤
-- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 시연·제출 전에 요청 횟수 제한을 건 뒤 키를 넣을 것
+- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
 - 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
   - 1단계 첫 타일 = 메뉴 결정(따뜻·차가움 × 노이즈 높음·낮음 → pizza/hamburger/ramen/omurice), 조리 판정에는 안 씀. 바로 손질로
-  - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4), hue=HSV 색상(서버가 LCh→sRGB로 되찾음). 손질=size·roughness, 조리=heat·noise, 플레이팅=hue(원형 범위, 벗어나면 abnormal)
-  - 확신 = 근접도(closeness) + bluff 흔들림(seed로 재현), 두 번째 시도부터 memory로 이전 확신 반영. 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 확정(finalize last/average)
+  - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4, 메뉴 결정용), power=논문 hl(R6), hue·sat=HSV 색상·채도(서버가 LCh→sRGB로 되찾음). 단계별 쓰임은 위 "진행 중" 참고
+  - 확신 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 쌓인 신호로 확정
   - main(#10 feat/layout, #11 feat/panel-size)과 합침(11/4): 가로 화면은 팀원 배치(외계인 바닥, 타일 패널 오른쪽 위, 결과 화면 스테이지)를 따르고 진행 표시는 위 가운데로. 세로 화면은 외계인을 배경 창에 고정하는 이쪽 배치를 유지(팀원의 세로 결과 화면 규칙은 그대로)
   - 왼쪽 아래 ? (세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
-  - 외계인 표정 = verdict_expressions, 행동 묘사 alien_message = config.game.messages (llm_messages=true면 OpenAI가 cooking_rules.md 검색 자료로 생성. 타일마다 3~6초 걸려 11/4에 꺼 둠). 화면에 글로는 안 보임
+  - 외계인 표정·행동 묘사 alien_message는 decide_turn이 정하고, 규칙 대체 때는 verdict_expressions·config.game.messages. 행동 묘사는 화면에 글로 안 보임
   - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색·재요청 ↻+남은 시도 점. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 완료: 레코드 대사 태그·검색 (data/knowledge/record_lines.md, retriever.search_lines, generator.record_lines, chatbot_service.py record_tags·pick_misreads, config.record.moods) — fallback_lines 삭제
   - 브라우저는 판정을 보내지 않아 서버가 색·질감으로 다시 판정함(record_tags). chatbot.js·app.py 안 고침. 외계인 타일은 앞 지구인 타일의 판정, 단계 첫 타일은 start
-  - 오해: pick_misreads 하나가 정함(판정이 어긋난 외계인 타일 중 성공 판 1개·실패 판 2~3개, 없으면 가운데). 바로 다음 지구인 타일이 바로잡음. 팀원의 understood_index가 들어오면 이 함수만 바꿀 것
+  - 오해: pick_misreads 하나가 정함(기준은 위 "진행 중" 참고). 바로 다음 지구인 타일이 바로잡음
   - 검색: 단계·말한 쪽이 같은 예시를 오해 > 판정 > 감정 순으로 정렬, 같은 순위는 임베딩 유사도(키 없으면 무작위). record_lines.md는 매번 읽어서 고치면 바로 반영
   - GPT: 타일마다 판정·적합도·오해·표정·의미·예시 5개를 넘기고, 판마다 기분 하나. 응답의 타일 번호·말한 쪽이 입력과 다르면 전부 예시 대사로(칸 밀림 방지), 판 안 같은 대사는 그 줄만 예시로 교체
   - 다양성: 예시 264줄, 기분 10가지. 지시문에서 물음표는 doubt·surprised만, 외계인 대사 모양을 바꿔 가며, 지구인은 한 문장으로 제한
   - 키 없을 때: 태그가 맞는 예시를 판 안 중복 없이 무작위로. 오해와 바로잡는 대사는 misread=짝이름으로 이어짐
-- 외계인 응답은 아직 임시 규칙(추측을 사용자 쪽으로 절반씩 옮김). GPT로 바꿀 예정
 - 다음 작업 순서
-  1. GPT 연결 (과제 핵심): generator.py의 respond_to_tile·first_guess를 OpenAI 호출로 교체. 대사 없이 타일 점수·표정만, 반환 형식 유지 (docs/MODEL_SETUP.md 참고)
-  2. RAG: retriever.py(지금 빈 틀)가 현재 단계 축에 맞는 paper_rules.md 기준을 찾아 GPT에 넘김. 넣기 전·후 비교 수치 기록
-  3. 확신 기준·최대 횟수·요리 목표 점수 조정 (지금은 대부분 4번 채워서 넘어감). GPT 연결 뒤에
-  4. 요리 재료 이미지 → 단계별 화면 연결, 레코드 예시(record_lines.md) 말투 다듬기, 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+  1. 사람이 직접 해 보기: 색으로 방법을 맞추는 난이도, AI가 묻는 횟수(무작위 입력은 단계당 7번까지 감)
+  2. 요리 재료 이미지 → 단계별 화면 연결, 레코드 예시(record_lines.md) 말투 다듬기, 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+  3. 배포 전: Render에 키와 호출 제한 환경 변수 넣기, X-Forwarded-For로 IP가 제대로 잡히는지 확인
 - 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 예시(record_lines.md), 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
