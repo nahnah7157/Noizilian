@@ -67,16 +67,17 @@ def match_images(texts: list[str], images: dict, embed) -> list[str]:
     return pick_diverse(texts, images, similarity)
 
 
-def pick_line_images(texts: list[str], character: dict) -> tuple[list[str], str]:
-    """외계인 대사마다 어울리는 표정 그림 URL. 키가 없거나 실패하면 문장부호로만 고른다.
-    반환: (URL 목록, "openai" | "no_key" | "openai_failed")
+def pick_line_images(texts: list[str], character: dict, use_llm: bool = True) -> tuple[list[str], str]:
+    """외계인 대사마다 어울리는 표정 그림 URL. 키가 없거나 호출 제한에 걸리거나 실패하면 문장부호로만 고른다.
+    반환: (URL 목록, "openai" | "no_key" | "rule_limited" | "openai_failed")
     """
     images = {k: v for k, v in ((character.get("record") or {}).get("line_images") or {}).items() if not k.startswith("_")}
     expressions = character.get("expressions") or {}
     if not texts or not images:
         return [], "empty"
-    source, keys = "no_key", None
-    if os.getenv("OPENAI_API_KEY"):
+    source = "no_key" if not os.getenv("OPENAI_API_KEY") else "openai" if use_llm else "rule_limited"
+    keys = None
+    if source == "openai":
         try:
             from openai import OpenAI
 

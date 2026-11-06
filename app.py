@@ -2,10 +2,14 @@
 
 import json
 import os
+import threading
+import time
+from collections import deque
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from services import ChatbotService
 from services.chatbot_service import AXES, GAME_METRICS, GAME_RESPONSE_KEYS, VERDICTS, parse_signal
@@ -22,7 +26,35 @@ app = Flask(
     static_folder=None if IS_VERCEL else "public",
     static_url_path=None if IS_VERCEL else "",
 )
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)  # Render 뒤에서 request.remote_addr가 실제 접속 주소가 되게
 chatbot = ChatbotService()
+
+# 호출 횟수 제한: 메모리에 세므로 worker 1개 기준이고 재시작하면 초기화된다. 넘으면 오류 없이 그 요청만 규칙으로 대체
+LIMIT_WINDOW = 600
+limit_lock = threading.Lock()
+ip_calls: dict[tuple[str, str], deque] = {}
+daily_calls = {"day": "", "count": 0}
+
+
+def llm_allowed(kind: str, per_ip_env: str, per_ip_default: int) -> bool:
+    """이번 요청이 OpenAI를 불러도 되는지. kind별 IP 10분 한도와 전체 하루 한도(LLM_DAILY_LIMIT)를 함께 본다."""
+    now = time.time()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    per_ip = int(os.getenv(per_ip_env, per_ip_default))
+    per_day = int(os.getenv("LLM_DAILY_LIMIT", 1500))
+    with limit_lock:
+        if daily_calls["day"] != day:
+            daily_calls.update(day=day, count=0)
+        for key in [k for k, calls in ip_calls.items() if not calls or calls[-1] <= now - LIMIT_WINDOW]:
+            del ip_calls[key]
+        calls = ip_calls.setdefault((kind, request.remote_addr or "unknown"), deque())
+        while calls and calls[0] <= now - LIMIT_WINDOW:
+            calls.popleft()
+        if len(calls) >= per_ip or daily_calls["count"] >= per_day:
+            return False
+        calls.append(now)
+        daily_calls["count"] += 1
+        return True
 
 
 def asset_url(filename: str) -> str:
@@ -235,7 +267,10 @@ def api_chat():
 
     try:
         if state is not None:
-            response = chatbot.play_turn(message, username, config, signal, state)
+            # 키가 없거나 AI 판단을 껐으면 호출이 없으므로 세지 않는다
+            calls_llm = bool(os.getenv("OPENAI_API_KEY")) and config["game"].get("llm_decide")
+            use_llm = not calls_llm or llm_allowed("chat", "LLM_PER_IP_PER_10MIN", 40)
+            response = chatbot.play_turn(message, username, config, signal, state, use_llm=use_llm)
         else:
             response = chatbot.generate_response(message, username, config, signal=signal)
         if not isinstance(response, dict) or not isinstance(response.get("reply"), str):
@@ -289,7 +324,8 @@ def api_record():
     except ValueError as error:
         return error_response("invalid_record", str(error), 400)
     try:
-        return jsonify(chatbot.record_dialogue(config, dish, entries, success, wrong))
+        use_llm = not os.getenv("OPENAI_API_KEY") or llm_allowed("record", "RECORD_PER_IP_PER_10MIN", 5)
+        return jsonify(chatbot.record_dialogue(config, dish, entries, success, wrong, use_llm=use_llm))
     except Exception:
         app.logger.exception("레코드 대사 생성 실패")
         return error_response("record_failed", "레코드 대사를 만들지 못했습니다.", 500)

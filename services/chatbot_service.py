@@ -12,7 +12,10 @@
 3. ChatbotService: 검색 → 생성 → 이미지 선택 → 응답 조립
 """
 
+import json
+import logging
 import math
+import os
 import random
 
 from .generator import DemoGenerator
@@ -734,24 +737,25 @@ class ChatbotService:
         }
 
     def record_dialogue(self, character: dict, dish_id: str, entries: list[dict], success: bool,
-                        wrong: int | None = None) -> dict:
+                        wrong: int | None = None, use_llm: bool = True) -> dict:
         """대화가 끝난 뒤 레코드의 타일마다 대사를 붙이고, 외계인 대사에는 임베딩으로 고른 그림을 붙인다.
         entries는 app.parse_record()가 검증한 값. wrong은 넣을 오해 대사 수(없으면 success로 정한다)."""
         tags = record_tags(entries, dish_id, character)
         mark_misreads(tags, pick_misreads(tags, wrong))
         moods = (character.get("record") or {}).get("moods") or ["호기심"]
-        lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags),
-                                                    self.dishes_of(character)[dish_id], success, random.choice(moods))
+        lines, source = self.generator.record_lines(entries, tags, self.retriever.search_lines(tags, use_llm=use_llm),
+                                                    self.dishes_of(character)[dish_id], success, random.choice(moods), use_llm)
         # 게임 때 표정을 아는 타일은 그 표정 그림, 모르는 타일만 대사로 고른다
         unknown = [i for i, e in enumerate(entries) if e["who"] == "alien" and not e.get("expression")]
-        images, image_source = pick_line_images([lines[i] for i in unknown], character)
+        images, image_source = pick_line_images([lines[i] for i in unknown], character, use_llm)
         image_of = dict(zip(unknown, images))
         image_of |= {i: _url(character["expressions"][e["expression"]]["image"])
                      for i, e in enumerate(entries) if e["who"] == "alien" and e.get("expression")}
         return {"lines": [{"text": line, "image": image_of.get(i)} for i, line in enumerate(lines)],
                 "source": source, "image_source": image_source}
 
-    def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict) -> dict:
+    def play_turn(self, user_message: str, username: str, character: dict, signal: dict, state: dict,
+                  use_llm: bool = True) -> dict:
         """사용자 타일 한 장을 판정하고, 확신·진행 상태와 외계인의 다음 타일·표정·행동 묘사를 돌려준다.
 
         1. 1단계(재료 선정): 타일 하나 = 재료 하나로 쌓고 메뉴 후보 점수를 갱신. 확신하면 1위 메뉴로 확정하고 손질로 (조리 판정에는 쓰지 않음)
@@ -825,7 +829,7 @@ class ChatbotService:
             **({"ingredient": ingredient and ingredient["name"], "ingredients": self._ingredient_names(ingredient_ids, game),
                 "menu_scores": candidates} if stage["id"] == "ingredient" else {"menu": dish["name"]}),
         }
-        decision = self.generator.decide_turn(stage, dish, character, view, rule, knowledge)
+        decision = self.generator.decide_turn(stage, dish, character, view, rule, knowledge, use_llm)
         # 자신만만한 오답은 재미지만 한 판에 몇 번까지만. 다 쓰면 서버가 넘어가지 못하게 막는다
         limits = game["overconfident"]
         if (decision["decision_source"] == "openai" and decision["advance"] and not final_turn
@@ -837,6 +841,10 @@ class ChatbotService:
         confidence = decision["confidence"]
         advance = decision["advance"] or final_turn  # 10번째는 AI 판단과 무관하게 넘어간다. 결과는 쌓인 신호로 판정
         reason = None if not advance else "confident" if decision["advance"] else "max_reached"
+        if os.getenv("GAME_LOG") == "1":  # 측정용. 기본 로그 수준에서도 보이게 warning으로 남긴다
+            logging.getLogger(__name__).warning("game %s", json.dumps({
+                "stage": stage["id"], "attempt": attempts, "fit": judged["closeness"], "consistency": steady,
+                "confidence": confidence, "decision_source": decision["decision_source"], "advance": advance}))
         message = decision["action"]
         menu = tentative if advance or stage["id"] != "ingredient" else None  # 화면이 menu로 1단계 칸을 칠한다
         if advance and stage["id"] == "ingredient":

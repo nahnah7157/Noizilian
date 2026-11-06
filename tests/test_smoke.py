@@ -1338,6 +1338,77 @@ class RecordCallsTest(unittest.TestCase):
         self.assertFalse(lines[0].startswith("새 대사"))
 
 
+class CallLimitTest(unittest.TestCase):
+    """호출 횟수 제한. 넘으면 오류 없이 규칙 대체. OpenAI는 mock."""
+    ANSWER = {"confidence": 0.2, "advance": False, "expression": "doubt", "action": "외계인이 재료를 살핍니다."}
+
+    def setUp(self):
+        import app as app_module
+        self.app_module = app_module
+        app_module.ip_calls.clear()
+        app_module.daily_calls.update(day="", count=0)
+        self.addCleanup(app_module.ip_calls.clear)
+        self.client = app.test_client()
+        self.state = self.client.post("/api/start", json={"dish": "pizza"}).get_json()["state"]
+
+    def chat(self, ip="1.1.1.1", calls=None):
+        return self.client.post("/api/chat", headers={"X-Forwarded-For": ip},
+                                json={"message": "타일", "signal": game_tile("ramen"), "state": self.state})
+
+    def run_chats(self, env, ips):
+        calls = []
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test", **env}), patch("openai.OpenAI", fake_openai(self.ANSWER, calls=calls)):
+            out = [self.chat(ip) for ip in ips]
+        return [r.get_json()["decision_source"] for r in out], [r.status_code for r in out], calls
+
+    def test_per_ip_limit_falls_back_without_error(self):
+        sources, codes, calls = self.run_chats({"LLM_PER_IP_PER_10MIN": "2"}, ["1.1.1.1"] * 3)
+        self.assertEqual(sources, ["openai", "openai", "rule_limited"])
+        self.assertEqual(codes, [200, 200, 200])
+        self.assertEqual(len(calls), 2)
+
+    def test_each_ip_has_its_own_limit(self):
+        sources, _, _ = self.run_chats({"LLM_PER_IP_PER_10MIN": "1"}, ["1.1.1.1", "2.2.2.2", "1.1.1.1"])
+        self.assertEqual(sources, ["openai", "openai", "rule_limited"])
+
+    def test_daily_limit_covers_everyone(self):
+        sources, _, calls = self.run_chats({"LLM_DAILY_LIMIT": "2"}, ["1.1.1.1", "2.2.2.2", "3.3.3.3"])
+        self.assertEqual(sources, ["openai", "openai", "rule_limited"])
+        self.assertEqual(len(calls), 2)
+
+    def test_old_calls_leave_the_window(self):
+        with patch("time.time", return_value=1000.0):
+            self.run_chats({"LLM_PER_IP_PER_10MIN": "1"}, ["1.1.1.1"])
+        with patch("time.time", return_value=1000.0 + self.app_module.LIMIT_WINDOW + 1):
+            sources, _, _ = self.run_chats({"LLM_PER_IP_PER_10MIN": "1"}, ["1.1.1.1"])
+        self.assertEqual(sources, ["openai"])
+
+    def test_no_key_is_not_counted(self):
+        self.assertEqual(self.chat().get_json()["decision_source"], "rule")
+        self.assertEqual(self.app_module.daily_calls["count"], 0)
+
+    def test_record_limit_skips_lines_and_embeddings(self):
+        alien = {"who": "alien", "stage": "prep", "message": "", "scores": {a: 0.0 for a in AXES}}
+        user = {"who": "user", "stage": "prep", "message": "타일", "signal": game_tile("pizza", "prep")}
+        calls = []
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test", "RECORD_PER_IP_PER_10MIN": "0"}), \
+                patch("openai.OpenAI", fake_openai(self.ANSWER, calls=calls)):
+            response = self.client.post("/api/record", json={"dish": "pizza", "success": True, "entries": [alien, user, alien]})
+        data = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((data["source"], data["image_source"]), ("rule_limited", "rule_limited"))
+        self.assertEqual(calls, [])
+        self.assertTrue(all(line["text"] for line in data["lines"]))
+
+    def test_game_log_only_when_switched_on(self):
+        with self.assertNoLogs("services.chatbot_service", "WARNING"):
+            self.chat()
+        with patch.dict("os.environ", {"GAME_LOG": "1"}), self.assertLogs("services.chatbot_service", "WARNING") as logs:
+            self.chat()
+        entry = json.loads(logs.output[0].split("game ", 1)[1])
+        self.assertEqual(set(entry), {"stage", "attempt", "fit", "consistency", "confidence", "decision_source", "advance"})
+
+
 class GameResponseTest(unittest.TestCase):
     OLD_KEYS = {"reply", "image", "sources", "alien", "state", "stage", "dish", "result"}
 

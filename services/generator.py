@@ -164,13 +164,15 @@ class DemoGenerator:
 
     # ── 외계인 판단 ─────────────────────────────────────────────
     def decide_turn(self, stage: dict, dish: dict, character: dict, view: dict, rule: dict,
-                    knowledge: list[KnowledgeHit]) -> dict:
+                    knowledge: list[KnowledgeHit], use_llm: bool = True) -> dict:
         """외계인의 확신·멈춤·표정·행동을 AI가 정한다. 키가 없거나, 꺼져 있거나, 시간 초과·형식 오류면 rule을 그대로 쓴다.
         view: 쌓인 신호 요약(chatbot_service.play_turn). rule: {confidence, advance, expression, action}.
-        반환: rule과 같은 필드 + decision_source("openai" | "rule")."""
+        use_llm: 호출 제한에 걸리면 False. 반환: rule과 같은 필드 + decision_source("openai" | "rule" | "rule_limited")."""
         fallback = {**rule, "decision_source": "rule"}
         if not ((character.get("game") or {}).get("llm_decide") and os.getenv("OPENAI_API_KEY")):
             return fallback
+        if not use_llm:
+            return {**rule, "decision_source": "rule_limited"}
         try:
             out = self._decide_with_openai(character, view, knowledge)
             confidence = out["confidence"]
@@ -247,17 +249,18 @@ class DemoGenerator:
 
     # ── 레코드 대화 ─────────────────────────────────────────────
     def record_lines(self, entries: list[dict], tags: list[dict], pools: list[list], dish: dict, success: bool,
-                     mood: str) -> tuple[list[str], str]:
+                     mood: str, use_llm: bool = True) -> tuple[list[str], str]:
         """레코드에 새긴 타일마다 그 타일을 말로 옮긴 대사 한 문장. 키가 없거나 실패하면 pools의 예시를 쓴다.
 
         entries: [{who: "user"|"alien", stage: 단계 이름, scores: {wc, mf, hs, hl}, color?, texture?, message?}]
         tags: 타일마다 {stage, who, verdict, fit, emotion, misread, meaning} (chatbot_service.record_tags)
         pools: 타일마다 잘 맞는 순서의 예시 (retriever.search_lines)
         mood: 이번 판 외계인 기분. 예시에는 기분 태그가 없어 GPT 경로에서만 쓴다
-        반환: (대사 목록, "openai" | "no_key" | "openai_failed:<오류 종류>")
+        use_llm: 호출 제한에 걸리면 False
+        반환: (대사 목록, "openai" | "no_key" | "rule_limited" | "openai_failed:<오류 종류>")
         """
-        source = "no_key"
-        if os.getenv("OPENAI_API_KEY"):
+        source = "no_key" if not os.getenv("OPENAI_API_KEY") else "openai" if use_llm else "rule_limited"
+        if source == "openai":
             try:
                 # 출력 한도 안에 드는 최근 타일만 GPT로 쓰고, 앞쪽은 예시 대사로 채운다
                 head = max(0, len(entries) - RECORD_GPT_TILES)

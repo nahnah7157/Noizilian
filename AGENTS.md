@@ -46,7 +46,7 @@
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-11-07)
-- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1~3단계 완료, 4 호출 제한 → 5 시뮬레이션·실제 10판
+- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1~4단계 완료, 5 시뮬레이션·실제 10판
   - 1단계 규칙: judge_stage 연속 적합도(soft_fit, 코사인), reason(method/size/power/density/color), 손질=색상·크기·밀도, 조리=색상·무거움(power, hl)·밀도(wc 뺌), 플레이팅=요리별 center(판정 ±40, 결과 그림 색은 ±60 안이면 그대로). seed·bluff·finalize 제거, seed는 그림용으로 세션마다 새로
   - 규칙 대체 확신 = 쌓인 적합도 × 일관성(이전 확신과 섞음), 멈춤 기준 confidence.thresholds는 시도마다 낮아져 규칙 경로는 5번 안에 끝남. max_attempts 네 단계 10, MAX_RECORD_ENTRIES 100
   - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상)
@@ -56,6 +56,7 @@
   - 자신만만한 오답 제한: AI가 쌓인 적합도 0.3 미만에서 넘어가면 state.overconfident_advances에 세고 한 판 2번까지. 다 쓰면 서버가 advance=false, decision_source=openai_capped (config.game.overconfident). 재료 단계와 10번째는 안 셈
   - 레코드: 태그는 쌓인 신호 기준, 표정·그림은 게임 때 표정(history의 expression, 없으면 규칙). 오해 = 단계가 끝날 때 쌓인 판정이 success가 아님, 어긋난 단계가 없으면 중간에 어긋났던 첫 순간(pick_misreads). 타일 48개 넘으면 최근 48개만 GPT, 앞쪽은 예시 대사
   - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
+  - 4단계 호출 제한: app.py llm_allowed(메모리, lock). 환경 변수 LLM_PER_IP_PER_10MIN·RECORD_PER_IP_PER_10MIN·LLM_DAILY_LIMIT. 넘으면 use_llm=False로 규칙 대체(rule_limited). 판 로그는 GAME_LOG=1
   - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
 - 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 112개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)

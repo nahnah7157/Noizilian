@@ -95,14 +95,14 @@ class DemoRetriever:
         top = max((score for score, _ in scored), default=0)
         return [hit for score, hit in scored if score == top and top > 0][: self.limit]
 
-    def search_lines(self, tags: list[dict], rng=random) -> list[list[RecordLine]]:
+    def search_lines(self, tags: list[dict], rng=random, use_llm: bool = True) -> list[list[RecordLine]]:
         """타일마다 단계·말한 쪽이 같은 예시를 잘 맞는 순서로. 파일은 매번 읽어서 고치면 바로 반영된다.
 
         오해 > 판정 > 감정 순으로 맞는 줄이 앞에 오므로, 맞는 줄을 다 쓰면 조건이 저절로 풀린다.
         같은 순위 안에서는 임베딩 유사도순, 키가 없으면 무작위.
         """
         lines = load_record_lines()
-        similarity = _line_similarity(tags, lines)
+        similarity = _line_similarity(tags, lines) if use_llm else None
         pools = []
         for i, tag in enumerate(tags):
             same = [line for line in lines if line.stage == tag["stage"] and line.who == tag["who"]]
