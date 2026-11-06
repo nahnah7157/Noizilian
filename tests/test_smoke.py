@@ -654,9 +654,11 @@ class RecordDialogueTest(unittest.TestCase):
         self.assertEqual(lines[2], "다른 대사")
         self.assertEqual(len(calls), 1)  # 겹친 줄을 바꿀 때 다시 호출하지 않는다
         self.assertIn("허세", calls[0]["instructions"])
-        tile = json.loads(calls[0]["input"])["tiles"][2]
+        sent = json.loads(calls[0]["input"])
+        tile = sent["tiles"][2]
         self.assertEqual((tile["verdict"], tile["fit"], tile["misread"], tile["meaning"]), ("부족함(덜 됨)", 0.5, True, "신호"))
-        self.assertEqual(len(tile["examples"]), 5)
+        self.assertEqual([sent["examples"][i] for i in tile["examples"]], [line.text for line in pools[2][:3]])
+        self.assertEqual(len(sent["examples"]), 3)  # 세 타일이 같은 예시를 써도 글은 한 번만 넘긴다
 
     def test_shifted_openai_lines_fall_back_to_examples(self):
         # 말하는 쪽이 밀린 응답을 그대로 쓰면 외계인 말이 지구인 칸에 들어간다

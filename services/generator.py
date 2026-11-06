@@ -10,7 +10,7 @@ from .retriever import KnowledgeHit
 AXES = ("wc", "mf", "hs", "hl")
 PAPER_RULES = Path(__file__).resolve().parent.parent / "data" / "knowledge" / "paper_rules.md"
 ALLOWED_REASONING_EFFORTS = {"none", "low", "medium"}
-EXAMPLE_LIMIT = 5  # 타일마다 GPT에 넘기는 예시 수
+EXAMPLE_LIMIT = 3  # 타일마다 GPT에 넘기는 예시 수
 RECORD_GPT_TILES = 48  # max_output_tokens 4000 안에 드는 타일 수 (타일당 약 70토큰)
 AXIS_NAMES = {"wc": "따뜻함–차가움", "mf": "남성적–여성적", "hs": "단단함–부드러움", "hl": "무거움–가벼움"}
 
@@ -24,11 +24,12 @@ def _explained(entry: dict) -> dict:
         words[AXIS_NAMES[axis]] = f"{value:+.2f} → {side}"
     return {**entry, "scores": words}
 
-def _tile_input(number: int, entry: dict, tag: dict, pool: list) -> dict:
-    """GPT에 넘기는 타일 하나: 점수 + 상황 태그 + 검색한 예시."""
+def _tile_input(number: int, entry: dict, tag: dict, pool: list, example_ids: dict) -> dict:
+    """GPT에 넘기는 타일 하나: 점수 + 상황 태그 + 예시 번호. 예시 글은 example_ids에 한 번만 모은다."""
     verdict = DemoGenerator.VERDICT_WORDS.get(tag["verdict"], "단계 시작(판정 전)")
     return {"tile": number, **_explained(entry), "verdict": verdict, "reason": tag.get("reason"), "fit": tag["fit"], "misread": tag["misread"],
-            "expression": tag["emotion"], "meaning": tag["meaning"], "examples": [line.text for line in pool[:EXAMPLE_LIMIT]]}
+            "expression": tag["emotion"], "meaning": tag["meaning"],
+            "examples": [example_ids.setdefault(line.text, len(example_ids)) for line in pool[:EXAMPLE_LIMIT]]}
 
 
 def _no_repeats(lines: list[str], pools: list[list]) -> list[str]:
@@ -315,7 +316,7 @@ class DemoGenerator:
             "손질의 부족함 = 너무 잘게, 지나침 = 너무 크게, 불안정함 = 크기가 들쭉날쭉. 조리의 부족함 = 덜 익음, 지나침 = 탐, "
             "불안정함 = 고르지 않음. 플레이팅의 부족함·지나침 = 음식 색이 낯섦. reason이 method면 정도가 아니라 방법이 틀린 것이다(썰기·조리법이 다름).\n"
             "- meaning은 타일의 색·노이즈를 말로 옮긴 것이다. 분위기만 참고한다. '재료: 이름'이 있으면 그 타일이 뜻하는 재료이니 대화에 그 재료를 쓴다.\n"
-            "- examples는 말투 참고용이다. 그대로 베끼지 말고 새로 쓴다. 이번 판의 대사끼리도 겹치지 않게 쓴다.\n"
+            "- 타일의 examples는 입력 examples 목록의 번호다. 말투 참고용이니 그대로 베끼지 말고 새로 쓴다. 이번 판의 대사끼리도 겹치지 않게 쓴다.\n"
             "- 앞 타일에 대한 대답처럼 이어지게 쓴다. 외계인이 모르겠다고 묻거나 따라 하면, 지구인이 알려 주거나 고쳐 준다.\n"
             "- 논문 번호나 근거 설명은 대사에 넣지 않는다.\n"
             + wrong_note
@@ -325,13 +326,14 @@ class DemoGenerator:
             f"- items의 개수는 입력 타일 수({len(entries)})와 같아야 하고 순서도 같아야 한다.\n\n"
             + PAPER_RULES.read_text(encoding="utf-8")
         )
+        example_ids = {}
+        tiles = [_tile_input(i, *tile, example_ids) for i, tile in enumerate(zip(entries, tags, pools))]
         # 일시적 오류(429·5xx·연결 끊김)는 SDK가 두 번까지 다시 시도한다
         response = OpenAI(timeout=90.0, max_retries=2).responses.create(
             model=os.getenv("OPENAI_MODEL", "gpt-6-luna"),
             reasoning={"effort": effort},
             instructions=instructions,
-            input=json.dumps({"dish": dish["name"], "tiles": [_tile_input(i, *tile) for i, tile in enumerate(zip(entries, tags, pools))]},
-                             ensure_ascii=False),
+            input=json.dumps({"dish": dish["name"], "tiles": tiles, "examples": list(example_ids)}, ensure_ascii=False),
             max_output_tokens=4000,
             text={"format": {
                 "type": "json_schema",

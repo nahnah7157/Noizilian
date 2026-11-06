@@ -672,6 +672,11 @@ function updateGameState(data) {
   if (currentState?.done) finishedIndex = currentStageIndex;
   else if (data.stage?.advanced) finishedIndex = prevIndex;
   if (finishedIndex >= 0) undoStack = []; // 단계가 바뀌면 되돌리기 스냅샷 비움(이전 단계로 안 감)
+  // 타일이 날아가고 요리 화면을 보는 동안 레코드 대사가 만들어지도록 마지막 응답을 받자마자 요청한다
+  if (currentState?.done && data.result) {
+    resultSuccess = data.result.success;
+    requestRecord();
+  }
   refreshUndo();
 
   if (finishedIndex >= 0) {
@@ -685,7 +690,7 @@ function updateGameState(data) {
     playOffer(finishedIndex, () => {
       renderTileRecord();
       if (currentState?.done) {
-        if (data.result && resultOverlayEl) showResult(data.result);
+        if (data.result && resultOverlayEl) showResult(data.result, true);
         sendButton.disabled = true;
         hideThink();
       } else {
@@ -700,8 +705,8 @@ function updateGameState(data) {
   }
 }
 
-/** 결과 화면을 ① 요리부터 연다. 레코드 대사는 ②에 갈 때쯤 준비되도록 지금 요청한다 */
-function showResult(result) {
+/** 결과 화면을 ① 요리부터 연다. requested면 대사는 이미 요청 중이다(콘솔에서 부를 때는 새로 요청) */
+function showResult(result, requested = false) {
   resultImageEl.src = result.image;
   resultSuccess = result.success;
   resultAlienEl.src = RESULT_ALIEN[result.success ? "success" : "fail"];
@@ -712,6 +717,7 @@ function showResult(result) {
   resultImageEl.classList.toggle("tinted", shift != null);
   resultImageEl.style.setProperty("--hue-shift", `${shift ?? 0}deg`);
   renderConclusion();
+  if (!requested) requestRecord();
   showRecord();
 }
 
@@ -988,13 +994,17 @@ recordCanvas?.addEventListener("pointerleave", () => {
   drawRecord();
 });
 
-async function showRecord() {
+function showRecord() {
   if (!recordCanvas) return;
-  const token = ++recordToken;
   recordTip.hidden = true;
   hovered = -1;
-  lines = null;
   fitCanvases(); // 결과 화면이 막 보여서 레코드 크기를 이제 알 수 있다 (drawRecord 포함)
+}
+
+async function requestRecord() {
+  if (!recordCanvas) return;
+  const token = ++recordToken;
+  lines = null;
   recordStatus.hidden = !history.length;
   if (!history.length) return;
   try {

@@ -57,6 +57,7 @@
   - 레코드: 태그는 쌓인 신호 기준, 표정·그림은 게임 때 표정(history의 expression, 없으면 규칙). 오해 = 단계가 끝날 때 쌓인 판정이 success가 아님, 어긋난 단계가 없으면 중간에 어긋났던 첫 순간(pick_misreads). 타일 48개 넘으면 최근 48개만 GPT, 앞쪽은 예시 대사
   - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
   - 4단계 호출 제한: app.py llm_allowed(메모리, lock). 환경 변수 LLM_PER_IP_PER_10MIN·RECORD_PER_IP_PER_10MIN·LLM_DAILY_LIMIT. 넘으면 use_llm=False로 규칙 대체(rule_limited). 판 로그는 GAME_LOG=1
+  - 레코드 대기: 마지막 응답(state.done)을 받는 즉시 chatbot.js requestRecord가 요청한다. GPT 입력은 타일마다 예시 3개 번호만 넣고 글은 examples 목록에 한 번만
   - 키 없는 대사: 태그 reason이 method면 record_lines.md의 method 섹션(방법이 틀렸을 때)을 쓴다
   - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
 - 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 121개
