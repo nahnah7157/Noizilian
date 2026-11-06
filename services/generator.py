@@ -160,7 +160,7 @@ class DemoGenerator:
         game = character.get("game") or {}
         messages = game.get("messages") or {}
         if stage["id"] == "ingredient":
-            fallback = messages.get("select", "{dish}").format(dish=dish["name"])
+            fallback = messages.get("retry", "") if retry else messages.get("select", "{dish}").format(dish=dish["name"])
         else:
             fallback = (messages.get(stage["id"]) or {}).get(verdict, "").format(dish=dish["name"])
             if retry and messages.get("retry"):
@@ -263,7 +263,7 @@ class DemoGenerator:
             "- verdict는 지구인 타일이 그 단계에 얼마나 맞았는지다. fit(0~1)이 낮을수록 많이 어긋난 것이다. 대사가 이 상황과 맞아야 한다. "
             "손질의 부족함 = 너무 잘게, 지나침 = 너무 크게, 불안정함 = 크기가 들쭉날쭉. 조리의 부족함 = 덜 익음, 지나침 = 탐, "
             "불안정함 = 고르지 않음. 플레이팅의 부족함·지나침 = 음식 색이 낯섦.\n"
-            "- meaning은 타일의 색·노이즈를 말로 옮긴 것이다. 분위기만 참고한다.\n"
+            "- meaning은 타일의 색·노이즈를 말로 옮긴 것이다. 분위기만 참고한다. '재료: 이름'이 있으면 그 타일이 뜻하는 재료이니 대화에 그 재료를 쓴다.\n"
             "- examples는 말투 참고용이다. 그대로 베끼지 말고 새로 쓴다. 이번 판의 대사끼리도 겹치지 않게 쓴다.\n"
             "- 앞 타일에 대한 대답처럼 이어지게 쓴다. 외계인이 모르겠다고 묻거나 따라 하면, 지구인이 알려 주거나 고쳐 준다.\n"
             "- 논문 번호나 근거 설명은 대사에 넣지 않는다.\n"

@@ -370,8 +370,13 @@ class CookingFlowTest(unittest.TestCase):
 
     def after_menu(self, tile=None):
         """1단계(메뉴 선택)를 지난 state와 응답."""
-        data = self.send(self.start()["state"], tile or game_tile("pizza")).get_json()
-        return data["state"], data
+        state = self.start()["state"]
+        for _ in range(GAME["max_attempts"]["ingredient"]):
+            data = self.send(state, tile or game_tile("pizza")).get_json()
+            state = data["state"]
+            if data["stage"]["advanced"]:
+                break
+        return state, data
 
     def test_first_tile_picks_menu_and_moves_to_prep(self):
         state, data = self.after_menu()
@@ -420,7 +425,7 @@ class CookingFlowTest(unittest.TestCase):
     def test_full_game_ends_with_dish_image(self):
         from services.image_selector import _url
         state, data = self.start()["state"], None
-        for _ in range(1 + 3 * max(GAME["max_attempts"].values())):
+        for _ in range(4 * max(GAME["max_attempts"].values())):
             data = self.send(state).get_json()
             state = data["state"]
             if state["done"]:
@@ -689,9 +694,12 @@ from services.chatbot_service import (
     game_metrics,
     consistency,
     hue_zone,
+    ingredient_scores,
     judge_menu_result,
     judge_stage,
+    menu_scores,
     plating_view,
+    read_ingredient,
     stage_signal,
 )
 
@@ -730,6 +738,9 @@ def find_tile(density, size, ok):
     raise AssertionError("조건에 맞는 타일이 없습니다")
 
 
+MENU_INGREDIENT = {"pizza": "pepperoni", "hamburger": "patty", "ramen": "noodle", "omurice": "ketchup"}  # 그 메뉴에만 있는 재료
+
+
 def zone_mid(name):
     lo, hi = GAME["hue_zones"][name]
     return (lo + ((hi - lo) % 360) / 2) % 360
@@ -739,9 +750,8 @@ def zone_mid(name):
 def game_tile(menu, stage="ingredient", verdict="success"):
     """메뉴 선택 타일, 또는 menu·stage에서 verdict가 나오는 타일."""
     if stage == "ingredient":
-        warm = menu in ("pizza", "omurice")
-        high = menu in ("pizza", "hamburger")
-        return find_tile(0.8 if high else 0.2, 50, lambda m: (m["heat"] >= GAME["menu"]["warm_min"]) == warm)
+        item = next(i for i in GAME["ingredients"] if i["id"] == MENU_INGREDIENT[menu])
+        return raw_tile(item["color"], GAME["grain"][item["grain"]]["density"], 50)
     rule = RULES[menu][stage]
     judged = lambda m: judge_stage(stage, m, rule, GAME)
     if stage == "plating":
@@ -791,8 +801,99 @@ class MenuTest(unittest.TestCase):
         for menu in RULES:
             with self.subTest(menu=menu):
                 state = client.post("/api/start", json={}).get_json()["state"]
-                data = client.post("/api/chat", json={"message": "타일", "signal": game_tile(menu), "state": state}).get_json()
+                for _ in range(GAME["max_attempts"]["ingredient"]):
+                    data = client.post("/api/chat", json={"message": "타일", "signal": game_tile(menu), "state": state}).get_json()
+                    state = data["state"]
+                    if data["stage"]["advanced"]:
+                        break
                 self.assertEqual((data["menu"], data["state"]["menu"], data["dish"]["id"]), (menu, menu, menu))
+
+
+class IngredientTest(unittest.TestCase):
+    def test_every_ingredient_is_read_back_from_its_own_tile(self):
+        for item in GAME["ingredients"]:
+            with self.subTest(item=item["name"]):
+                tile = parse_signal(raw_tile(item["color"], GAME["grain"][item["grain"]]["density"], 50))
+                self.assertEqual(read_ingredient(tile, GAME)["id"], item["id"])
+
+    def test_menu_lists_match_the_request(self):
+        lists = {"pizza": "반죽,토마토소스,모차렐라,페퍼로니,버섯,바질,반죽 물", "hamburger": "번,패티,체더치즈,양상추,토마토,소스,패티 반죽 물",
+                 "ramen": "면,육수,차슈,달걀,대파,김", "omurice": "달걀,밥,양파,당근,완두콩,케첩,밥 물,쌀뜨물"}
+        for menu, names in lists.items():
+            with self.subTest(menu=menu):
+                self.assertEqual({i["name"] for i in GAME["ingredients"] if menu in i["menus"]}, set(names.split(",")))
+
+    def test_blue_means_water_for_every_menu_but_indigo_is_ramen_only(self):
+        zone_menus = lambda zone: {menu for i in GAME["ingredients"] if i["zone"] == zone for menu in i["menus"]}
+        self.assertEqual(zone_menus("blue"), set(RULES))
+        self.assertEqual(zone_menus("indigo"), {"ramen"})
+
+    def test_every_zone_and_grain_reads_some_ingredient(self):
+        for h in range(0, 360, 10):
+            for density in (0.1, 0.5, 0.9):
+                self.assertIsNotNone(read_ingredient(parse_signal(raw_tile(hsv_color(h), density, 50)), GAME))
+
+    def test_rough_and_smooth_split_the_same_zone(self):
+        red = hsv_color(zone_mid("red"))
+        names = [read_ingredient(parse_signal(raw_tile(red, density, 50)), GAME)["name"] for density in (0.1, 0.5, 0.9)]
+        self.assertEqual(names, ["차슈", "페퍼로니", "패티"])
+
+    def test_gray_tile_means_no_ingredient(self):
+        self.assertIsNone(read_ingredient(parse_signal(raw_tile(hsv_color(0, 0.05, 0.6), 0.5, 50)), GAME))
+
+    def test_candidates_follow_ingredients_and_warmth_is_only_a_helper(self):
+        signal = {"heat": 80, "noise": 80}  # 기존 매핑은 피자
+        self.assertEqual(max(menu_scores(["noodle", "broth"], signal, GAME).items(), key=lambda s: s[1])[0], "ramen")
+        scores = menu_scores([], signal, GAME)
+        self.assertEqual(scores["pizza"], GAME["ingredient_rule"]["aux"])
+
+    def test_menu_can_change_during_the_conversation(self):
+        signal = {"heat": 50, "noise": 50}
+        first = menu_scores(["ketchup"], signal, GAME)
+        later = menu_scores(["ketchup", "noodle", "broth", "nori"], signal, GAME)
+        self.assertEqual(max(first, key=first.get), "omurice")
+        self.assertEqual(max(later, key=later.get), "ramen")
+
+    def test_stage_can_continue_and_keeps_menu_hidden_until_confirmed(self):
+        config = copy.deepcopy(CONFIG)
+        config["game"]["confidence"]["thresholds"] = [1.01]
+        service = ChatbotService()
+        state = service.start(config, "ramen")["state"]
+        data = service.play_turn("", "헤슬", config, parse_signal(game_tile("pizza")), state)
+        self.assertTrue(data["retry"])
+        self.assertIsNone(data["menu"])  # 화면이 menu로 1단계 칸을 칠한다
+        self.assertEqual(data["ingredient"], "페퍼로니")
+        self.assertEqual(data["ingredients"], ["페퍼로니"])
+        self.assertEqual(max(data["menu_scores"], key=data["menu_scores"].get), "pizza")
+        self.assertEqual(data["state"]["ingredients"], ["pepperoni"])
+        self.assertEqual(data["state"]["stage_index"], 0)
+
+    def test_one_clear_tile_can_finish_the_stage(self):
+        service = ChatbotService()
+        state = service.start(CONFIG, "ramen")["state"]
+        data = service.play_turn("", "헤슬", CONFIG, parse_signal(game_tile("ramen")), state)
+        self.assertTrue(data["stage"]["advanced"])
+        self.assertEqual(data["menu"], "ramen")
+
+    def test_alien_answers_with_the_representative_ingredient(self):
+        scores = ingredient_scores(["noodle", "pepperoni", "pepperoni"], "pizza", GAME)
+        item = next(i for i in GAME["ingredients"] if i["id"] == "pepperoni")
+        density = GAME["grain"][item["grain"]]["density"]
+        tile = parse_signal(raw_tile(item["color"], density, 50))
+        self.assertAlmostEqual(scores["wc"], tile["scores"]["wc"], places=2)
+        self.assertIsNone(ingredient_scores([], "pizza", GAME))
+
+    def test_bad_ingredients_are_rejected(self):
+        client = app.test_client()
+        state = client.post("/api/start", json={}).get_json()["state"]
+        for bad in ("밥", ["kimchi"], ["rice"] * 99):
+            with self.subTest(bad=str(bad)[:20]):
+                r = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza"), "state": {**state, "ingredients": bad}})
+                self.assertEqual(r.get_json()["error"]["code"], "invalid_state")
+
+    def test_record_meaning_names_the_ingredient(self):
+        entry = {**parse_signal(game_tile("ramen")), "who": "user", "stage": "재료 준비", "message": ""}
+        self.assertIn("재료: 면", record_tags([entry], "ramen", CONFIG)[0]["meaning"])
 
 
 class JudgeTest(unittest.TestCase):
@@ -918,7 +1019,8 @@ class GameFlowTest(unittest.TestCase):
         config["game"].update(game_changes)
         service = ChatbotService()
         state = service.start(config, "ramen")["state"]
-        data = service.play_turn("", "헤슬", config, parse_signal(game_tile(menu)), state)
+        confident = {**config, "game": {**config["game"], "confidence": {**config["game"]["confidence"], "thresholds": [0]}}}
+        data = service.play_turn("", "헤슬", confident, parse_signal(game_tile(menu)), state)  # 재료 선정은 바로 넘긴다
         return service, config, data
 
     NEVER = {**GAME["confidence"], "thresholds": [1.01]}  # 절대 확신하지 않음 → 최대 시도에서 확정
@@ -1007,7 +1109,7 @@ class GameResponseTest(unittest.TestCase):
         for name, data in (("start", start), ("chat", chat)):
             with self.subTest(name=name):
                 self.assertTrue(self.OLD_KEYS <= set(data))
-                self.assertTrue(set(GAME_RESPONSE_KEYS) - {"metrics", "understanding"} <= set(data))
+                self.assertTrue(set(GAME_RESPONSE_KEYS) - {"metrics", "understanding", "ingredient", "ingredients", "menu_scores"} <= set(data))
                 self.assertEqual(set(data["stage"]), {"id", "name", "index", "total", "hint", "advanced", "reason"})
                 self.assertEqual(set(data["alien"]), {"scores", "word", "expression", "reading"})
                 self.assertIsInstance(data["reply"], str)

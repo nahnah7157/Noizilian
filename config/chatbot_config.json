@@ -365,6 +365,47 @@
       "cook": 10,
       "plating": 10
     },
+    "grain": {
+      "_note": "재료를 가르는 무늬 거침칸. max = 밀도(roughness) 상한, density = 그 칸 대표 무늬의 밀도(0~1). 외계인 색 언어 [앱 설정]",
+      "smooth": {"max": 33, "density": 0.15},
+      "mid": {"max": 66, "density": 0.5},
+      "rough": {"max": 100, "density": 0.85}
+    },
+    "ingredient_rule": {
+      "_note": "메뉴 후보 점수 = 메뉴 재료 목록에 맞은 타일 수 + 기존 따뜻·차가움 × 노이즈 매핑(aux, 보조). 규칙 대체 확신 = min(1, 1·2위 점수 차 / margin_full) × 1위에 맞은 타일 비율",
+      "aux": 0.5,
+      "margin_full": 2
+    },
+    "ingredients": [
+      {"id": "chashu", "name": "차슈", "zone": "red", "grain": "smooth", "value": 75, "color": {"L": 50.99, "C": 47.49, "h": 35.54}, "menus": ["ramen"]},
+      {"id": "pepperoni", "name": "페퍼로니", "zone": "red", "grain": "mid", "value": 75, "color": {"L": 42.24, "C": 70.69, "h": 33.77}, "menus": ["pizza"]},
+      {"id": "patty", "name": "패티", "zone": "red", "grain": "rough", "value": 45, "color": {"L": 26.61, "C": 38.91, "h": 23.58}, "menus": ["hamburger"]},
+      {"id": "dough", "name": "반죽", "zone": "orange", "grain": "smooth", "value": 95, "color": {"L": 86.73, "C": 31.6, "h": 86.55}, "menus": ["pizza"]},
+      {"id": "bun", "name": "번", "zone": "orange", "grain": "mid", "value": 85, "color": {"L": 68.69, "C": 51.95, "h": 73.4}, "menus": ["hamburger"]},
+      {"id": "rice", "name": "밥", "zone": "orange", "grain": "rough", "value": 95, "color": {"L": 90.71, "C": 24.54, "h": 95.32}, "menus": ["omurice"]},
+      {"id": "egg", "name": "달걀", "zone": "yellow", "grain": "smooth", "value": 95, "color": {"L": 91.57, "C": 77.33, "h": 102.18}, "menus": ["ramen", "omurice"]},
+      {"id": "mozzarella", "name": "모차렐라", "zone": "yellow", "grain": "mid", "value": 98, "color": {"L": 96.7, "C": 37.76, "h": 107.25}, "menus": ["pizza"]},
+      {"id": "cheddar", "name": "체더치즈", "zone": "yellow", "grain": "rough", "value": 95, "color": {"L": 88.42, "C": 83.93, "h": 98.16}, "menus": ["hamburger"]},
+      {"id": "onion", "name": "양파", "zone": "green", "grain": "smooth", "value": 85, "color": {"L": 82.55, "C": 36.94, "h": 130.56}, "menus": ["omurice"]},
+      {"id": "pea", "name": "완두콩", "zone": "green", "grain": "smooth", "value": 45, "color": {"L": 42.26, "C": 54.54, "h": 138.49}, "menus": ["omurice"]},
+      {"id": "lettuce", "name": "양상추", "zone": "green", "grain": "mid", "value": 85, "color": {"L": 78.59, "C": 78.49, "h": 131.59}, "menus": ["hamburger"]},
+      {"id": "scallion", "name": "대파", "zone": "green", "grain": "mid", "value": 60, "color": {"L": 56.89, "C": 57.57, "h": 135.32}, "menus": ["ramen"]},
+      {"id": "basil", "name": "바질", "zone": "green", "grain": "mid", "value": 35, "color": {"L": 33.12, "C": 37.37, "h": 146.26}, "menus": ["pizza"]},
+      {"id": "tomato", "name": "토마토", "zone": "green", "grain": "rough", "value": 85, "color": {"L": 78.74, "C": 81.31, "h": 129.05}, "menus": ["hamburger"]},
+      {"id": "carrot", "name": "당근", "zone": "green", "grain": "rough", "value": 60, "color": {"L": 58.17, "C": 46.87, "h": 132.27}, "menus": ["omurice"]},
+      {"id": "mushroom", "name": "버섯", "zone": "green", "grain": "rough", "value": 35, "color": {"L": 35.46, "C": 19.26, "h": 138.3}, "menus": ["pizza"]},
+      {"id": "broth", "name": "육수", "zone": "blue", "grain": "smooth", "value": 80, "color": {"L": 72.28, "C": 24.78, "h": 217.55}, "menus": ["ramen"]},
+      {"id": "rice_water", "name": "밥 물", "zone": "blue", "grain": "smooth", "value": 45, "color": {"L": 42.39, "C": 12.31, "h": 227.99}, "menus": ["omurice"]},
+      {"id": "dough_water", "name": "반죽 물", "zone": "blue", "grain": "mid", "value": 80, "color": {"L": 74.48, "C": 26.32, "h": 206.65}, "menus": ["pizza"]},
+      {"id": "patty_water", "name": "패티 반죽 물", "zone": "blue", "grain": "mid", "value": 40, "color": {"L": 31.03, "C": 19.28, "h": 256.56}, "menus": ["hamburger"]},
+      {"id": "wash_water", "name": "쌀뜨물", "zone": "blue", "grain": "rough", "value": 80, "color": {"L": 75.25, "C": 17.65, "h": 216.53}, "menus": ["omurice"]},
+      {"id": "nori", "name": "김", "zone": "blue", "grain": "rough", "value": 25, "color": {"L": 18.77, "C": 13.86, "h": 246.07}, "menus": ["ramen"]},
+      {"id": "noodle", "name": "면", "zone": "indigo", "grain": "smooth", "value": 85, "color": {"L": 54.22, "C": 56.07, "h": 296.5}, "menus": ["ramen"]},
+      {"id": "ketchup", "name": "케첩", "zone": "violet", "grain": "smooth", "value": 80, "color": {"L": 46.32, "C": 65.81, "h": 1.85}, "menus": ["omurice"]},
+      {"id": "sauce", "name": "소스", "zone": "violet", "grain": "mid", "value": 60, "color": {"L": 40.68, "C": 63.95, "h": 327.57}, "menus": ["hamburger"]},
+      {"id": "tomato_sauce", "name": "토마토소스", "zone": "violet", "grain": "rough", "value": 70, "color": {"L": 42.9, "C": 63.67, "h": 342.73}, "menus": ["pizza"]}
+    ],
+    "_ingredients_note": "타일 → 색상 구간(zone) + 거침칸(grain)으로 재료 하나. 같은 칸에 여럿이면 밝기(value)가 가까운 재료. color는 대표 색(CIELAB). 면·육수는 거침칸이 비면 같은 구간의 가까운 칸을 쓴다. 외계인의 색 언어 [앱 설정, 논문 근거 아님]",
     "gray_sat": 15,
     "_gray_note": "채도(0~100)가 이 값 미만이면 색상이 뜻이 없어 어느 구간도 아닌 것으로 본다 (색 적합도 0.5)",
     "hue_zones": {
@@ -373,9 +414,9 @@
       "orange": [18, 52],
       "yellow": [52, 88],
       "green": [88, 150],
-      "blue": [150, 215],
-      "indigo": [215, 275],
-      "violet": [275, 338]
+      "blue": [150, 225],
+      "indigo": [225, 265],
+      "violet": [265, 338]
     },
     "plating": {
       "_note": "요리별 정답 색 = rules.*.plating.center. 판정(적합도·성공)은 ± judge_range. 결과 그림은 ± tint_range 안이면 원래 색 그대로, soft까지는 살짝, 더 밖은 이상한 색",

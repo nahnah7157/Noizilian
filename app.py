@@ -106,6 +106,10 @@ def parse_state(data, config: dict) -> dict:
             raise ValueError(f"verdicts.{k}가 올바르지 않습니다.")
         clean_verdicts[k] = {"verdict": v["verdict"], "metrics": metrics(v.get("metrics"), f"verdicts.{k}.metrics"),
                              **({"abnormal": v["abnormal"]} if "abnormal" in v else {})}
+    ingredients = data.get("ingredients", [])
+    known = {i["id"] for i in config["game"]["ingredients"]}
+    if not isinstance(ingredients, list) or len(ingredients) > MAX_STAGE_ATTEMPTS or not set(ingredients) <= known:
+        raise ValueError("ingredients가 올바르지 않습니다.")
     stage_metrics = data.get("stage_metrics", [])
     if not isinstance(stage_metrics, list) or len(stage_metrics) > MAX_STAGE_ATTEMPTS:
         raise ValueError("stage_metrics가 올바르지 않습니다.")
@@ -119,6 +123,7 @@ def parse_state(data, config: dict) -> dict:
         "finals": {k: scores(v, f"finals.{k}") for k, v in finals.items()},
         "verdicts": clean_verdicts,
         "stage_metrics": [metrics(m, "stage_metrics") for m in stage_metrics],
+        "ingredients": ingredients,
         "done": False,
     }
 

@@ -46,11 +46,14 @@
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
 ## 현재 진행 상황 (2026-11-07)
-- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1단계 완료, 2 재료 선정 → 3 decide_turn → 4 호출 제한 → 5 시뮬레이션·실제 10판
+- 진행 중: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 계획 5단계 중 1·2단계 완료, 3 decide_turn → 4 호출 제한 → 5 시뮬레이션·실제 10판
   - 1단계 규칙: judge_stage 연속 적합도(soft_fit, 코사인), reason(method/size/power/density/color), 손질=색상·크기·밀도, 조리=색상·무거움(power, hl)·밀도(wc 뺌), 플레이팅=요리별 center(판정 ±40, 결과 그림 색은 ±60 안이면 그대로). seed·bluff·finalize 제거, seed는 그림용으로 세션마다 새로
   - 규칙 대체 확신 = 쌓인 적합도 × 일관성(이전 확신과 섞음), 멈춤 기준 confidence.thresholds는 시도마다 낮아져 규칙 경로는 5번 안에 끝남. max_attempts 네 단계 10, MAX_RECORD_ENTRIES 100
-  - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상). 재료 선정은 아직 첫 타일로 메뉴 결정
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 79개
+  - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상)
+  - 2단계 재료 선정: 타일 하나 = 재료 하나(read_ingredient: 색상 구간 + 거침칸 + 밝기). 메뉴 후보 = 재료 목록 일치 수 + 기존 온도·노이즈 매핑(aux 0.5). 규칙 대체 확신 = 1·2위 차이 × 1위에 맞은 타일 비율. 외계인은 대표 재료의 색으로 응답. menu는 확정 때만 채움(chatbot.js가 1단계 칸을 칠함)
+  - 파(국물·물) 재료는 네 메뉴 모두에 있고 남(면)은 라멘 고유. 무작위로 눌러도 메뉴가 쏠리지 않게 남 구간을 좁혔다(225~265)
+  - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 92개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 진행 중에는 한국어 설명 없음. 결과·결론 화면과 다음에 만들 인트로·미션은 짧은 문구 허용). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
