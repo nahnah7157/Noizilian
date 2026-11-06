@@ -6,11 +6,15 @@
 import json
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import app
 from services.chatbot_service import (
     AXES,
+    mark_misreads,
+    pick_misreads,
+    record_tags,
     DEFAULT_RELIABILITY,
     ChatbotService,
     color_clarity,
@@ -21,7 +25,8 @@ from services.chatbot_service import (
     stage_distance,
     update_confidence,
 )
-from services.retriever import KnowledgeHit
+from services.generator import DemoGenerator
+from services.retriever import DemoRetriever, KnowledgeHit, load_record_lines
 
 
 def setUpModule():
@@ -492,43 +497,170 @@ class RecordDialogueTest(unittest.TestCase):
         self.assertEqual(pick_diverse(["맞아…?", "맞아…?", "알겠다…!", "알겠다…!"], keys),
                          ["doubt", "thinking", "joy", "convinced"])
 
-    def test_without_key_uses_fallback_lines_and_alien_images(self):
+    def test_without_key_uses_tagged_examples_and_alien_images(self):
         alien = {"who": "alien", "stage": "ingredient", "message": "이거…?", "scores": {a: 0.0 for a in AXES}}
         user = {"who": "user", "stage": "ingredient", "message": "타일", "signal": TILE}
         response = self.record([alien, user, alien])
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(data["source"], "no_key")
-        fallback = CONFIG["record"]["fallback_lines"]
-        # 성공이어도 가운데 외계인 대사 하나는 엉뚱한 요리 방법
-        self.assertEqual([l["text"] for l in data["lines"]],
-                         [fallback["alien"][0], fallback["user"][0], fallback["wrong"][0]])
+        texts = [l["text"] for l in data["lines"]]
+        self.assertEqual(len(set(texts)), 3)
+        known = {(l.stage, l.who): set() for l in load_record_lines()}
+        for line in load_record_lines():
+            known[line.stage, line.who].add(line.text)
+        self.assertIn(texts[0], known["ingredient", "alien"])
+        self.assertIn(texts[1], known["ingredient", "user"])
         self.assertIsNone(data["lines"][1]["image"])
         for line in (data["lines"][0], data["lines"][2]):
             self.assertTrue((Path("public") / line["image"].lstrip("/")).is_file(), line["image"])
 
-    def test_fail_has_more_wrong_methods_than_success(self):
-        alien = {"who": "alien", "stage": "cook", "message": "", "scores": {a: 0.0 for a in AXES}}
-        user = {"who": "user", "stage": "cook", "message": "타일", "signal": TILE}
-        wrong = set(CONFIG["record"]["fallback_lines"]["wrong"])
-        counts = {}
-        for success in (True, False):
-            lines = self.record([alien, user] * 9, success).get_json()["lines"]
-            counts[success] = sum(l["text"] in wrong for l in lines)
-        self.assertEqual(counts[True], 1)
-        self.assertGreater(counts[False], 1)
+    def test_record_lines_file_uses_known_tags(self):
+        lines = load_record_lines()
+        emotions = {None, "doubt", "surprised", "thinking", "convinced", "joy"}
+        for line in lines:
+            with self.subTest(line=line.text):
+                self.assertIn(line.stage, STAGES_ORDER)
+                self.assertIn(line.who, ("alien", "user"))
+                self.assertIn(line.verdict, ("start", "success", "under", "over", "unstable"))
+                self.assertIn(line.emotion, emotions)
+                self.assertNotIn("지직", line.text)
+            if line.misread and line.who == "alien":
+                self.assertTrue(any(o.who == "user" and o.stage == line.stage and o.pair == line.pair for o in lines), line.text)
+        self.assertGreaterEqual(len(lines), 240)
+        self.assertEqual(len({line.text for line in lines}), len(lines))
 
-    def test_wrong_count_controls_injected_methods(self):
-        # 단계별 병렬 호출: wrong=N이면 그 묶음에 엉뚱한 방법 대사를 정확히 N개 넣는다
-        alien = {"who": "alien", "stage": "cook", "message": "", "scores": {a: 0.0 for a in AXES}}
-        user = {"who": "user", "stage": "cook", "message": "타일", "signal": TILE}
-        wrong_set = set(CONFIG["record"]["fallback_lines"]["wrong"])
+    def tags_of(self, verdicts):
+        """외계인 타일이 verdicts 판정을 받은 대화 (지구인·외계인 번갈아)."""
+        tags = []
+        for verdict in verdicts:
+            base = {"stage": "cook", "verdict": verdict, "fit": 0.5, "misread": False, "meaning": "신호"}
+            tags += [{**base, "who": "user", "emotion": None}, {**base, "who": "alien", "emotion": "doubt"}]
+        return tags
+
+    def test_tags_rejudge_tiles_and_follow_screen_expressions(self):
+        game = CONFIG["game"]
+        hot = {"who": "user", "stage": "조리", "message": "", "scores": {"wc": -1.0, "mf": 0, "hs": 0, "hl": 0},
+               "color": {"L": 50, "C": 40, "h": 40}, "texture": {"oct": 1, "freq": 0.6, "pers": 0.5, "lac": 2.0}}
+        alien = {"who": "alien", "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}}
+        first = {"who": "alien", "stage": "재료 준비", "message": "", "scores": {a: 0.0 for a in AXES}}
+        tags = record_tags([first, alien, hot, alien], "ramen", CONFIG)
+        self.assertEqual([(t["verdict"], t["emotion"]) for t in tags],
+                         [("start", "default"), ("start", "default"), ("over", None), ("over", game["verdict_expressions"]["over"])])
+        self.assertLess(tags[2]["fit"], 1)
+        self.assertEqual(tags[3]["fit"], tags[2]["fit"])
+        self.assertIn("노이즈 낮음", tags[2]["meaning"])
+
+    def test_misreads_prefer_off_verdicts_and_fixing_tile_follows(self):
+        tags = self.tags_of(["success", "under", "over", "unstable", "success"])
+        off = {3, 5, 7}
+        self.assertEqual(len(pick_misreads(tags, True)), 1)
+        self.assertLessEqual(pick_misreads(tags, True), off)
+        failed = pick_misreads(tags, False)
+        self.assertIn(len(failed), (2, 3))
+        self.assertLessEqual(failed, off)
+        # 어긋난 타일이 없으면 가운데 외계인 타일 하나
+        self.assertEqual(pick_misreads(self.tags_of(["success"] * 3), False), {3})
+        mark_misreads(tags, {3})
+        self.assertEqual([i for i, t in enumerate(tags) if t["misread"]], [3, 4])
+
+    def test_search_prefers_matching_tags_then_relaxes(self):
+        tag = {"stage": "cook", "who": "alien", "verdict": "over", "emotion": "surprised", "misread": True, "meaning": "신호"}
         with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
-            for n in (0, 2):
-                lines = self.client.post("/api/record", json={
-                    "dish": "ramen", "entries": [alien, user] * 3, "success": True, "wrong": n,
-                }).get_json()["lines"]
-                self.assertEqual(sum(l["text"] in wrong_set for l in lines), n)
+            pool = DemoRetriever().search_lines([tag])[0]
+        self.assertTrue(all(l.stage == "cook" and l.who == "alien" for l in pool))
+        self.assertEqual({(l.verdict, l.misread) for l in pool[:2]}, {("over", True)})
+        self.assertTrue(pool[2].misread)  # 맞는 줄을 다 쓰면 판정 조건부터 풀린다
+        self.assertFalse(pool[-1].misread)
+
+    def test_embeddings_order_lines_within_same_tags(self):
+        tag = {"stage": "cook", "who": "alien", "verdict": "over", "emotion": "surprised", "misread": False, "meaning": "연기"}
+        smoke = "헉…! 연기…! 연기…!"
+
+        class Client:
+            def __init__(self, **_):
+                self.embeddings = self
+
+            def create(self, model, input):
+                data = [[1.0, 0.0] if text in ("연기", smoke) else [0.0, 1.0] for text in input]
+                return SimpleNamespace(data=[SimpleNamespace(embedding=v) for v in data])
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", Client):
+            self.assertEqual(DemoRetriever().search_lines([tag])[0][0].text, smoke)
+
+    def test_openai_gets_tags_and_duplicates_are_replaced(self):
+        calls = []
+
+        class Client:
+            def __init__(self, **_):
+                self.responses = self
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                texts = ["같은 대사", "같은 대사", "다른 대사"]
+                items = [{"tile": i, "who": t["who"], "text": text} for i, (t, text) in enumerate(zip(tags, texts))]
+                return SimpleNamespace(status="completed", output_text=json.dumps({"items": items}))
+
+        tags = self.tags_of(["under"])[:2] + [{**self.tags_of(["under"])[0], "misread": True}]
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [load_record_lines()[:9]] * 3
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", Client):
+            lines, source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, False, "허세")
+        self.assertEqual(source, "openai")
+        self.assertEqual(lines[0], "같은 대사")
+        self.assertEqual(lines[1], pools[1][0].text)
+        self.assertEqual(lines[2], "다른 대사")
+        self.assertEqual(len(calls), 1)  # 겹친 줄을 바꿀 때 다시 호출하지 않는다
+        self.assertIn("허세", calls[0]["instructions"])
+        tile = json.loads(calls[0]["input"])["tiles"][2]
+        self.assertEqual((tile["verdict"], tile["fit"], tile["misread"], tile["meaning"]), ("부족함(덜 됨)", 0.5, True, "신호"))
+        self.assertEqual(len(tile["examples"]), 5)
+
+    def test_shifted_openai_lines_fall_back_to_examples(self):
+        # 말하는 쪽이 밀린 응답을 그대로 쓰면 외계인 말이 지구인 칸에 들어간다
+        tags = self.tags_of(["under"])
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [load_record_lines()[:3]] * 2
+        items = [{"tile": 0, "who": "alien", "text": "음…"}, {"tile": 1, "who": "user", "text": "아니야"}]  # 입력은 user, alien
+
+        class Client:
+            def __init__(self, **_):
+                self.responses = self
+
+            def create(self, **_):
+                return SimpleNamespace(status="completed", output_text=json.dumps({"items": items}))
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", Client):
+            with self.assertLogs("services.generator", "ERROR"):
+                lines, source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, True, "허세")
+        self.assertEqual(source, "openai_failed:RuntimeError")
+        self.assertEqual(lines, [pools[0][0].text, pools[0][1].text])
+
+    def test_openai_failure_falls_back_to_examples(self):
+        tags = self.tags_of(["under"])
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        pools = [load_record_lines()[:3]] * 2
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}), patch("openai.OpenAI", side_effect=RuntimeError):
+            with self.assertLogs("services.generator", "ERROR"):
+                lines, source = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, True, "허세")
+        self.assertEqual(source, "openai_failed:RuntimeError")
+        self.assertEqual(lines, [pools[0][0].text, pools[0][1].text])
+
+    def test_fixing_line_is_the_pair_of_the_misread_line(self):
+        tags = self.tags_of(["under"])[::-1]  # 외계인 → 지구인
+        tags[0]["misread"] = tags[1]["misread"] = True
+        entries = [{"who": t["who"], "stage": "조리", "message": "", "scores": {a: 0.0 for a in AXES}} for t in tags]
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            pools = DemoRetriever().search_lines(tags)
+            lines, _ = DemoGenerator().record_lines(entries, tags, pools, {"name": "라멘"}, False, "허세")
+        by_text = {l.text: l for l in load_record_lines()}
+        self.assertTrue(by_text[lines[0]].pair)
+        self.assertEqual(by_text[lines[0]].pair, by_text[lines[1]].pair)
+
+    def test_wrong_count_controls_misreads(self):
+        tags = self.tags_of(["success"] * 3)
+        for n in (0, 2):
+            self.assertEqual(len(pick_misreads(tags, True, n)), n)
 
     def test_rejects_bad_entries(self):
         for entries in ([], [{"who": "ghost", "stage": "prep"}], [{"who": "alien", "stage": "prep", "scores": {"wc": 2}}],
