@@ -164,6 +164,29 @@ function colorFor(target, tex) {
   return best;
 }
 
+// 결과 화면 글에 쓰는 축 이름의 활용형 [왼쪽 단어, 오른쪽 단어]. 브라우저는 config를 못 받으므로 config.axis_labels와 같이 고칠 것
+const SENSE_WORDS = {
+  wc: [["따뜻하고", "따뜻한"], ["차갑고", "차가운"]],
+  mf: [["강렬하고", "강렬한"], ["섬세하고", "섬세한"]],
+  hs: [["단단하고", "단단한"], ["부드럽고", "부드러운"]],
+  hl: [["무겁고", "무거운"], ["가볍고", "가벼운"]],
+};
+
+/** 가장 뚜렷한 축의 낱말을 count개까지 이어 붙인다 ("따뜻하고 섬세한"). min 이하인 축은 뺀다 */
+function strongestWords(scores, count, min = -1) {
+  const words = AXES.filter((a) => Math.abs(scores[a]) > min)
+    .sort((a, b) => Math.abs(scores[b]) - Math.abs(scores[a]))
+    .slice(0, count)
+    .map((a) => SENSE_WORDS[a][scores[a] < 0 ? 0 : 1]);
+  return words.map((pair, i) => pair[i === words.length - 1 ? 1 : 0]).join(" ");
+}
+
+/** 레코드 타일 하나의 감각 의미 */
+function tileMeaning(scores) {
+  const words = strongestWords(scores, 2, 0.25);
+  return words ? `${words} 신호` : "뚜렷한 쪽이 없는 중립 신호";
+}
+
 /** 점수를 한국어 설명으로 ("차갑고 단단한 신호") */
 function describe(s) {
   const forms = {
@@ -392,7 +415,10 @@ const shell = document.querySelector(".chat-area");
 const sendButton = document.getElementById("send-btn");
 const alienExpr = document.getElementById("alien-expression");
 const resultOverlayEl = document.getElementById("result-overlay");
+const resultContentEl = document.querySelector(".result-content");
 const resultImageEl = document.getElementById("result-image");
+const resultAlienEl = document.getElementById("result-alien");
+const resultNextBtn = document.getElementById("result-next");
 const restartBtn = document.getElementById("restart-btn");
 const signalCenter = document.getElementById("signal-center");
 const thinkEl = document.getElementById("alien-think");
@@ -409,6 +435,11 @@ let currentStageId = null;
 let currentStageIndex = 0;
 let currentDishId = null;
 let resultSuccess = true;
+// 결과 화면 외계인. 성공·실패 전용 그림이 오면 여기만 바꾼다 (발 위치는 style.css의 #result-alien --foot)
+const RESULT_ALIEN = { success: "/assets/images/alien/alien_joy.png", fail: "/assets/images/alien/alien_thinking.png" };
+const RESULT_NEXT = { dish: "record", record: "end" };
+const RESULT_FADE_MS = 200; // style.css의 .result-content > * 전환 시간과 같게
+let resultFadeTimer = 0;
 const stageNames = {};
 // 레코드에 새길 대화: 지구인 {who, stage, message, signal, scores} / 외계인 {who, stage, message, scores}
 let history = [];
@@ -490,12 +521,12 @@ function refreshUndo() {
 function flyTile(draw, startX, startY, cell) {
   return new Promise((resolve) => {
     const fly = document.createElement("canvas");
-    fly.width = fly.height = 80;
+    fly.width = fly.height = 64; // 날아가는 타일 크기 (80 × 0.8)
     draw(fly);
     fly.className = "fly-tile";
     const t0 = cell.getBoundingClientRect(); // 칸 위치 미리 잡기(그 사이 다시 그려도 안전)
-    fly.style.left = `${startX - 40}px`;
-    fly.style.top = `${startY - 40}px`;
+    fly.style.left = `${startX - 32}px`;
+    fly.style.top = `${startY - 32}px`;
     document.body.append(fly);
     let settled = false;
     const finish = () => { if (settled) return; settled = true; fly.remove(); resolve(); };
@@ -503,7 +534,7 @@ function flyTile(draw, startX, startY, cell) {
     setTimeout(() => {
       const dx = (t0.left + t0.width / 2) - startX;
       const dy = (t0.top + t0.height / 2) - startY;
-      fly.style.transform = `translate(${dx}px, ${dy}px) scale(${t0.width / 80})`;
+      fly.style.transform = `translate(${dx}px, ${dy}px) scale(${t0.width / 64})`;
       setTimeout(finish, 900); // transitionend가 안 오면 안전장치
     }, 1200);
   });
@@ -654,16 +685,7 @@ function updateGameState(data) {
     playOffer(finishedIndex, () => {
       renderTileRecord();
       if (currentState?.done) {
-        if (data.result && resultOverlayEl) {
-          if (resultImageEl) resultImageEl.src = data.result.image;
-          resultSuccess = data.result.success;
-          resultOverlayEl.hidden = false;
-          // 플레이팅 색을 결과 요리 그림에도 입힌다 (abnormal이면 파란 피자 같은 색 그대로)
-          const shift = data.result.plating?.hue_shift;
-          resultImageEl?.classList.toggle("tinted", shift != null);
-          resultImageEl?.style.setProperty("--hue-shift", `${shift ?? 0}deg`);
-          showRecord();
-        }
+        if (data.result && resultOverlayEl) showResult(data.result);
         sendButton.disabled = true;
         hideThink();
       } else {
@@ -678,6 +700,59 @@ function updateGameState(data) {
   }
 }
 
+/** 결과 화면을 ① 요리부터 연다. 레코드 대사는 ②에 갈 때쯤 준비되도록 지금 요청한다 */
+function showResult(result) {
+  resultImageEl.src = result.image;
+  resultSuccess = result.success;
+  resultAlienEl.src = RESULT_ALIEN[result.success ? "success" : "fail"];
+  resetResultScreen();
+  resultOverlayEl.hidden = false;
+  // 플레이팅 색을 결과 요리 그림에도 입힌다 (abnormal이면 파란 피자 같은 색 그대로)
+  const shift = result.plating?.hue_shift;
+  resultImageEl.classList.toggle("tinted", shift != null);
+  resultImageEl.style.setProperty("--hue-shift", `${shift ?? 0}deg`);
+  renderConclusion();
+  showRecord();
+}
+
+function resetResultScreen() {
+  clearTimeout(resultFadeTimer);
+  resultFadeTimer = 0;
+  resultContentEl?.classList.remove("fading");
+  if (resultContentEl) resultContentEl.dataset.screen = "dish";
+}
+
+/** 결론 카드의 요리 결과·소통 결과 글 */
+function renderConclusion() {
+  const mine = history.filter((entry) => entry.who === "user");
+  const mean = Object.fromEntries(AXES.map((a) => [a, mine.reduce((sum, e) => sum + e.scores[a], 0) / mine.length]));
+  document.getElementById("card-dish").textContent = resultSuccess
+    ? "외계인이 처음으로 지구 요리를 완성했어요" : "요리는 조금 이상했지만, 신호는 전해졌어요";
+  document.getElementById("card-count").textContent = `${mine.length}번의 신호로 대화했어요`;
+  document.getElementById("card-style").textContent = `당신은 주로 ${strongestWords(mean, 2)} 신호를 보냈어요`;
+}
+
+/** 다음 장으로. 짧게 사라졌다가 바꾸고, 모션 줄이기면 바로 바꾼다. 페이드 중 연타는 무시 */
+function showResultScreen(name) {
+  if (resultFadeTimer) return;
+  const swap = () => {
+    resultFadeTimer = 0;
+    resultContentEl.dataset.screen = name;
+    resultContentEl.classList.remove("fading");
+    recordTip.hidden = true;
+    hovered = -1;
+    fitCanvases(); // 레코드 크기가 장마다 달라서 캔버스 해상도를 다시 맞춘다
+  };
+  if (reduceMotion) return swap();
+  resultContentEl.classList.add("fading");
+  resultFadeTimer = setTimeout(swap, RESULT_FADE_MS);
+}
+
+resultNextBtn?.addEventListener("click", () => {
+  const next = RESULT_NEXT[resultContentEl.dataset.screen];
+  if (next) showResultScreen(next);
+});
+
 function addAlienToHistory(data) {
   if (data.alien?.scores && data.stage) {
     history.push({ who: "alien", stage: data.stage.id, message: data.alien.word || "", scores: data.alien.scores });
@@ -690,6 +765,7 @@ async function startCooking() {
   awaiting = false;
   refreshUndo();
   if (resultOverlayEl) resultOverlayEl.hidden = true;
+  resetResultScreen();
   sendButton.disabled = false;
 
   try {
@@ -785,11 +861,12 @@ undoBtn?.addEventListener("click", () => {
 
 // ── 7. 골든 레코드 ──────────────────────────────────────────
 // 주고받은 타일을 바깥에서 안쪽으로 도는 나선 홈에 순서대로 새긴다.
-// 타일 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사(OpenAI) ② 외계인 대사면 대사와 가장 비슷한 외계인 그림(서버가 임베딩으로 고름)
+// 타일 홈에 마우스를 올리면 ① 타일을 말로 옮긴 대사(OpenAI) ② 외계인 대사면 대사와 가장 비슷한 외계인 그림(서버가 임베딩으로 고름) ③ 타일의 감각 의미
 
 const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
-const PER_TURN = 12; // 한 바퀴에 들어가는 타일 수
+const recordStatus = document.getElementById("record-status");
+const WAITING_LINE = "외계인이 신호를 보내는 중이에요";
 let lines = null; // 타일마다 {text, image} — null이면 아직 만드는 중
 let hovered = -1; // 마우스가 올라간 타일 번호
 let recordToken = 0;
@@ -798,13 +875,15 @@ const RECORD_SIZE = 600; // 레코드 기준 좌표. 실제 캔버스 픽셀은 
 
 function recordGeometry() {
   const S = RECORD_SIZE;
-  return { S, band: S * 0.035, pitch: S * 0.045, outer: S * 0.44, step: (2 * Math.PI) / PER_TURN };
+  // 타일이 많으면 한 바퀴에 더 넣어 최대 3바퀴로 막는다. 안쪽 끝이 가운데 금색 원(반지름 약 S × 0.13) 밖에 남는다
+  const perTurn = Math.max(12, Math.ceil(history.length / 3));
+  return { S, band: S * 0.07, pitch: S * 0.08, outer: S * 0.44, perTurn, step: (2 * Math.PI) / perTurn };
 }
 
 function arcOf(i) {
-  const { band, pitch, outer, step } = recordGeometry();
+  const { band, pitch, outer, perTurn, step } = recordGeometry();
   const start = -Math.PI / 2 + i * step;
-  return { r: outer - (i * pitch) / PER_TURN - band / 2, start, end: start + step - 0.06 };
+  return { r: outer - (i * pitch) / perTurn - band / 2, start, end: start + step - 0.06 };
 }
 
 function drawRecord() {
@@ -830,7 +909,7 @@ function drawRecord() {
 /** 홈을 채울 타일 무늬. 기록칸·말풍선과 같은 seed라 같은 타일로 보인다 */
 function tilePattern(ctx, entry) {
   const tile = document.createElement("canvas");
-  tile.width = tile.height = 48;
+  tile.width = tile.height = 96;
   if (entry.who === "user") {
     renderTile(tile, entry.signal.color, entry.signal.texture, 54321);
   } else {
@@ -848,7 +927,7 @@ function hitTile(event) {
   const y = ((event.clientY - rect.top) * S) / rect.height - S / 2;
   const r = Math.hypot(x, y);
   const angle = Math.atan2(y, x);
-  const reach = band * 0.7; // 홈 반폭(band × 0.5)보다 조금 넉넉하게
+  const reach = band * 0.55; // 홈 반폭(band × 0.5)보다 조금 넉넉하게. 이웃 바퀴(pitch)에 닿지 않을 만큼만
   return history.findIndex((_, i) => {
     const arc = arcOf(i);
     const d = (((angle - arc.start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
@@ -856,16 +935,20 @@ function hitTile(event) {
   });
 }
 
-// 대사는 타일 단위. 외계인 대사에만 그림
+// 대사는 타일 단위. 외계인 대사에만 그림. 대사를 못 받았으면(lines = []) 감각 의미만 보여 준다
 function showTip(event, tile) {
   const item = lines?.[tile];
+  const text = lines ? item?.text : WAITING_LINE;
   const line = document.createElement("q");
-  line.textContent = item?.text ?? "대사를 만드는 중…"; // 아직 안 온 타일
+  line.textContent = text ?? "";
+  const meaning = document.createElement("p");
+  meaning.className = "record-meaning";
+  meaning.textContent = item?.meaning ?? tileMeaning(history[tile].scores); // 서버가 보내면 그 값을 쓴다
   const img = document.createElement("img");
   img.alt = "";
   img.hidden = !item?.image;
   if (item?.image) img.src = item.image;
-  recordTip.replaceChildren(line, img);
+  recordTip.replaceChildren(...(text ? [line] : []), img, meaning);
   recordTip.hidden = false;
 
   // 화면 좌표를 스테이지 좌표로 바꾼다(배율로 나눔). 레코드 기준 위치에 놓는다
@@ -912,6 +995,7 @@ async function showRecord() {
   hovered = -1;
   lines = null;
   fitCanvases(); // 결과 화면이 막 보여서 레코드 크기를 이제 알 수 있다 (drawRecord 포함)
+  recordStatus.hidden = !history.length;
   if (!history.length) return;
   try {
     const response = await fetch("/api/record", {
@@ -928,10 +1012,12 @@ async function showRecord() {
     if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
     if (token !== recordToken) return; // 그 사이 다시 시작함
     lines = data.lines;
+    recordStatus.hidden = true;
     if (data.source !== "openai") console.warn("레코드 대사: 준비된 대사 사용", data.source); // 화면엔 안 보임
   } catch (error) {
     if (token !== recordToken) return;
     lines = [];
+    recordStatus.hidden = true;
     console.warn("레코드 대사를 불러오지 못함", error); // "Failed to fetch" = 서버와 연결이 끊김
   }
 }
@@ -985,6 +1071,9 @@ window.addEventListener("resize", queueFit);
 window.addEventListener("orientationchange", queueFit);
 portrait.addEventListener("change", queueFit);
 fitStage();
+
+// 콘솔에서 성공·실패 결과 화면을 볼 때 쓴다 (게임을 끝낸 뒤 호출하면 타일·대사도 실제 값)
+if (window.noizilien) window.noizilien.showResult = showResult;
 
 // 페이지 시작 시 요리 시작 API 호출
 if (shell) {
