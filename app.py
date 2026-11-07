@@ -218,6 +218,20 @@ def detail():
     return render_template("detail.html", bot=bot_view(load_config()))
 
 
+def intro_view(config: dict) -> dict:
+    """인트로 대화 설정. 그림 경로를 브라우저 주소로 바꾼다."""
+    intro = config.get("intro") or {}
+    url = lambda path: asset_url(path) if path else None
+    pictures = lambda group: {k: url(v) for k, v in (intro.get(group) or {}).items() if not k.startswith("_")}
+    return {
+        "background": url(intro.get("background")),
+        "alien_name": intro.get("alien_name", "외계인"),
+        "player_portraits": pictures("player_portraits"),
+        "alien_portraits": pictures("alien_portraits"),
+        "lines": [{**line, **({"image": url(line["image"])} if line.get("image") else {})} for line in intro.get("lines", [])],
+    }
+
+
 @app.get("/chat")
 def chat():
     username = (request.args.get("username") or "사용자").strip()[:50] or "사용자"
@@ -225,7 +239,8 @@ def chat():
     config = load_config()
     # 왼쪽 아래 ? 도움말: 만들 수 있는 요리들의 성공 그림 (어떤 요리를 만드는 중인지는 알려 주지 않음)
     dishes = [{"name": d["name"], "image": asset_url(d["images"]["success"])} for d in chatbot.dishes_of(config).values()]
-    return render_template("chat.html", bot=bot_view(config), username=username, player=player, dishes=dishes)
+    return render_template("chat.html", bot=bot_view(config), username=username, player=player, dishes=dishes,
+                           intro=intro_view(config))
 
 
 @app.post("/api/chat")

@@ -1085,8 +1085,116 @@ fitStage();
 // 콘솔에서 성공·실패 결과 화면을 볼 때 쓴다 (게임을 끝낸 뒤 호출하면 타일·대사도 실제 값)
 if (window.noizilien) window.noizilien.showResult = showResult;
 
-// 페이지 시작 시 요리 시작 API 호출
+// ── 0. 인트로 ───────────────────────────────────────────────
+// 처음 들어올 때만 주인공과 외계인의 대화 장면을 보여 주고, 끝나거나 SKIP하면 게임을 시작한다. 대사·그림은 config.intro
+const introEl = document.getElementById("intro");
+const INTRO_KEY = "noizilien.introSeen";
+const INTRO_TYPE_MS = 35;
+// 가운데 틀에 보여 줄 타일 4장 (빨강·초록·파랑·노랑 계열, 무늬도 다르게)
+const INTRO_TILES = [
+  { color: { L: 50, C: 60, h: 30 }, texture: { oct: 2, freq: 0.5, pers: 0.5, lac: 2.0 } },
+  { color: { L: 65, C: 55, h: 140 }, texture: { oct: 6, freq: 0.7, pers: 0.6, lac: 2.5 } },
+  { color: { L: 55, C: 45, h: 270 }, texture: { oct: 10, freq: 0.45, pers: 0.7, lac: 3.0 } },
+  { color: { L: 85, C: 70, h: 95 }, texture: { oct: 4, freq: 0.8, pers: 0.5, lac: 2.2 } },
+];
+const INTRO_HIGHLIGHT = 2; // highlight 효과로 강조할 타일
+
+/** 이미 봤으면 false. 저장소가 막혀 있으면 매번 보여 준다 */
+function shouldShowIntro() {
+  if (!introEl) return false;
+  try {
+    return localStorage.getItem(INTRO_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+function playIntro(done) {
+  let data;
+  try {
+    data = JSON.parse(document.getElementById("intro-data").textContent);
+  } catch {
+    return done();
+  }
+  const lines = data.lines || [];
+  if (!lines.length) return done();
+  const q = (selector) => introEl.querySelector(selector);
+  const player = q(".intro-player"), alien = q(".intro-alien"), board = q(".intro-board");
+  const boardImage = q(".intro-board-image"), tiles = [...introEl.querySelectorAll(".intro-tiles canvas")];
+  const nameEl = q(".intro-name"), textEl = q(".intro-text"), srEl = q(".intro-sr");
+  const playerName = shell?.dataset.username || "사용자";
+  player.src = data.player_portraits?.[shell?.dataset.player] || data.player_portraits?.male || "";
+  alien.src = data.alien_portraits?.default || "";
+  if (data.background) q(".intro-content").style.setProperty("--intro-bg", `url("${data.background}")`);
+  tiles.forEach((canvas, i) => renderTile(canvas, INTRO_TILES[i].color, INTRO_TILES[i].texture, 700 + i));
+
+  let index = -1, chars = [], shown = 0, timer = 0, closed = false;
+  const stopTyping = () => { clearInterval(timer); timer = 0; textEl.textContent = chars.join(""); };
+
+  function show(line) {
+    const alienSpeaks = line.speaker === "alien";
+    player.classList.toggle("speaking", !alienSpeaks);
+    alien.classList.toggle("speaking", alienSpeaks);
+    nameEl.textContent = alienSpeaks ? data.alien_name : playerName;
+    if (alienSpeaks && line.expression && data.alien_portraits?.[line.expression]) alien.src = data.alien_portraits[line.expression];
+    if (line.image || line.effect === "tiles" || line.effect === "highlight") board.hidden = false; // 한 번 나오면 끝까지 둔다
+    if (line.image) boardImage.src = line.image;
+    boardImage.hidden = !boardImage.getAttribute("src");
+    q(".intro-tiles").hidden = !boardImage.hidden;
+    tiles.forEach((canvas, i) => canvas.classList.toggle("highlight", line.effect === "highlight" && i === INTRO_HIGHLIGHT));
+    alien.classList.remove("shake", "nod");
+    if (!reduceMotion && (line.effect === "shake" || line.effect === "nod")) {
+      void alien.offsetWidth; // 같은 효과가 이어져도 다시 시작
+      alien.classList.add(line.effect);
+    }
+    chars = Array.from(line.text);
+    srEl.textContent = line.text; // 화면 읽기 프로그램에는 한 줄을 한 번에
+    clearInterval(timer);
+    if (reduceMotion) { stopTyping(); return; }
+    shown = 0;
+    textEl.textContent = "";
+    timer = setInterval(() => {
+      textEl.textContent = chars.slice(0, ++shown).join("");
+      if (shown >= chars.length) stopTyping();
+    }, INTRO_TYPE_MS);
+  }
+
+  // 글자가 나오는 중이면 그 줄을 끝까지, 다 나왔으면 다음 줄, 마지막 뒤면 닫는다
+  function advance() {
+    if (timer) return stopTyping();
+    if (index + 1 >= lines.length) return close();
+    show(lines[++index]);
+  }
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    clearInterval(timer);
+    introEl.hidden = true;
+    document.removeEventListener("keydown", onKey);
+    try { localStorage.setItem(INTRO_KEY, "1"); } catch { /* 저장소가 막혀 있으면 다음에도 보여 준다 */ }
+    done();
+  }
+
+  function onKey(event) {
+    if ((event.key !== " " && event.key !== "Enter") || event.repeat) return;
+    if (event.target.closest?.(".intro-skip")) return; // SKIP에 포커스가 있으면 버튼이 처리한다
+    event.preventDefault();
+    advance();
+  }
+
+  introEl.addEventListener("click", (event) => { if (!event.target.closest(".intro-skip")) advance(); });
+  q(".intro-skip").addEventListener("click", close);
+  document.addEventListener("keydown", onKey);
+  introEl.hidden = false;
+  queueFit(); // 스테이지 배율은 fitStage가 모든 .stage에 맞춘다
+  introEl.focus();
+  advance();
+}
+
+// 페이지 시작: 처음이면 인트로 뒤에, 아니면 바로 요리 시작 API 호출. 다시 하기는 startCooking만 불러서 인트로를 건너뛴다
 if (shell) {
-  startCooking();
+  if (shouldShowIntro()) playIntro(startCooking);
+  else startCooking();
 }
 

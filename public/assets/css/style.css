@@ -449,12 +449,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .alien-expression { display: block; height: 100%; width: auto; transform: translateY(var(--foot, 0)); }
 /* 표정 이미지마다 아래 투명 여백이 달라서, 그만큼 내려 발을 바닥에 맞춘다 */
-.alien-expression[src*="alien_default"], .brand-image[src*="alien_default"] { --foot: 7.1%; }
-.alien-expression[src*="alien_doubt"], .brand-image[src*="alien_doubt"] { --foot: 3.8%; }
-.alien-expression[src*="alien_convinced"], .brand-image[src*="alien_convinced"] { --foot: 4.6%; }
-.alien-expression[src*="alien_surprised"], .brand-image[src*="alien_surprised"] { --foot: 5.3%; }
-.alien-expression[src*="alien_thinking"], .brand-image[src*="alien_thinking"] { --foot: 3.6%; }
-.alien-expression[src*="alien_joy"], .brand-image[src*="alien_joy"] { --foot: 6.4%; }
+.alien-expression[src*="alien_default"], .brand-image[src*="alien_default"], .intro-alien[src*="alien_default"] { --foot: 7.1%; }
+.alien-expression[src*="alien_doubt"], .brand-image[src*="alien_doubt"], .intro-alien[src*="alien_doubt"] { --foot: 3.8%; }
+.alien-expression[src*="alien_convinced"], .brand-image[src*="alien_convinced"], .intro-alien[src*="alien_convinced"] { --foot: 4.6%; }
+.alien-expression[src*="alien_surprised"], .brand-image[src*="alien_surprised"], .intro-alien[src*="alien_surprised"] { --foot: 5.3%; }
+.alien-expression[src*="alien_thinking"], .brand-image[src*="alien_thinking"], .intro-alien[src*="alien_thinking"] { --foot: 3.6%; }
+.alien-expression[src*="alien_joy"], .brand-image[src*="alien_joy"], .intro-alien[src*="alien_joy"] { --foot: 6.4%; }
 
 /* 요리 진행 표시 (위 가운데, 메뉴는 숨김): 4단계 칸 · 재요청 ↻ + 남은 시도. 칸 색 = 서버 판정(verdict).
    왼쪽 위 기록칸·오른쪽 위 타일 패널 사이 */
@@ -710,6 +710,79 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .sense-icon.freq-min, .sense-icon.density-min { width: 10px; height: 10px; }
 .sense-icon.freq-max, .sense-icon.density-max { width: 22px; height: 22px; }
 .sense-bar input { height: 28px; }
+
+/* 인트로 대화 장면: 결과 화면처럼 1920×1080 스테이지. 말하는 쪽은 밝고 조금 크게, 듣는 쪽은 어둡게 */
+.intro-overlay { position: fixed; inset: 0; z-index: 120; background: var(--letterbox); overflow: hidden; outline: none; }
+.intro-overlay[hidden] { display: none; }
+.intro-content { background: #f7f7f7 var(--intro-bg) center / cover no-repeat; cursor: pointer; user-select: none; }
+.intro-portrait {
+  position: absolute;
+  bottom: 300px;
+  height: 640px;
+  transform: translate(-50%, var(--foot, 0%)) scale(.95);
+  transform-origin: bottom center;
+  filter: brightness(.5);
+  transition: filter .25s, transform .25s;
+}
+.intro-player { left: 380px; }
+.intro-alien { left: 1540px; }
+.intro-portrait.speaking { filter: none; transform: translate(-50%, var(--foot, 0%)) scale(1.05); }
+.intro-alien.shake { animation: intro-shake .45s ease-in-out; }
+.intro-alien.nod { animation: intro-nod .5s ease-in-out 2; }
+@keyframes intro-shake { 0%, 100% { translate: 0 0; } 20%, 60% { translate: -18px 0; } 40%, 80% { translate: 18px 0; } }
+@keyframes intro-nod { 0%, 100% { translate: 0 0; } 50% { translate: 0 18px; } }
+.intro-board {
+  position: absolute;
+  left: 50%;
+  top: 110px;
+  box-sizing: border-box;
+  width: 680px;
+  padding: 28px;
+  border: 6px solid #764ba2;
+  border-radius: 24px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+  transform: translateX(-50%);
+}
+.intro-board[hidden], .intro-board > [hidden] { display: none; }
+.intro-board-image { display: block; width: 100%; height: auto; }
+.intro-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.intro-tiles canvas { width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; }
+.intro-tiles canvas.highlight { outline: 6px solid #e06b6b; outline-offset: 4px; animation: intro-pulse 1s ease-in-out infinite; }
+@keyframes intro-pulse { 50% { outline-color: transparent; } }
+.intro-box {
+  position: absolute;
+  left: 80px;
+  right: 80px;
+  top: 790px;
+  box-sizing: border-box;
+  height: 250px;
+  padding: 28px 44px;
+  border-radius: 24px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+}
+.intro-name { margin: 0 0 12px; font-size: 1.9rem; font-weight: 700; color: #764ba2; }
+.intro-text { margin: 0; font-size: 2.3rem; line-height: 1.5; word-break: keep-all; }
+.intro-next { position: absolute; right: 40px; bottom: 26px; color: #764ba2; font-size: 1.6rem; animation: intro-pulse-text 1s ease-in-out infinite; }
+@keyframes intro-pulse-text { 50% { opacity: .2; } }
+.intro-overlay .intro-skip { position: absolute; right: 40px; top: 40px; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .intro-portrait { transition: none; }
+  .intro-alien.shake, .intro-alien.nod, .intro-tiles canvas.highlight, .intro-next { animation: none; }
+}
+@media (orientation: portrait) {
+  .intro-portrait { bottom: calc(28dvh + 8px); height: min(32dvh, 64vw); }
+  .intro-player { left: 26%; }
+  .intro-alien { left: 74%; }
+  .intro-board { top: 9dvh; width: calc(100vw - 32px); padding: 14px; border-width: 4px; border-radius: 16px; }
+  .intro-tiles { gap: 10px; }
+  .intro-box { left: 0; right: 0; top: auto; bottom: 0; height: 28dvh; padding: 16px 20px; border-radius: 18px 18px 0 0; }
+  .intro-name { margin-bottom: 6px; font-size: 1.05rem; }
+  .intro-text { font-size: 1.2rem; }
+  .intro-next { right: 20px; bottom: 14px; font-size: 1rem; }
+  .intro-overlay .intro-skip { right: 16px; top: 16px; }
+}
 
 /* 세로 화면 결과: 배경을 키워 테이블을 아래로 내리고, 음식은 테이블 가운데, 레코드는 위쪽 창 앞 */
 @media (orientation: portrait) {

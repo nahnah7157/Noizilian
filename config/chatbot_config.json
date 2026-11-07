@@ -316,6 +316,73 @@
       ]
     }
   },
+  "intro": {
+    "_note": "게임 시작 전 대화 장면(chatbot.js 0번). 그림 경로만 바꾸면 프로듀서 그림으로 교체된다. 줄마다 speaker(player|alien), text, 선택 expression(외계인 표정)·effect(shake|nod|tiles|highlight)·image(가운데 그림)",
+    "background": "assets/images/background/bg_default.png",
+    "player_portraits": {
+      "male": "assets/images/alien/player_male.png",
+      "female": "assets/images/alien/player_female.png"
+    },
+    "alien_name": "외계인",
+    "alien_portraits": {
+      "default": "assets/images/alien/alien_default.png",
+      "doubt": "assets/images/alien/alien_doubt.png",
+      "convinced": "assets/images/alien/alien_convinced.png",
+      "surprised": "assets/images/alien/alien_surprised.png",
+      "thinking": "assets/images/alien/alien_thinking.png",
+      "joy": "assets/images/alien/alien_joy.png"
+    },
+    "lines": [
+      {
+        "speaker": "player",
+        "text": "요리를 도와달라는 거야?"
+      },
+      {
+        "speaker": "alien",
+        "text": "쀼쀼쀼삣",
+        "expression": "default"
+      },
+      {
+        "speaker": "player",
+        "text": "뭐라는 거야, 하나도 모르겠어"
+      },
+      {
+        "speaker": "alien",
+        "text": "삐쀼빡!",
+        "expression": "surprised",
+        "effect": "shake"
+      },
+      {
+        "speaker": "player",
+        "text": "아 진짜 어떻게 알아들어야 하지…"
+      },
+      {
+        "speaker": "player",
+        "text": "어? 이게 뭐야? 색깔이랑… 뾱뾱이 같은 무늬?",
+        "effect": "tiles"
+      },
+      {
+        "speaker": "alien",
+        "text": "쀼쀼쁏!",
+        "expression": "convinced"
+      },
+      {
+        "speaker": "player",
+        "text": "혹시 이게 얘네들의 언어인가?",
+        "effect": "highlight"
+      },
+      {
+        "speaker": "alien",
+        "text": "쀼삣!",
+        "expression": "joy",
+        "effect": "nod"
+      },
+      {
+        "speaker": "player",
+        "text": "아, 이게 언어인가 봐. 그러면 이걸로 한번 도와줘 볼까?"
+      }
+    ]
+  },
   "sense_rules": {
     "source": "Lucassen, Gevers, Gijsenij (2011), Texture Affects Color Emotion, Color Research & Application 36(6), 426–436",
     "color": "온도·무게·남성적–여성적 인상을 결정한다",
