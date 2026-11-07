@@ -56,6 +56,25 @@
         </div>
       </section>
     </main>
+    <!-- 인트로: 처음 들어올 때만 나오는 대화 장면 (chatbot.js 0번). 대사·그림은 config.intro -->
+    <div id="intro" class="intro-overlay" tabindex="-1" hidden>
+      <div class="intro-content stage">
+        <img class="intro-portrait intro-player" alt="">
+        <img class="intro-portrait intro-alien" alt="">
+        <div class="intro-board" hidden>
+          <img class="intro-board-image" alt="" hidden>
+          <div class="intro-tiles"><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas></div>
+        </div>
+        <section class="intro-box">
+          <p class="intro-name"></p>
+          <p class="intro-text" aria-hidden="true"></p>
+          <p class="intro-sr sr-only" aria-live="polite"></p>
+          <span class="intro-next" aria-hidden="true">▼</span>
+        </section>
+        <button type="button" class="start-button intro-skip">SKIP</button>
+      </div>
+    </div>
+    <script type="application/json" id="intro-data">{{ intro|tojson }}</script>
     <!-- 결과 화면도 같은 스테이지 방식: 배경·음식·레코드가 같은 좌표를 쓴다. 세 장(data-screen): dish 요리 → record 레코드 → end 결론 카드 -->
     <div id="result-overlay" class="result-overlay" hidden>
       <div class="result-content stage" data-screen="dish">
