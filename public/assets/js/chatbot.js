@@ -426,7 +426,6 @@ const thinkTile = thinkEl?.querySelector(".think-tile");
 const thinkDots = thinkEl?.querySelector(".think-dots");
 const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const hudEl = document.getElementById("game-hud");
-const hudRetry = document.getElementById("hud-retry");
 const STEP_IDS = ["select", "prep", "cook", "plate"]; // 서버 응답 stage_name과 같다 (config.game.stage_names)
 let lastGame = null; // 서버가 판정한 요리 게임 상태 (진행 표시·연출용). 판정은 서버가 하고 화면은 그리기만 한다
 
@@ -491,16 +490,18 @@ function showAlien(data) {
   if (data.image) alienExpr.src = data.image;
 }
 
-// 진행 중 외계인 머리 위 말풍선: 내가 방금 보낸 타일(없으면 "…")을 띄우고 깜박인다(속도 = 확신)
+// 진행 중 외계인 머리 위 말풍선: 외계인이 방금 답한 타일을 띄운다.
+// 이번 단계에 내가 아직 안 보냈으면 "…" (단계를 넘긴 답은 서버가 다음 단계 것으로 붙여서 오기 때문)
 function updateThink() {
   if (!thinkEl) return;
   const show = !!(currentState && !currentState.done);
   thinkEl.hidden = !show;
   if (!show) return;
-  signalCenter?.style.setProperty("--think", Math.max(0, Math.min(1, currentState.confidence || 0)).toFixed(3));
-  const mine = history.findLast(e => e.who === "user" && e.stage === currentStageId);
-  if (mine?.signal?.color && thinkTile) {
-    renderTile(thinkTile, mine.signal.color, mine.signal.texture, 54321);
+  const sent = history.some(e => e.who === "user" && e.stage === currentStageId);
+  const reply = sent && history.findLast(e => e.who === "alien" && e.stage === currentStageId);
+  if (reply?.scores && thinkTile) {
+    const texture = textureFor(reply.scores.hs);
+    renderTile(thinkTile, colorFor(reply.scores, texture), texture, 12345);
     thinkTile.hidden = false;
     if (thinkDots) thinkDots.hidden = true;
   } else {
@@ -540,7 +541,7 @@ function flyTile(draw, startX, startY, cell) {
   });
 }
 
-// 단계 끝: 내 타일(말풍선)→윗줄 칸, 외계인 타일(외계인 앞)→아랫줄 칸으로 같이 날아가 고정
+// 단계 끝: 외계인 타일(말풍선)→아랫줄 칸, 내 타일(오른쪽 미리보기)→윗줄 칸으로 같이 날아가 고정
 function playOffer(finishedIndex, afterFill) {
   const stageId = STAGE_IDS[finishedIndex];
   const alienE = history.findLast(e => e.who === "alien" && e.stage === stageId);
@@ -549,6 +550,7 @@ function playOffer(finishedIndex, afterFill) {
   const userCell = cells[finishedIndex], alienCell = cells[4 + finishedIndex]; // 윗줄(나) 0~3, 아랫줄(외계인) 4~7
   const a = alienExpr.getBoundingClientRect();
   const b = (thinkEl && !thinkEl.hidden) ? thinkEl.getBoundingClientRect() : a; // 말풍선 위치(숨겨졌으면 외계인)
+  const p = document.getElementById("preview-tile")?.getBoundingClientRect() ?? a; // 내가 조절하던 미리보기 타일 자리
   hideThink();
   if (reduceMotion || !userCell || !alienCell) { afterFill(); return; }
 
@@ -556,10 +558,10 @@ function playOffer(finishedIndex, afterFill) {
   if (alienE) jobs.push(flyTile((c) => {
     const tx = textureFor(alienE.scores.hs);
     renderTile(c, colorFor(alienE.scores, tx), tx, 12345);
-  }, a.left + a.width / 2, a.top + a.height * 0.6, alienCell));
+  }, b.left + b.width / 2, b.top + b.height / 2, alienCell));
   if (userE?.signal?.color) jobs.push(flyTile((c) =>
     renderTile(c, userE.signal.color, userE.signal.texture, 54321),
-    b.left + b.width / 2, b.top + b.height / 2, userCell));
+    p.left + p.width / 2, p.top + p.height / 2, userCell));
 
   if (!jobs.length) { afterFill(); return; }
   Promise.all(jobs).then(afterFill);
@@ -569,12 +571,12 @@ function playOffer(finishedIndex, afterFill) {
 function gameView(data) {
   return {
     menu: data.menu, stageName: data.stage_name, verdict: data.verdict,
-    retry: !!data.retry, attemptsLeft: data.attempts_left ?? 0, plating: data.plating,
+    plating: data.plating,
     verdicts: data.state?.verdicts || {}, stageIndex: data.stage?.index ?? 0, done: !!data.state?.done,
   };
 }
 
-// 진행 표시 (메뉴는 보여 주지 않는다): 4단계 칸(지금 단계 강조, 끝난 단계는 판정 색) · 재요청이면 ↻ + 남은 시도 점
+// 진행 표시 (메뉴는 보여 주지 않는다): 4단계 칸(지금 단계 강조, 끝난 단계는 판정 색)
 function renderHud(view) {
   if (!hudEl || !view) return;
   const done = { select: view.menu ? "success" : null };
@@ -582,8 +584,6 @@ function renderHud(view) {
   hudEl.querySelectorAll(".hud-steps li").forEach((li, i) => {
     li.className = (i === view.stageIndex && !view.done ? "current" : "") + (done[li.dataset.step] ? ` v-${done[li.dataset.step]}` : "");
   });
-  hudRetry.hidden = !view.retry;
-  if (view.retry) hudRetry.querySelector(".hud-dots").textContent = "●".repeat(view.attemptsLeft);
 }
 
 // 판정 연출: 외계인 반응(움직임). 플레이팅 색(hue_shift)은 결과 화면 요리 그림에 입힌다
