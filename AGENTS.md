@@ -94,7 +94,7 @@
   - 레코드 대사 지시문(generator._lines_with_openai)에 외계인 감정 6가지와 흐름을 넣어, 외계인 대사가 질문만 되지 않게 함
 - 완료 (팀원 feat/turn-flow에서 가져옴): 되돌리기(↺) = 보낸 타일 취소, 말풍선·타일 날아가기 연출 (chatbot.js, style.css, chat.html)
   - ↺: 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, 누르면 마지막 스냅샷으로 복원(선택기는 취소한 타일 값으로). 단계가 바뀌면 비움. 되돌릴 게 없거나 응답 대기 중이거나 done이면 비활성. app.py 안 고침(이전 state 재전송)
-  - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 방금 보낸 타일(없으면 "…"), 확신이 오를수록 빨리 깜박임(--think). 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile)
+  - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 외계인이 방금 답한 타일(이번 단계에 아직 안 보냈으면 "…", 11/9 변경). 꼬리 달린 말풍선, 깜박임은 11/9에 뺌. 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile)
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
 - 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view)
@@ -103,7 +103,7 @@
   - 넘기기: 아무 데나 클릭·터치·스페이스·엔터. 글자가 나오는 중이면 그 줄을 끝까지. effect: shake·nod(외계인), tiles(가운데 틀에 renderTile 타일 4장, 이후 유지), highlight(타일 하나 깜박임). image가 있으면 틀에 그 그림
   - 그림 경로는 config.intro(배경·초상화). 세로 화면은 초상화를 대화창 위에 작게, 대화창은 아래 가득. 모션 줄이기면 글자 한 번에·효과 없음
 - 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶"(③만 "다시 하기"), 짧은 페이드(모션 줄이기면 즉시)
-  - ① 요리(x 600·y 840 그대로) + 외계인(x 1330·발 y 860). 그림 경로는 chatbot.js RESULT_ALIEN 상수. 세로 화면은 ①에서만 요리 28%·외계인 74%
+  - ① 요리는 테이블 가운데(x 960·접시 끝 y 850·높이 300, 외계인보다 앞), 외계인은 테이블 뒤(11/10): 그림 위쪽 --show만 보이게 object-fit으로 잘라 잘린 끝을 테이블 뒤 끝 y 583에 맞춤. 성공 joy(--show .68), 실패 찡그린 default(.74, 입이 테이블 위로 보이게). 그림 경로는 chatbot.js RESULT_ALIEN. 세로 화면은 같은 구도(테이블 뒤 끝 62.4dvh, 외계인 min(85dvh,130vw), 접시가 외계인 아래쪽을 조금 가림). 외계인 그림을 바꾸면 --show를 다시 볼 것
   - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
   - ③ 결론 카드. 레코드는 같은 요소를 CSS로 카드 안에 옮김. 소통 결과는 history로 계산(renderConclusion)
   - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
@@ -117,7 +117,7 @@
   - main(#10 feat/layout, #11 feat/panel-size)과 합침(11/4): 가로 화면은 팀원 배치(외계인 바닥, 타일 패널 오른쪽 위, 결과 화면 스테이지)를 따르고 진행 표시는 위 가운데로. 세로 화면은 외계인을 배경 창에 고정하는 이쪽 배치를 유지(팀원의 세로 결과 화면 규칙은 그대로)
   - 왼쪽 아래 ? (세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
   - 외계인 표정·행동 묘사 alien_message는 decide_turn이 정하고, 규칙 대체 때는 verdict_expressions·config.game.messages. 행동 묘사는 화면에 글로 안 보임
-  - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색·재요청 ↻+남은 시도 점. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
+  - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색. 재요청 ↻+남은 시도 점은 11/9에 뺌. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 완료: 레코드 대사 태그·검색 (data/knowledge/record_lines.md, retriever.search_lines, generator.record_lines, chatbot_service.py record_tags·pick_misreads, config.record.moods) — fallback_lines 삭제
   - 브라우저는 판정을 보내지 않아 서버가 색·질감으로 다시 판정함(record_tags). chatbot.js·app.py 안 고침. 외계인 타일은 앞 지구인 타일의 판정, 단계 첫 타일은 start
   - 오해: pick_misreads 하나가 정함(기준은 위 "진행 중" 참고). 바로 다음 지구인 타일이 바로잡음
