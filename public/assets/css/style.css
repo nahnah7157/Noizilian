@@ -289,11 +289,13 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .result-content > * { transition: none; }
 }
-/* 테이블 윗면은 y 590~910. 접시 아래 끝을 y 840에 놓는다 */
+/* 테이블 윗면은 y 590~910. 요리는 테이블 가운데, 접시 아래 끝을 y 850에 놓고 외계인보다 앞 */
+.result-content[data-screen="dish"] { --dish-h: 300px; }
 #result-image {
   position: absolute;
-  left: 600px;
-  top: 840px;
+  z-index: 1;
+  left: 960px;
+  top: 850px;
   height: calc(var(--dish-h) / var(--fill, 1));
   transform: translate(-50%, calc(-100% + var(--foot, 0%)));
   filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%));
@@ -303,17 +305,22 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 #result-image[src*="omurice"] { --fill: .717; --foot: 8.2%; }
 #result-image[src*="pizza"] { --fill: .954; --foot: .2%; }
 #result-image[src*="ramen"] { --fill: .916; --foot: 2.2%; }
-/* 요리 옆 외계인. 발 끝을 y 860에 놓는다 */
+/* 외계인은 테이블 뒤: 그림 위쪽 --show만 보여 주고(object-fit으로 아래를 잘라냄) 잘린 끝을 테이블 뒤 끝 선(y 583)에 맞춘다.
+   --alien-full = 그림 전체 높이, 표정 그림은 모두 가로:세로 약 0.671. 보이는 비율은 표정이 테이블 위로 보이게 그림마다 */
 #result-alien {
+  --alien-full: 800px;
+  --edge: 583px;
   position: absolute;
-  left: 1330px;
-  top: 860px;
-  height: 600px;
-  transform: translate(-50%, calc(-100% + var(--foot, 0%)));
-  filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%));
+  left: 960px;
+  top: var(--edge);
+  width: calc(var(--alien-full) * .671);
+  height: calc(var(--alien-full) * var(--show, .7));
+  object-fit: cover;
+  object-position: top;
+  transform: translate(-50%, -100%);
 }
-#result-alien[src*="alien_joy"] { --foot: 6.4%; }
-#result-alien[src*="alien_thinking"] { --foot: 3.6%; }
+#result-alien[src*="alien_joy"] { --show: .68; }
+#result-alien[src*="alien_default"] { --show: .74; }
 .result-overlay .start-button { position: absolute; right: 40px; bottom: 30px; margin: 0; }
 .record { margin: 0; }
 /* ② 레코드: 가운데 크게, 아래 끝이 테이블 앞 끝(y 910) */
@@ -771,12 +778,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 @media (orientation: portrait) {
   .result-overlay { --dish-h: min(22dvh, 62vw); }
   .result-content { background-size: auto 115%; background-position: center top; }
-  #result-image { top: 88dvh; }
-  .result-overlay .start-button { right: 24px; bottom: 24px; }
-  /* ① 외계인 자리를 내려고 요리를 왼쪽으로 */
-  .result-content[data-screen="dish"] { --dish-h: min(16dvh, 40vw); }
-  #result-image { left: 28%; }
-  #result-alien { left: 74%; top: 88dvh; height: min(38dvh, 80vw); }
+  /* 접시 아래 끝은 최대 62.4 + 32 × 0.9 = 91.2dvh. 버튼(아래 여백 포함 약 7.2dvh)이 그 아래 공간에 들어가게 화면 높이로 제한 */
+  .result-overlay .start-button {
+    right: 24px;
+    bottom: min(24px, 1.5dvh);
+    padding: min(14px, 1.4dvh) min(40px, 6vw);
+    font-size: min(1.1rem, 2.4dvh);
+  }
+  /* ① 가로와 같은 구도: 요리는 가운데, 외계인은 테이블 뒤. 배경이 높이 115%라 테이블 뒤 끝 = 511/941 × 115dvh ≈ 62.4dvh.
+     크기는 배경 비율(가로 800/1081 × 115dvh ≈ 85dvh)을 따르되 좁은 화면에선 폭으로 제한 */
+  .result-content[data-screen="dish"] { --dish-h: min(32dvh, 49vw); }
+  /* 접시는 가로처럼 외계인 아래쪽을 조금 가린다: 아래 끝 = 테이블 뒤 끝 + 요리 높이 × 0.9 */
+  #result-image { left: 50%; top: calc(62.4dvh + var(--dish-h) * .9); }
+  #result-alien { --alien-full: min(85dvh, 130vw); --edge: 62.4dvh; left: 50%; }
   .record-disc { left: 50%; top: calc(50dvh - min(45vw, 28dvh)); width: min(90vw, 56dvh); height: min(90vw, 56dvh); transform: translateX(-50%); }
   .record-status { top: 3dvh; padding: 8px 16px; font-size: 1rem; }
   .result-card {

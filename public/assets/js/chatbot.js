@@ -434,8 +434,8 @@ let currentStageId = null;
 let currentStageIndex = 0;
 let currentDishId = null;
 let resultSuccess = true;
-// 결과 화면 외계인. 성공·실패 전용 그림이 오면 여기만 바꾼다 (발 위치는 style.css의 #result-alien --foot)
-const RESULT_ALIEN = { success: "/assets/images/alien/alien_joy.png", fail: "/assets/images/alien/alien_thinking.png" };
+// 결과 화면 외계인(테이블 뒤). 성공 = 손 흔드는 joy, 실패 = 찡그린 default. 보이는 비율은 style.css #result-alien --show
+const RESULT_ALIEN = { success: "/assets/images/alien/alien_joy.png", fail: "/assets/images/alien/alien_default.png" };
 const RESULT_NEXT = { dish: "record", record: "end" };
 const RESULT_FADE_MS = 200; // style.css의 .result-content > * 전환 시간과 같게
 let resultFadeTimer = 0;

@@ -103,7 +103,7 @@
   - 넘기기: 아무 데나 클릭·터치·스페이스·엔터. 글자가 나오는 중이면 그 줄을 끝까지. effect: shake·nod(외계인), tiles(가운데 틀에 renderTile 타일 4장, 이후 유지), highlight(타일 하나 깜박임). image가 있으면 틀에 그 그림
   - 그림 경로는 config.intro(배경·초상화). 세로 화면은 초상화를 대화창 위에 작게, 대화창은 아래 가득. 모션 줄이기면 글자 한 번에·효과 없음
 - 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶"(③만 "다시 하기"), 짧은 페이드(모션 줄이기면 즉시)
-  - ① 요리(x 600·y 840 그대로) + 외계인(x 1330·발 y 860). 그림 경로는 chatbot.js RESULT_ALIEN 상수. 세로 화면은 ①에서만 요리 28%·외계인 74%
+  - ① 요리는 테이블 가운데(x 960·접시 끝 y 850·높이 300, 외계인보다 앞), 외계인은 테이블 뒤(11/10): 그림 위쪽 --show만 보이게 object-fit으로 잘라 잘린 끝을 테이블 뒤 끝 y 583에 맞춤. 성공 joy(--show .68), 실패 찡그린 default(.74, 입이 테이블 위로 보이게). 그림 경로는 chatbot.js RESULT_ALIEN. 세로 화면은 같은 구도(테이블 뒤 끝 62.4dvh, 외계인 min(85dvh,130vw), 접시가 외계인 아래쪽을 조금 가림). 외계인 그림을 바꾸면 --show를 다시 볼 것
   - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
   - ③ 결론 카드. 레코드는 같은 요소를 CSS로 카드 안에 옮김. 소통 결과는 history로 계산(renderConclusion)
   - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
