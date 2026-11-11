@@ -389,7 +389,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .send-button { padding-inline: 18px; }
 }
 
-/* Noizilien 학종이 작성기: 감각 막대로 색·질감을 정한다 */
+/* 윅쿡 학종이 작성기: 감각 막대로 색·질감을 정한다 */
 .signal-composer {
   flex: none;
   display: grid;

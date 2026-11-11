@@ -1,12 +1,12 @@
-Noizilien 팀 개발 환경
+윅쿡 팀 개발 환경
 ======================
 새 패키지를 추가하거나 버전을 바꾸면 이 파일과 requirements.txt를 같이 고쳐서 PR로 올려 주세요.
 
 [Python]
 - 버전: 3.12 (.python-version과 같음)
 - 가상환경: Conda
-    conda create -n noizilian python=3.12 pip
-    conda activate noizilian
+    conda create -n oekcook python=3.12 pip
+    conda activate oekcook
     python -m pip install -r requirements.txt
 
 [실행]

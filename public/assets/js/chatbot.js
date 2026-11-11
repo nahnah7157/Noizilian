@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// Noizilien 학종이 작성기 + 채팅
+// 윅쿡 학종이 작성기 + 채팅
 // 1. 색 변환  2. 감각 공식  3. 색·질감 목록과 찾기  4. 타일 그리기  5. 학종이 작성기  6. 채팅
 // ════════════════════════════════════════════════════════════
 
@@ -388,7 +388,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
     current = { color, texture, seed, scores, density: currentDensity, hsv, description: describe(scores) };
   }
 
-  window.noizilien = {
+  window.oekcook = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
     redraw: () => { renderColorCanvas(); update(); }, // 캔버스 해상도를 바꾼 뒤 다시 그리기 (8번)
@@ -800,7 +800,7 @@ restartBtn?.addEventListener("click", () => {
 
 // 보내기(✓): 색·질감 타일만 보낸다. 글은 고정 문자열 "타일" (app.py는 그대로)
 sendButton.addEventListener("click", async () => {
-  const signal = window.noizilien?.getSignal() ?? null;
+  const signal = window.oekcook?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
 
   // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
@@ -860,7 +860,7 @@ undoBtn?.addEventListener("click", () => {
   lastGame = snap.game;
   renderHud(lastGame);
   renderVerdict(lastGame, false);
-  window.noizilien?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
+  window.oekcook?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
   renderTileRecord();
   updateThink();
   refreshUndo();
@@ -1065,7 +1065,7 @@ function fitCanvases() {
   // shortcut: 색 네모·미리보기는 픽셀마다 다시 계산하므로 너비 1024·256px에서 멈춘다. 끌 때 느리지 않으면 더 키워도 된다
   const color = fitCanvas(document.getElementById("color-canvas"), stageScale, 1024);
   const tile = fitCanvas(document.getElementById("preview-tile"), stageScale, 256);
-  if (color || tile) window.noizilien?.redraw();
+  if (color || tile) window.oekcook?.redraw();
   if (recordCanvas && !resultOverlayEl?.hidden) {
     fitCanvas(recordCanvas, stageScale, 1600);
     drawRecord();
@@ -1084,12 +1084,12 @@ portrait.addEventListener("change", queueFit);
 fitStage();
 
 // 콘솔에서 성공·실패 결과 화면을 볼 때 쓴다 (게임을 끝낸 뒤 호출하면 타일·대사도 실제 값)
-if (window.noizilien) window.noizilien.showResult = showResult;
+if (window.oekcook) window.oekcook.showResult = showResult;
 
 // ── 0. 인트로 ───────────────────────────────────────────────
 // 처음 들어올 때만 주인공과 외계인의 대화 장면을 보여 주고, 끝나거나 SKIP하면 게임을 시작한다. 대사·그림은 config.intro
 const introEl = document.getElementById("intro");
-const INTRO_KEY = "noizilien.introSeen";
+const INTRO_KEY = "oekcook.introSeen";
 const INTRO_TYPE_MS = 35;
 // 가운데 틀에 보여 줄 타일 4장 (빨강·초록·파랑·노랑 계열, 무늬도 다르게)
 const INTRO_TILES = [

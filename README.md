@@ -1,4 +1,4 @@
-# NOIZILIEN (노이질리언)
+# 윅쿡 (Oek-Cook)
 
 보이저호의 골든 레코드에서 지구 요리를 보고 따라 만들다 실패한 외계인 요리사를 돕는 캐릭터 챗봇 게임입니다.
 외계인은 지구 말을 모릅니다. 그래서 **말 대신 색과 질감이 담긴 타일**을 주고받으며 재료 선정부터 플레이팅까지 요리를 완성합니다.
@@ -125,8 +125,8 @@ API 계약(요청·응답 필드)은 [AGENTS.md의 "코드 구조에서 지킬 �
 ## 실행 및 테스트
 
 ```bash
-conda create -n noizilian python=3.12 pip
-conda activate noizilian
+conda create -n oekcook python=3.12 pip
+conda activate oekcook
 python -m pip install -r requirements.txt
 python app.py            # → http://localhost:5000
 ```

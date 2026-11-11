@@ -1,4 +1,4 @@
-# 프로젝트: Noizilien
+# 프로젝트: 윅쿡 (Oek-Cook, 이전 이름 Noizilien)
 
 골든 레코드에서 지구 요리를 보고 따라 만들다 실패한 외계인을, 말 대신 색·질감 타일을 주고받으며 도와 요리를 완성하는 캐릭터 챗봇입니다.
 
@@ -91,7 +91,7 @@
     - 기록칸은 윗줄 나, 아랫줄 외계인
     - 캔버스 실제 픽셀 = 보이는 크기 × 배율 × devicePixelRatio (색 네모 최대 1024, 미리보기 256, 레코드 1600). 레코드는 기준 좌표 600 고정(RECORD_SIZE)
     - 결과 화면도 같은 --stage-scale을 씀. record-tip 위치는 showTip이 화면 좌표를 배율로 나눠 계산하고 스테이지 안으로 제한
-    - 기록 박스는 칸 90px·아이콘 90px, 제목 "Noizilien" 없애고 그 자리=왼쪽 위
+    - 기록 박스는 칸 90px·아이콘 90px, 제목 글자 없애고 그 자리=왼쪽 위
   - 레코드 대사 지시문(generator._lines_with_openai)에 외계인 감정 6가지와 흐름을 넣어, 외계인 대사가 질문만 되지 않게 함
 - 완료 (팀원 feat/turn-flow에서 가져옴): 되돌리기(↺) = 보낸 타일 취소, 말풍선·타일 날아가기 연출 (chatbot.js, style.css, chat.html)
   - ↺: 보내기 직전 스냅샷(state·history 길이·단계·보낸 타일 값)을 undoStack에 쌓고, 누르면 마지막 스냅샷으로 복원(선택기는 취소한 타일 값으로). 단계가 바뀌면 비움. 되돌릴 게 없거나 응답 대기 중이거나 done이면 비활성. app.py 안 고침(이전 state 재전송)
@@ -99,7 +99,7 @@
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
 - 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view)
-  - 처음 들어올 때만(localStorage noizilien.introSeen, 막혀 있으면 매번). 다 보거나 SKIP하면 그때 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
+  - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 SKIP하면 그때 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
   - 1920×1080 스테이지: 왼쪽 주인공(이름 화면에서 고른 player_male/female), 오른쪽 외계인(줄마다 expression), 하단 대화창(이름 + 한 글자씩), 오른쪽 위 SKIP. 말하는 쪽 밝게·1.05배, 듣는 쪽 어둡게
   - 넘기기: 아무 데나 클릭·터치·스페이스·엔터. 글자가 나오는 중이면 그 줄을 끝까지. effect: shake·nod(외계인), tiles(가운데 틀에 renderTile 타일 4장, 이후 유지), highlight(타일 하나 깜박임). image가 있으면 틀에 그 그림
   - 그림 경로는 config.intro(배경·초상화). 세로 화면은 초상화를 대화창 위에 작게, 대화창은 아래 가득. 모션 줄이기면 글자 한 번에·효과 없음
@@ -108,7 +108,7 @@
   - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
   - ③ 결론 카드. 레코드는 같은 요소를 CSS로 카드 안에 옮김. 소통 결과는 history로 계산(renderConclusion)
   - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
-  - 콘솔 시험: 게임을 끝낸 뒤 noizilien.showResult({success, image, plating:{hue_shift}})
+  - 콘솔 시험: 게임을 끝낸 뒤 oekcook.showResult({success, image, plating:{hue_shift}})
 - 완료: 시작 화면 외계인 (index.html, style.css): 표정 6장을 1.5초마다 바꿈. 불러온 그림만 돌리고, 발 위치는 --foot로 고정. 모션 줄이기면 멈춤
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
 - 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
