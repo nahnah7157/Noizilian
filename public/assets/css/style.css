@@ -82,14 +82,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .landing-page { background-image: url("../images/title/hero_portrait.png"); }
   .landing-page .landing-start { left: 50%; bottom: 6dvh; padding: min(18px, 2dvh) min(64px, 16vw); font-size: clamp(1.3rem, 3dvh, 2rem); }
 }
-/* 창 비율이 그림과 많이 다르면(세로 그림 9:16보다 넓은 세로 창, 16:10보다 좁은 가로 창) cover로 채우면 로고가 잘린다.
+/* 창 비율이 그림과 많이 다르면(세로 창 전부, 16:10보다 좁은 가로 창) cover로 채우면 로고가 잘린다.
    그때는 그림 전체를 보이게(contain) 두고, 남는 곳은 같은 그림을 흐리게 깔아 채운다. ::before = 흐린 바탕, ::after = 선명한 그림 */
 .landing-page { --hero: url("../images/title/hero_landscape.png"); position: relative; isolation: isolate; background: var(--navy); }
 .landing-page::before, .landing-page::after { content: ""; position: fixed; z-index: -1; pointer-events: none; }
 .landing-page::before { inset: -40px; background: var(--hero) center / cover no-repeat; filter: blur(28px) brightness(.85); }
 .landing-page::after { inset: 0; background: var(--hero) center / cover no-repeat; }
 @media (orientation: portrait) { .landing-page { --hero: url("../images/title/hero_portrait.png"); } }
-@media (orientation: portrait) and (min-aspect-ratio: 3/5), (orientation: landscape) and (max-aspect-ratio: 16/10) {
+@media (orientation: portrait), (orientation: landscape) and (max-aspect-ratio: 16/10) {
   .landing-page::after { background-size: contain; }
 }
 @media (orientation: landscape) and (max-aspect-ratio: 16/10) {
