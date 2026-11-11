@@ -26,7 +26,9 @@ from services.chatbot_service import (
     scores_of,
     should_advance,
     stage_distance,
+    turn_expression,
     update_confidence,
+    TURN_EXPRESSIONS,
 )
 from services.generator import DemoGenerator
 from services.retriever import DemoRetriever, KnowledgeHit, load_record_lines
@@ -422,7 +424,8 @@ class CookingFlowTest(unittest.TestCase):
         self.assertTrue(data["stage"]["advanced"])
         self.assertEqual(state["stage_index"], 2)
         self.assertEqual(state["verdicts"]["prep"]["verdict"], data["verdict"])
-        face = GAME["verdict_expressions"][data["verdict"]]  # 넘어갈 때도 판정 표정 (화면이 0.5초 뒤 joy로 바꾼다)
+        face = data["alien"]["expression"]  # 넘어갈 때도 확신 표정 (화면은 convinced → joy로 바꾼다)
+        self.assertIn(face, TURN_EXPRESSIONS)
         self.assertEqual(data["image"], "/" + CONFIG["expressions"][face]["image"])
 
     def test_full_game_ends_with_dish_image(self):
@@ -1241,8 +1244,8 @@ def fake_openai(answer=None, error=None, calls=None):
 
 class DecideTurnTest(unittest.TestCase):
     """AI 경로. OpenAI는 전부 mock이다."""
-    STAY = {"confidence": 0.2, "advance": False, "expression": "doubt", "action": "외계인이 재료를 다시 살핍니다."}
-    GO = {"confidence": 0.9, "advance": True, "expression": "convinced", "action": "외계인이 자신만만하게 칼을 듭니다."}
+    STAY = {"confidence": 0.2, "advance": False, "action": "외계인이 재료를 다시 살핍니다."}
+    GO = {"confidence": 0.9, "advance": True, "action": "외계인이 자신만만하게 칼을 듭니다."}
 
     def setUp(self):
         self.service = ChatbotService()
@@ -1264,7 +1267,7 @@ class DecideTurnTest(unittest.TestCase):
         self.assertEqual(data["state"]["verdicts"]["prep"]["verdict"], "over")
 
     def test_ai_keeps_asking_even_when_the_rule_would_stop(self):
-        data = self.turn(game_tile("pizza", "prep", "success"), {**self.STAY, "expression": "convinced"})
+        data = self.turn(game_tile("pizza", "prep", "success"), self.STAY)
         self.assertFalse(data["stage"]["advanced"])
         self.assertTrue(data["retry"])
         self.assertEqual(data["state"]["exchange_count"], 1)
@@ -1300,12 +1303,22 @@ class DecideTurnTest(unittest.TestCase):
         self.assertEqual((data["stage"]["advanced"], data["stage"]["reason"]), (True, "max_reached"))
         self.assertEqual(state["verdicts"]["prep"]["verdict"], "under")  # 자동 성공 아님
 
-    def test_expression_must_follow_the_verdict_or_be_confident(self):
-        tile = game_tile("pizza", "prep", "over")
-        data = self.turn(tile, {**self.STAY, "expression": "joy"})
-        self.assertEqual(data["alien"]["expression"], GAME["verdict_expressions"]["over"])  # 어기면 규칙 표정
-        data = self.turn(tile, {**self.STAY, "expression": "convinced"})
-        self.assertEqual(data["alien"]["expression"], "convinced")  # 틀렸지만 자신만만은 허용
+    def test_expression_follows_the_ai_confidence(self):
+        # 같은 타일(쌓인 신호 변화 없음): 확신이 오르면 convinced, 내리면 thinking, 그대로면 doubt
+        tile, state, faces = game_tile("pizza", "prep", "over"), self.state, []
+        for confidence in (0.2, 0.05, 0.05):
+            data = self.turn(tile, {**self.STAY, "confidence": confidence}, state=state)
+            state = data["state"]
+            faces.append(data["alien"]["expression"])
+        self.assertEqual(faces, ["convinced", "thinking", "doubt"])
+        self.assertEqual(state["last_expression"], "doubt")
+
+    def test_turn_expression_rule(self):
+        self.assertEqual(turn_expression(None, 0.5, 0, None, GAME), "convinced")  # 첫 타일은 neutral과 비교
+        self.assertEqual(turn_expression(0.5, 0.5, 0, None, GAME), "doubt")
+        self.assertEqual(turn_expression(0.5, 0.2, 0, None, GAME), "thinking")
+        self.assertEqual(turn_expression(0.5, 0.5, 0.5, None, GAME), "surprised")
+        self.assertEqual(turn_expression(0.5, 0.5, 0.5, "surprised", GAME), "doubt")  # 직전 표정은 연달아 안 나옴
 
     def test_blank_action_uses_prepared_text(self):
         data = self.turn(game_tile("pizza", "prep", "over"), {**self.STAY, "action": "  "})
@@ -1319,7 +1332,7 @@ class DecideTurnTest(unittest.TestCase):
         call = calls[-1]
         self.assertEqual(call["client"], {"timeout": 8.0, "max_retries": 0})
         self.assertLessEqual(call["max_output_tokens"], 200)
-        self.assertEqual(set(call["text"]["format"]["schema"]["properties"]), {"confidence", "advance", "expression", "action"})
+        self.assertEqual(set(call["text"]["format"]["schema"]["properties"]), {"confidence", "advance", "action"})
         view = json.loads(call["input"])
         self.assertEqual((view["attempt"], view["attempts_left"], view["previous_confidence"]), (2, 8, 0.2))
         self.assertLess(view["patience"], 1)
@@ -1368,6 +1381,11 @@ class DecideTurnTest(unittest.TestCase):
             with self.subTest(bad=bad):
                 r = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza"),
                                                    "state": {**state, "overconfident_advances": bad}})
+                self.assertEqual(r.get_json()["error"]["code"], "invalid_state")
+        for bad in ("joy", 1, ""):
+            with self.subTest(last_expression=bad):
+                r = client.post("/api/chat", json={"message": "타일", "signal": game_tile("pizza"),
+                                                   "state": {**state, "last_expression": bad}})
                 self.assertEqual(r.get_json()["error"]["code"], "invalid_state")
 
     def test_ingredient_stage_asks_ai_with_candidates(self):
@@ -1435,7 +1453,7 @@ class RecordCallsTest(unittest.TestCase):
 
 class CallLimitTest(unittest.TestCase):
     """호출 횟수 제한. 넘으면 오류 없이 규칙 대체. OpenAI는 mock."""
-    ANSWER = {"confidence": 0.2, "advance": False, "expression": "doubt", "action": "외계인이 재료를 살핍니다."}
+    ANSWER = {"confidence": 0.2, "advance": False, "action": "외계인이 재료를 살핍니다."}
 
     def setUp(self):
         import app as app_module

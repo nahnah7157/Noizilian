@@ -505,6 +505,14 @@
       "over": "surprised",
       "unstable": "thinking"
     },
+    "turn_expressions": {
+      "_note": "[앱 설정] 진행 중 표정 = 확신이 움직인 정도. 오름폭/rise → convinced, 내림폭/drop → thinking, 쌓인 신호 변화(change)/surprise → surprised, 그대로면 doubt(steady). 가장 센 표정을 고르되 직전 표정은 빼서 번갈아 나온다. 단계 첫 타일은 neutral과 비교. 값은 무작위 입력에서 네 표정이 비슷하게 나오도록 맞춤",
+      "rise": 0.02,
+      "drop": 0.15,
+      "surprise": 0.15,
+      "neutral": 0.1,
+      "steady": 0.5
+    },
     "overconfident": {
       "_note": "자신만만한 오답 제한. AI가 쌓인 적합도 fit_below 미만에서 넘어가면 한 번으로 세고, 한 판에 max_per_game번까지만 허용한다. 재료 단계는 적합도의 뜻이 달라서 세지 않고, 10번째 강제 진행도 세지 않는다",
       "fit_below": 0.3,

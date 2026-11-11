@@ -521,6 +521,19 @@ def alien_confidence(previous: float | None, fit: float, steady: float, game: di
     return round(max(0.0, min(1.0, value)), 4)
 
 
+TURN_EXPRESSIONS = ("doubt", "thinking", "surprised", "convinced")  # 동점이면 앞 표정 (확신이 그대로면 doubt ↔ thinking)
+
+
+def turn_expression(previous: float | None, confidence: float, change: float, last: str | None, game: dict) -> str:
+    """진행 중 표정 = 확신이 움직인 정도(config.game.turn_expressions). 오르면 convinced, 내리면 thinking,
+    쌓인 신호가 크게 바뀌면 surprised, 그대로면 doubt. 직전 표정(last)은 빼서 같은 표정이 연달아 나오지 않는다."""
+    rule = game["turn_expressions"]
+    delta = confidence - (rule["neutral"] if previous is None else previous)
+    strength = {"doubt": rule["steady"], "surprised": change / rule["surprise"],
+                "thinking": -delta / rule["drop"], "convinced": delta / rule["rise"]}
+    return max((k for k in TURN_EXPRESSIONS if k != last), key=strength.get)
+
+
 def stop_threshold(attempts: int, game: dict) -> float:
     """이 시도에서 멈출 확신 기준. 시도가 늘수록 낮아져서 대화가 끝없이 길어지지 않는다."""
     steps = game["confidence"]["thresholds"]
@@ -730,7 +743,7 @@ class ChatbotService:
         alien = self.generator.first_guess(stage, dish, character)
         state = {"dish": dish_id, "menu": None, "stage_index": 0, "exchange_count": 0, "confidence": 0.0,
                  "alien_scores": alien["scores"], "finals": {}, "verdicts": {}, "stage_metrics": [], "ingredients": [],
-                 "overconfident_advances": 0, "done": False}
+                 "overconfident_advances": 0, "last_expression": None, "done": False}
         return {
             "reply": alien["reply"],
             "image": self.image_selector.select(alien["reply"], character, stage=stage, expression=alien["expression"]),
@@ -811,9 +824,7 @@ class ChatbotService:
         rule_advance = rule_confidence >= stop_threshold(attempts, game)
         limit = self._max_attempts(game, stage["id"])
         final_turn = attempts >= limit
-        expression = (("convinced" if rule_confidence >= 0.4 else "doubt") if stage["id"] == "ingredient"
-                      else game["verdict_expressions"][verdict])
-        rule = {"confidence": rule_confidence, "advance": rule_advance, "expression": expression,
+        rule = {"confidence": rule_confidence, "advance": rule_advance,
                 "action": self.generator.act(stage, dish, character, verdict, not (rule_advance or final_turn))}
         view = {
             "stage": stage["name"],
@@ -846,6 +857,10 @@ class ChatbotService:
             else:
                 new_state["overconfident_advances"] = state["overconfident_advances"] + 1
         confidence = decision["confidence"]
+        # 표정은 AI든 규칙이든 실제로 쓰는 확신이 움직인 정도로 정한다
+        expression = turn_expression(state["confidence"] if attempts > 1 else None, confidence,
+                                     view["understanding"]["change"], state["last_expression"], game)
+        new_state["last_expression"] = expression
         advance = decision["advance"] or final_turn  # 10번째는 AI 판단과 무관하게 넘어간다. 결과는 쌓인 신호로 판정
         reason = None if not advance else "confident" if decision["advance"] else "max_reached"
         if os.getenv("GAME_LOG") == "1":  # 측정용. 기본 로그 수준에서도 보이게 warning으로 남긴다
@@ -874,16 +889,16 @@ class ChatbotService:
                 current_index = index + 1
                 current = stages[current_index]
                 alien = {**self.generator.first_guess(current, dish, character, previous=stage, reason=reason),
-                         "expression": decision["expression"]}
+                         "expression": expression}
                 new_state.update(stage_index=current_index, exchange_count=0, confidence=0.0,
-                                 alien_scores=alien["scores"])
+                                 alien_scores=alien["scores"], last_expression=None)
         else:
             current, current_index = stage, index
             # 외계인 타일 = 지금까지 쌓인 이해. 단계의 첫 타일은 받은 그대로에서 시작한다
             understood = state["alien_scores"] if attempts > 1 else signal["scores"]
             alien = self.generator.respond_to_tile(stage, dish, character, signal, understood,
                                                    update, knowledge, username, user_message)
-            alien = {**alien, "expression": decision["expression"]}
+            alien = {**alien, "expression": expression}
             if stage["id"] == "ingredient":  # 쌓인 재료 중 대표 재료의 색으로 응답한다
                 alien = {**alien, "scores": ingredient_scores(ingredient_ids, tentative, game) or alien["scores"]}
             new_state["stage_metrics"].append(metrics)

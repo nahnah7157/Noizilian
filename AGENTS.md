@@ -4,10 +4,10 @@
 
 ## 컨셉 (기준: config/chatbot_config.json)
 - 요리 4단계: 재료 준비 → 손질 → 조리 → 플레이팅. 한 단계 = 한 턴
-- 한 턴 안에서 타일을 여러 번 주고받는다. 외계인의 확신이 기준(0.8)을 넘거나 최대 횟수(임시 4번)에 닿으면 다음 단계로
+- 한 턴 안에서 타일을 여러 번 주고받는다. 외계인(AI, 실패 시 규칙)이 확신하면 다음 단계로. 단계마다 최대 10번(config.game.max_attempts), 10번째는 판단과 무관하게 넘어가고 결과는 쌓인 신호로 판정(자동 성공 아님)
 - 외계인은 매번 타일 + 표정으로 응답한다
 - 네 단계에서 확정된 타일이 요리 목표와 가까우면 성공, 멀면 실패 이미지 (햄버거·오므라이스·피자·라멘)
-- 외계인 표정 이미지: alien_default·doubt·convinced·surprised·thinking·joy (config.expressions, 고르는 규칙은 generator.py). 단계가 끝나면 판정과 상관없이(잘못 알아들음·10번째·마지막 단계 포함) convinced를 0.5초 보여 준 뒤 joy로 바뀌고 다음 응답까지 유지, 마지막 단계는 joy로 바뀐 뒤 결과 화면(chatbot.js updateGameState, 11/11). 진행 중 턴은 판정 표정 그대로. convinced·joy는 chat.html에서 preload. 배경: images/background/bg_* (단계별, style.css body[data-stage])
+- 외계인 표정 이미지: alien_default·doubt·convinced·surprised·thinking·joy (config.expressions). 게임 진행 중 표정은 chatbot_service.turn_expression이 확신 변화로 고름(아래 "확신 표정"). 단계가 끝나면 판정과 상관없이(잘못 알아들음·10번째·마지막 단계 포함) convinced를 0.5초 보여 준 뒤 joy로 바뀌고 다음 응답까지 유지, 마지막 단계는 joy로 바뀐 뒤 결과 화면(chatbot.js updateGameState, 11/11). 진행 중 턴은 확신 표정 그대로. convinced·joy는 chat.html에서 preload. 배경: images/background/bg_* (단계별, style.css body[data-stage])
 - 감각 규칙: Lucassen, Gevers, Gijsenij (2011) "Texture Affects Color Emotion" Table III. 근거는 data/knowledge/paper_rules.md의 R1~R15
 - 색 언어 [앱 설정, 논문 근거 아님]: 색상 7구간(빨주노초파남보)은 종류·방법, 밝기·무늬는 정도. 뜻은 cooking_rules.md '색 언어', 숫자는 config.game.hue_zones·rules
 - 쌓이는 이해: 외계인은 타일 하나를 고르지 않고 받은 타일이 쌓여 이해가 만들어진다(chatbot_service.stage_signal). 단계 결과는 쌓인 신호를 규칙으로 판정
@@ -40,7 +40,7 @@
 - API 계약 (바꾸면 app.py, chatbot.js, 테스트를 같이 고친다)
   - POST /api/start {dish?} → {reply, image, sources, alien, state, stage, dish, result}
   - POST /api/chat {message, username, signal, state?} → 위와 같음. state가 없으면 기존 대화 흐름
-  - alien = {scores, word, expression, reading}, state = {dish, menu, stage_index, exchange_count, confidence, alien_scores, finals, verdicts, stage_metrics, done}
+  - alien = {scores, word, expression, reading}, state = {dish, menu, stage_index, exchange_count, confidence, alien_scores, finals, verdicts, stage_metrics, last_expression, done}
   - 요리 게임 필드(추가만, 기존 필드 유지): menu, menu_image, stage_number(1~4), stage_name(select/prep/cook/plate), verdict(success/under/over/unstable), confidence, retry, attempts_left, alien_message, plating{hue, abnormal, hue_shift}, metrics(개발 확인용). stage_number·stage_name·verdict는 "방금 판정한 단계", stage 객체는 "지금 진행할 단계". result에 menu·verdicts·plating 추가
   - 단계 id(ingredient/prep/cook/plating)는 화면 배경·기록칸·레코드가 쓰므로 바꾸지 않는다. 화면용 이름은 config.game.stage_names
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
@@ -52,7 +52,8 @@
   - 성공 기준 후보 config.game.success(A·B·C), 지금 C(평균 적합도 0.8 + 플레이팅 정상)
   - 2단계 재료 선정: 타일 하나 = 재료 하나(read_ingredient: 색상 구간 + 거침칸 + 밝기). 메뉴 후보 = 재료 목록 일치 수 + 기존 온도·노이즈 매핑(aux 0.5). 규칙 대체 확신 = 1·2위 차이 × 1위에 맞은 타일 비율. 외계인은 대표 재료의 색으로 응답. menu는 확정 때만 채움(chatbot.js가 1단계 칸을 칠함)
   - 파(국물·물) 재료는 네 메뉴 모두에 있고 남(면)은 라멘 고유. 무작위로 눌러도 메뉴가 쏠리지 않게 남 구간을 좁혔다(225~265)
-  - 3단계 AI 판단: generator.decide_turn이 타일마다 한 번 {confidence, advance, expression, action}을 정함(8초, 재시도 없음, max_output_tokens 200). 실패·키 없음·config.game.llm_decide 꺼짐이면 규칙 대체. 응답 decision_source. 10번째는 final=true로 묻고 답과 무관하게 넘어감. 단계 결과는 항상 쌓인 신호를 규칙으로 판정. 표정은 판정 표정 또는 convinced만 허용
+  - 3단계 AI 판단: generator.decide_turn이 타일마다 한 번 {confidence, advance, action}을 정함(8초, 재시도 없음, max_output_tokens 200). 실패·키 없음·config.game.llm_decide 꺼짐이면 규칙 대체. 응답 decision_source. 10번째는 final=true로 묻고 답과 무관하게 넘어감. 단계 결과는 항상 쌓인 신호를 규칙으로 판정
+  - 확신 표정(11/11): AI는 표정을 고르지 않고, 서버가 실제로 쓴 확신(AI 또는 규칙)으로 정함(turn_expression, config.game.turn_expressions). 확신 오름 → convinced, 내림 → thinking, 쌓인 신호 변화(change) 큼 → surprised, 그대로 → doubt 중 가장 센 것. 직전 표정(state.last_expression, 단계가 바뀌면 null)은 빼서 연달아 안 나옴. 동점이면 doubt·thinking·surprised·convinced 순. 무작위 400판 측정: doubt 27·thinking 26·surprised 25·convinced 22%, 연속 0번(단, 재료 단계는 convinced 47%, 나머지 단계는 convinced 13~16%). verdict_expressions는 레코드 태그 대체용으로만 남음
   - 자신만만한 오답 제한: AI가 쌓인 적합도 0.3 미만에서 넘어가면 state.overconfident_advances에 세고 한 판 2번까지. 다 쓰면 서버가 advance=false, decision_source=openai_capped (config.game.overconfident). 재료 단계와 10번째는 안 셈
   - 레코드: 태그는 쌓인 신호 기준, 표정·그림은 게임 때 표정(history의 expression, 없으면 규칙). 오해 = 단계가 끝날 때 쌓인 판정이 success가 아님, 어긋난 단계가 없으면 중간에 어긋났던 첫 순간(pick_misreads). 타일 48개 넘으면 최근 48개만 GPT, 앞쪽은 예시 대사
   - 테스트는 tests/test_smoke.py 맨 앞에서 OPENAI_API_KEY를 비운다(실제 호출 방지). AI 경로는 mock
@@ -75,7 +76,7 @@
   - 논문 근거 문장과 결과 화면 외계인 대사(result-line)는 표시 안 함
 - 완료: 외계인 대사 제거. config의 greeting·stages[].alien_line·result.success_line/fail_line 삭제, persona.speaking_style을 "말하지 않음"으로. generator.py의 "…지직" 대사 삭제 → alien.word는 항상 ""(형식 유지), reply는 괄호 지문만(화면에 안 보임). judge_dish 결과의 line 삭제
 - 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
-  - 표정: 시작 default / 단계 확신 통과·요리 성공 joy / 횟수 차서 통과·요리 실패 thinking / 교환 중엔 아주 다르면 surprised, 확신이 내려가면 thinking, 오르면 확신 0.4 이상 convinced 아니면 doubt. 단계별 포즈(alien_cute_a/b/c) 제거
+  - 표정: 시작 default / 교환 중엔 위 "확신 표정" / 단계가 끝나면(통과 이유와 무관) convinced → joy / 결과 화면 외계인은 요리 성공 alien_success, 실패 alien_fail. 단계별 포즈(alien_cute_a/b/c) 제거
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
   - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 

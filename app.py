@@ -12,7 +12,7 @@ from flask import Flask, jsonify, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from services import ChatbotService
-from services.chatbot_service import AXES, GAME_METRICS, GAME_RESPONSE_KEYS, VERDICTS, parse_signal
+from services.chatbot_service import AXES, GAME_METRICS, GAME_RESPONSE_KEYS, TURN_EXPRESSIONS, VERDICTS, parse_signal
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -145,6 +145,9 @@ def parse_state(data, config: dict) -> dict:
     overconfident = data.get("overconfident_advances", 0)
     if isinstance(overconfident, bool) or not isinstance(overconfident, int) or not 0 <= overconfident <= len(stages):
         raise ValueError("overconfident_advances가 올바르지 않습니다.")
+    last_expression = data.get("last_expression")
+    if last_expression is not None and last_expression not in TURN_EXPRESSIONS:
+        raise ValueError("last_expression이 올바르지 않습니다.")
     stage_metrics = data.get("stage_metrics", [])
     if not isinstance(stage_metrics, list) or len(stage_metrics) > MAX_STAGE_ATTEMPTS:
         raise ValueError("stage_metrics가 올바르지 않습니다.")
@@ -160,6 +163,7 @@ def parse_state(data, config: dict) -> dict:
         "stage_metrics": [metrics(m, "stage_metrics") for m in stage_metrics],
         "ingredients": ingredients,
         "overconfident_advances": overconfident,
+        "last_expression": last_expression,
         "done": False,
     }
 
