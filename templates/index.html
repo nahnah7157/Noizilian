@@ -6,25 +6,11 @@
     <title>{{ bot.name }} - 캐릭터 챗봇</title>
     <link rel="stylesheet" href="{{ asset_url('assets/css/style.css') }}">
   </head>
+  <!-- 히어로샷(로고 포함)이 화면 가득: 가로 hero_landscape, 세로 hero_portrait (style.css .landing-page) -->
   <body class="landing-page">
     <main>
-      <h1 class="landing-title"><span class="glass">{{ bot.name }}</span></h1>
-      <img class="brand-image" src="{{ asset_url('assets/images/alien/alien_default.png') }}" alt="요리사 모자를 쓴 외계인">
-      <a class="start-button" href="{{ url_for('detail') }}">시작하기</a>
+      <h1 class="sr-only">{{ bot.name }}</h1>
+      <a class="start-button landing-start" href="{{ url_for('detail') }}">시작하기</a>
     </main>
-    <script>
-      // 시작 화면 외계인: 표정을 차례로 바꿔 살아 있는 느낌을 준다. 불러온 그림만 돌려서 깜박이지 않게
-      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        const alien = document.querySelector(".brand-image");
-        const faces = [alien.getAttribute("src")];
-        for (const src of [{% for face in ("doubt", "surprised", "thinking", "convinced", "joy") %}"{{ asset_url('assets/images/alien/alien_' ~ face ~ '.png') }}", {% endfor %}]) {
-          const img = new Image();
-          img.src = src;
-          img.decode().then(() => faces.push(src)).catch(() => {});
-        }
-        let now = 0;
-        setInterval(() => { now = (now + 1) % faces.length; alien.src = faces[now]; }, 1500);
-      }
-    </script>
   </body>
 </html>

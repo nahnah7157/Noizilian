@@ -97,8 +97,12 @@
           <p id="card-style"></p>
           <p class="card-closing">말이 통하지 않아도, 우리는 색과 질감으로 통했다.</p>
         </section>
-        <button id="result-next" class="start-button">다음 ▶</button>
-        <button id="restart-btn" class="start-button">다시 하기</button>
+        <!-- 끝 화면 두 버튼: 처음으로 = 시작 화면(이름·성별 다시), 다시 요리하기 = 같은 이름·성별로 인트로 없이 재료 선정부터 -->
+        <div class="result-actions">
+          <button id="result-next" class="start-button">다음 ▶</button>
+          <a id="home-btn" class="start-button secondary" href="{{ url_for('index') }}">처음으로</a>
+          <button id="restart-btn" class="start-button">다시 요리하기</button>
+        </div>
         <figure class="record">
           <div class="record-disc">
             <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
