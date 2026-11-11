@@ -110,8 +110,13 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .start-button.secondary { background: var(--pink); }
 .start-button:hover { filter: brightness(1.05); }
 
-/* 이름 정하기: 도로 배경(bg_road, 없으면 아래 겹의 bg_default가 보임) 위에 가운데 플레이어, 가운데 아래 성별·이름, 오른쪽 아래 시작하기 */
+/* 이름 정하기: 밤 골목 bg_road(없으면 아래 겹의 bg_default) 위에 가운데 플레이어. 머리 위 = 제목·이름 칸, 발 아래 = 성별, 오른쪽 아래 = 시작하기.
+   --feet = 발 높이(화면 아래에서). cover + center라 그림 높이 H = max(100vh, 100vw × 941/1672), 인도 85% → 50vh − 0.35H
+   --head = 머리 끝(화면 아래에서) = 발 + 그림 높이 × (1 − 아래 여백 4.5% − 위 여백 3%) */
 .detail-page {
+  --feet: calc(50vh - .35 * max(100vh, 100vw * 941 / 1672));
+  --player-h: min(62vh, 560px);
+  --head: calc(var(--feet) + var(--player-h) * .925);
   min-height: 100dvh;
   overflow: hidden;
   background: url("../images/background/bg_road.png") center / cover no-repeat fixed,
@@ -121,9 +126,35 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .player-image {
   position: fixed;
   left: 50%;
-  bottom: calc(50vh - .35 * max(100vh, 100vw * 941 / 1672));
-  height: min(62vh, 560px);
-  transform: translate(-50%, 4.5%);
+  bottom: var(--feet);
+  height: var(--player-h);
+  transform: translate(-50%, 4.5%); /* 그림 아래 투명 여백만큼 내려 발이 --feet에 */
+}
+.name-top {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--head) + 14px);
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(520px, calc(100% - 32px));
+}
+.name-title { /* 밤 배경에서 보이게: 흰 글자 + 남보라 외곽선 + 아래 그림자 */
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.6rem, 5vh, 3rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+  --o: 3px; /* 외곽선 두께: 여덟 방향 그림자로 글자 바깥에만 두르고(안쪽을 파먹지 않게), 맨 아래 그림자 하나 */
+  text-shadow:
+    calc(var(--o) * -1) calc(var(--o) * -1) 0 var(--navy), var(--o) calc(var(--o) * -1) 0 var(--navy),
+    calc(var(--o) * -1) var(--o) 0 var(--navy), var(--o) var(--o) 0 var(--navy),
+    0 calc(var(--o) * -1) 0 var(--navy), 0 var(--o) 0 var(--navy),
+    calc(var(--o) * -1) 0 0 var(--navy), var(--o) 0 0 var(--navy),
+    0 calc(var(--o) + 4px) 0 var(--navy);
 }
 .start-form:has(#player-male:checked) .player-female,
 .start-form:has(#player-female:checked) .player-male { display: none; }
@@ -133,11 +164,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   bottom: 24px;
   transform: translateX(-50%);
   display: grid;
-  grid-auto-flow: column; /* 가로: 성별 | 이름 한 줄로 낮게 → 발(인도 85%)을 가리지 않는다 */
-  align-items: center;
   justify-items: center;
-  gap: 10px;
-  width: min(620px, calc(100% - 32px));
 }
 .player-pick { display: flex; gap: 8px; margin: 0; padding: 0; border: 0; }
 .player-pick input { position: absolute; opacity: 0; }
@@ -196,13 +223,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .sound-toggle:active { translate: 0 2px; box-shadow: 0 1px 0 var(--navy); }
 @media (orientation: portrait) { .sound-toggle { top: 8px; width: 44px; height: 44px; font-size: 20px; } }
-/* 세로 이름 화면: 인도(화면 높이 81~88%)가 아래 입력칸과 겹치므로, 시작하기를 이름 칸 오른쪽 같은 줄로 옮겨 아래를 낮게 하고 발은 인도 윗부분(82%)에 */
+/* 세로 이름 화면: 발 아래 한 줄에 [성별(왼쪽) | 시작하기(오른쪽)] */
 @media (orientation: portrait) {
-  .player-image { bottom: 18vh; height: min(46vh, 88vw); }
-  .detail-page .bottom-center { left: 16px; transform: none; grid-auto-flow: row; width: calc(100% - 32px - 128px); justify-items: start; }
-  .detail-page .bottom-center { grid-template-columns: minmax(0, 1fr); }
-  .detail-page .username-area { justify-self: stretch; }
-  .detail-page .start-button { right: 16px; bottom: 24px; width: 118px; height: 62px; padding: 0; text-align: center; }
+  .detail-page { --player-h: min(46vh, 88vw); }
+  .detail-page .bottom-center { left: 16px; transform: none; }
+  .detail-page .start-button { right: 16px; bottom: 24px; padding: 10px 22px; }
+  .name-title { font-size: clamp(1.4rem, 3.6vh, 2rem); --o: 2px; }
 }
 /* 이름 화면의 티저 영상: 시작하기를 누르면 그 화면 위에 띄워 소리와 함께 재생. 끝나거나 skip하면 게임 화면으로(detail.html 스크립트) */
 .teaser { position: fixed; inset: 0; z-index: 250; background: #000; }
