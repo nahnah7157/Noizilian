@@ -333,18 +333,20 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .result-content:not([data-screen="dish"]) :is(#result-image, #result-alien) { display: none; }
 .result-content[data-screen="dish"] .record { display: none; }
 .result-content:not([data-screen="record"]) #record-status { display: none; }
-.result-content:not([data-screen="end"]) :is(#result-card, #restart-btn, #home-btn) { display: none; }
+.result-content:not([data-screen="dish"]) :is(#result-dome, #result-badge) { display: none; }
+.result-content:not([data-screen="end"]) :is(#result-card, #save-btn, #restart-btn, #home-btn) { display: none; }
 .result-content[data-screen="end"] #result-next { display: none; }
+.result-content[data-screen="dish"]:not([data-reveal="revealed"]) #result-next { visibility: hidden; } /* 돔을 연 뒤에 다음 */
 @media (prefers-reduced-motion: reduce) {
   .result-content > * { transition: none; }
 }
-/* 테이블 윗면은 y 590~910. 요리는 테이블 가운데, 접시 아래 끝을 y 850에 놓고 외계인보다 앞 */
-.result-content[data-screen="dish"] { --dish-h: 300px; }
+/* 테이블 윗면은 y 590~910. 요리(=돔 자리)는 가운데에서 살짝 왼쪽(x 860), 접시 아래 끝 y 850, 외계인보다 앞. 외계인은 살짝 오른쪽(x 1080) */
+.result-content[data-screen="dish"] { --dish-h: 300px; --dish-x: 860px; --alien-x: 1080px; --plate-y: 850px; }
 #result-image {
   position: absolute;
   z-index: 1;
-  left: 960px;
-  top: 850px;
+  left: var(--dish-x);
+  top: var(--plate-y);
   height: calc(var(--dish-h) / var(--fill, 1));
   transform: translate(-50%, calc(-100% + var(--foot, 0%)));
   filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%));
@@ -360,7 +362,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   --alien-full: 800px;
   --edge: 583px;
   position: absolute;
-  left: 960px;
+  left: var(--alien-x);
   top: var(--edge);
   width: calc(var(--alien-full) * .671);
   height: calc(var(--alien-full) * var(--show, .7));
@@ -369,13 +371,86 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   transform: translate(-50%, -100%);
 }
 /* 1027×1532: 입(성공 벌린 입·실패 찡그린 입)이 접시 위로 보이게 */
+#result-alien[src*="alien_joy"] { --show: .72; }
 #result-alien[src*="alien_success"] { --show: .74; }
 #result-alien[src*="alien_fail"] { --show: .76; }
-.result-actions { position: absolute; right: 40px; bottom: 30px; display: flex; gap: 16px; }
+/* ① 돔 커버: 은은하게 숨 쉬는 글로우 + 통통 튀며 눌러 보라고 알린다(글자 없음). 누르면 살짝 들렸다가 하늘로 날아간다(0.8초, chatbot.js DOME_FLY_MS)
+   dome_cover.png가 없으면 ::before(돔)·::after(손잡이)로 그린 은색 돔 */
+.result-dome {
+  --silver-hi: #f4f6fa;
+  --silver: #c6ccd8;
+  --silver-lo: #8e97ab;
+  position: absolute;
+  z-index: 2;
+  left: var(--dish-x);
+  top: calc(var(--plate-y) + 14px);
+  width: calc(var(--dish-h) * 1.6);
+  height: calc(var(--dish-h) * 1.25);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transform: translate(-50%, -100%);
+  animation: dome-hint 2.4s ease-in-out infinite;
+}
+.result-dome img { width: 100%; height: 100%; object-fit: contain; }
+.result-dome:not(.has-image)::before {
+  content: "";
+  position: absolute;
+  inset: 16% 0 0;
+  border: var(--ui-line);
+  border-radius: 50% 50% 10px 10px / 100% 100% 10px 10px;
+  background: radial-gradient(ellipse at 32% 22%, var(--silver-hi), var(--silver) 45%, var(--silver-lo));
+  box-shadow: inset 0 -14px 0 var(--silver-lo);
+}
+.result-dome:not(.has-image)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  width: 14%;
+  height: 16%;
+  border: var(--ui-line);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--silver-hi), var(--silver-lo));
+  transform: translateX(-50%);
+}
+@keyframes dome-hint {
+  0%, 100% { translate: 0 0; filter: drop-shadow(0 0 10px rgb(255 244 200 / 45%)); }
+  15% { translate: 0 -12px; }
+  30% { translate: 0 0; }
+  50% { filter: drop-shadow(0 0 34px rgb(255 244 200 / 95%)); }
+}
+.result-content[data-reveal="lifting"] .result-dome { animation: dome-fly .8s cubic-bezier(.45, 0, .8, .2) forwards; pointer-events: none; }
+@keyframes dome-fly {
+  0% { translate: 0 0; rotate: 0deg; }
+  25% { translate: 0 -40px; rotate: -5deg; }
+  100% { translate: 0 -1800px; rotate: 6deg; }
+}
+.result-content[data-reveal="revealed"] .result-dome { display: none; }
+/* 공개 직후 요리 위에 성공·실패 그림 배지가 통통 튀며 등장 */
+.result-badge { position: absolute; z-index: 3; left: var(--dish-x); top: 250px; width: 440px; transform: translateX(-50%); }
+.result-badge[hidden] { display: none; }
+.result-badge:not([hidden]) { animation: badge-pop .6s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes badge-pop { 0% { scale: .3; opacity: 0; } 60% { scale: 1.15; opacity: 1; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .result-dome, .result-badge:not([hidden]) { animation: none; }
+}
+.result-actions { position: absolute; z-index: 4; right: 40px; bottom: 30px; display: flex; gap: 16px; }
 .result-actions .start-button { margin: 0; }
+.start-button.tertiary { background: var(--lavender); }
 .record { margin: 0; }
-/* ② 레코드: 가운데 크게, 아래 끝이 테이블 앞 끝(y 910) */
+/* ② 레코드: 가운데 크게, 아래 끝이 테이블 앞 끝(y 910). 주변은 반투명 남보라 덮개, 레코드 둘레는 천천히 밝아졌다 어두워지는 빛 */
 .record-disc { position: absolute; left: 560px; top: 110px; width: 800px; height: 800px; }
+.result-content[data-screen="record"]::before { content: ""; position: absolute; inset: 0; background: rgb(36 29 96 / 60%); }
+.result-content[data-screen="record"] .record-disc { border-radius: 50%; animation: record-glow 3.2s ease-in-out infinite; }
+@keyframes record-glow {
+  0%, 100% { box-shadow: 0 0 40px 8px rgb(255 226 140 / 35%); }
+  50% { box-shadow: 0 0 110px 34px rgb(255 226 140 / 80%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-content[data-screen="record"] .record-disc { animation: none; box-shadow: 0 0 70px 20px rgb(255 226 140 / 55%); }
+}
 .record-status {
   position: absolute;
   left: 50%;
@@ -390,29 +465,69 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   white-space: nowrap;
   transform: translateX(-50%);
 }
-/* ③ 결론 카드: 레코드는 같은 요소를 카드 왼쪽에 작게 옮긴다 */
+/* ③ 최종 카드(docs/design/final_record_ref.png 구성): 위 FINAL RECORD 탭, 왼쪽 칸(레코드·주인공 상반신·지구인·시도 횟수),
+   오른쪽 칸(배지·최종 요리·요리 그림·실패 원인/성공 포인트), 아래 결론 문장, 버튼 3개. 레코드는 같은 .record-disc를 왼쪽 칸 자리로 옮긴다 */
 .result-card {
+  --soft: color-mix(in srgb, var(--lavender) 28%, var(--paper));
   position: absolute;
-  left: 480px;
-  top: 330px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 960px;
-  height: 420px;
-  padding: 36px 48px 36px 300px;
+  left: 100px;
+  top: 200px;
+  width: 1720px;
+  height: 800px;
   border: var(--ui-line);
-  border-radius: var(--ui-radius);
+  border-radius: 36px;
   background: var(--paper);
-  box-shadow: var(--ui-drop);
-  font-size: 1.5rem;
-  line-height: 1.5;
+  box-shadow: 0 8px 0 var(--navy);
   word-break: keep-all;
 }
-.result-card p { margin: 0 0 14px; }
-.result-card .card-closing { margin: 26px 0 0; font-size: 1.9rem; font-weight: 700; }
-.result-content[data-screen="end"] .record-disc { left: 524px; top: 430px; width: 220px; height: 220px; pointer-events: none; }
+.card-title {
+  position: absolute;
+  left: 50%;
+  top: -46px;
+  margin: 0;
+  padding: 12px 64px;
+  border: var(--ui-line);
+  border-radius: 28px;
+  background: var(--lavender);
+  box-shadow: var(--ui-drop);
+  font-size: 46px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.card-title::before, .card-title::after { content: "✦"; margin: 0 18px; color: var(--lime); }
+.card-left, .card-right, .card-summary { position: absolute; border: var(--ui-line); border-radius: 28px; background: var(--soft); }
+.card-left { left: 40px; top: 80px; width: 960px; height: 400px; }
+.card-right { left: 1030px; top: 80px; width: 650px; height: 400px; }
+.card-player { position: absolute; left: 370px; top: 28px; width: 270px; height: 340px; overflow: hidden; border: var(--ui-line); border-radius: 24px; background: var(--lavender); }
+.card-player img { position: absolute; left: 50%; top: 5%; width: 160%; transform: translateX(-50%); } /* 상반신만 보이게 크게 */
+.card-facts { margin: 0; }
+.card-facts dt, .card-label {
+  display: inline-block;
+  padding: 4px 18px;
+  border: var(--ui-line);
+  border-radius: 999px;
+  background: var(--lavender);
+  font-size: 24px;
+}
+.card-facts dd { margin: 10px 0 34px 4px; overflow: hidden; font-size: 50px; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; }
+.card-left .card-facts { position: absolute; left: 676px; top: 40px; width: 260px; }
+.card-badge { position: absolute; left: 22px; top: 16px; height: 100px; }
+.card-right .card-facts { position: absolute; left: 28px; top: 136px; width: 330px; }
+.card-dish-image { position: absolute; right: 18px; top: 24px; width: 270px; height: 210px; object-fit: contain; filter: drop-shadow(0 6px 6px rgb(0 0 0 / 15%)); }
+.card-dish-image.tinted { filter: hue-rotate(var(--hue-shift, 0deg)) drop-shadow(0 6px 6px rgb(0 0 0 / 15%)); }
+.card-points { position: absolute; left: 28px; right: 28px; top: 272px; }
+.card-points ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.card-points li { padding: 6px 18px; border: var(--ui-line); border-radius: 999px; background: var(--pink); font-size: 24px; }
+.card-points li::before { content: "✕ "; }
+#result-card[data-result="success"] .card-points li { background: var(--lime); }
+#result-card[data-result="success"] .card-points li::before { content: "✦ "; }
+.card-summary { left: 40px; right: 40px; top: 506px; height: 176px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 27px; line-height: 1.45; text-align: center; }
+.card-summary p { margin: 0; }
+.result-content[data-screen="end"] .record-disc { left: 172px; top: 320px; width: 320px; height: 320px; pointer-events: none; }
+/* 끝 화면 버튼 3개는 카드 아래쪽 가운데: 기록 저장(Mint) · 다시 요리하기(Pink) · 처음으로(Lavender) */
+.result-content[data-screen="end"] .result-actions { left: 50%; right: auto; bottom: 102px; gap: 28px; transform: translateX(-50%); }
+.result-content[data-screen="end"] .result-actions .start-button { padding: 16px 56px; font-size: 32px; white-space: nowrap; }
 .record-disc > img, .record-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .record-disc > img { filter: drop-shadow(0 10px 10px rgb(0 0 0 / 14%)); }
 .record-tip {
@@ -885,21 +1000,48 @@ button:focus-visible, a:focus-visible, input:focus-visible {
      크기는 배경 비율(가로 800/1081 × 115dvh ≈ 85dvh)을 따르되 좁은 화면에선 폭으로 제한 */
   .result-content[data-screen="dish"] { --dish-h: min(32dvh, 49vw); }
   /* 접시는 가로처럼 외계인 아래쪽을 조금 가린다: 아래 끝 = 테이블 뒤 끝 + 요리 높이 × 0.9 */
-  #result-image { left: 50%; top: calc(62.4dvh + var(--dish-h) * .9); }
-  #result-alien { --alien-full: min(85dvh, 130vw); --edge: 62.4dvh; left: 50%; }
+  .result-content[data-screen="dish"] { --dish-x: 40%; --alien-x: 62%; --plate-y: calc(62.4dvh + var(--dish-h) * .9); }
+  #result-alien { --alien-full: min(85dvh, 130vw); --edge: 62.4dvh; }
+  .result-badge { top: 22dvh; width: min(78vw, 44dvh); }
   .record-disc { left: 50%; top: calc(50dvh - min(45vw, 28dvh)); width: min(90vw, 56dvh); height: min(90vw, 56dvh); transform: translateX(-50%); }
   .record-status { top: 3dvh; padding: 8px 16px; font-size: 1rem; }
+  /* ③ 카드는 위아래로 쌓는다(스크롤 없음). --rec = 레코드·주인공 칸 크기 */
+  .result-overlay { --rec: min(34vw, 17dvh); }
   .result-card {
-    left: 16px;
-    top: 6dvh;
-    width: calc(100vw - 32px);
+    left: 12px;
+    right: 12px;
+    top: 5dvh;
+    width: auto;
     height: auto;
-    padding: calc(min(24dvh, 44vw) + 5dvh) 20px 20px;
-    font-size: 1.05rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2dvh;
+    padding: 4dvh 10px 12px;
+    border-radius: 22px;
+    box-shadow: var(--ui-drop);
   }
-  .result-card p { margin-bottom: 8px; }
-  .result-card .card-closing { margin-top: 16px; font-size: 1.25rem; }
-  .result-content[data-screen="end"] .record-disc { left: 50%; top: 9dvh; width: min(24dvh, 44vw); height: min(24dvh, 44vw); }
+  .card-title { top: -2.6dvh; padding: .6dvh 22px; border-radius: 16px; font-size: min(1.25rem, 2.6dvh); }
+  .card-title::before, .card-title::after { margin: 0 8px; }
+  .card-left, .card-right, .card-summary { position: relative; inset: auto; width: auto; height: auto; border-radius: 16px; }
+  /* 왼쪽 칸: 윗줄 [레코드 자리 | 주인공], 아랫줄 지구인·시도 횟수를 한 줄씩(좁은 화면에서 이름이 잘리지 않게) */
+  .card-left { display: grid; grid-template-columns: calc(var(--rec) + 10px) 1fr; gap: 6px 8px; padding: 8px; }
+  .card-player { position: relative; left: auto; top: auto; grid-column: 2; justify-self: center; width: calc(var(--rec) * .85); height: var(--rec); border-radius: 14px; }
+  .card-left .card-facts { position: static; grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; width: auto; }
+  .card-left .card-facts dt { justify-self: start; }
+  .card-left .card-facts dd { margin: 0; }
+  .card-right .card-facts { position: static; width: auto; }
+  .card-facts dt, .card-label { padding: 2px 10px; font-size: min(.85rem, 1.8dvh); }
+  .card-facts dd { margin: 4px 0 10px 2px; font-size: min(1.5rem, 3.2dvh); }
+  .card-right { min-height: calc(var(--rec) * 1.5); padding: 8px 10px; }
+  .card-badge { position: static; display: block; height: 6.5dvh; }
+  .card-dish-image { right: 8px; top: 8px; width: 36vw; height: calc(var(--rec) * .95); }
+  .card-points { position: static; margin-top: 2px; }
+  .card-points ul { gap: 4px; margin-top: 4px; }
+  .card-points li { padding: 3px 12px; font-size: min(.9rem, 1.9dvh); }
+  .card-summary { padding: 1.4dvh 8px; font-size: min(.95rem, 2dvh); }
+  .result-content[data-screen="end"] .record-disc { left: calc(12px + 3px + 10px + 3px + 8px); top: calc(5dvh + 3px + 4dvh + 3px + 8px); width: var(--rec); height: var(--rec); transform: none; }
+  .result-content[data-screen="end"] .result-actions { left: 12px; right: 12px; bottom: 1.5dvh; gap: 8px; transform: none; }
+  .result-content[data-screen="end"] .result-actions .start-button { flex: 1; padding: 1.2dvh 4px; font-size: min(1rem, 2.1dvh); text-align: center; }
   .record-tip { width: min(220px, 70vw); padding: 10px 12px; border-radius: 16px; font-size: .85rem; }
   .record-tip img { width: 96px; margin-top: 6px; }
   .record-tip q { font-size: 1rem; }
