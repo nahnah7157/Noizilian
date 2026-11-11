@@ -319,8 +319,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   object-position: top;
   transform: translate(-50%, -100%);
 }
-#result-alien[src*="alien_joy"] { --show: .68; }
-#result-alien[src*="alien_default"] { --show: .74; }
+/* 1027×1532: 입(성공 벌린 입·실패 찡그린 입)이 접시 위로 보이게 */
+#result-alien[src*="alien_success"] { --show: .74; }
+#result-alien[src*="alien_fail"] { --show: .76; }
 .result-overlay .start-button { position: absolute; right: 40px; bottom: 30px; margin: 0; }
 .record { margin: 0; }
 /* ② 레코드: 가운데 크게, 아래 끝이 테이블 앞 끝(y 910) */

@@ -435,7 +435,7 @@ let currentStageIndex = 0;
 let currentDishId = null;
 let resultSuccess = true;
 // 결과 화면 외계인(테이블 뒤). 성공 = 손 흔드는 joy, 실패 = 찡그린 default. 보이는 비율은 style.css #result-alien --show
-const RESULT_ALIEN = { success: "/assets/images/alien/alien_joy.png", fail: "/assets/images/alien/alien_default.png" };
+const RESULT_ALIEN = { success: "/assets/images/alien/alien_success.png", fail: "/assets/images/alien/alien_fail.png" };
 const RESULT_NEXT = { dish: "record", record: "end" };
 const RESULT_FADE_MS = 200; // style.css의 .result-content > * 전환 시간과 같게
 let resultFadeTimer = 0;
@@ -481,7 +481,8 @@ function renderTileRecord() {
 }
 
 const JOY_IMAGE = "/assets/images/alien/alien_joy.png";
-const JOY_DELAY_MS = 500; // 판정 표정을 잠깐 보여 준 뒤 기뻐한다
+const CONVINCED_IMAGE = "/assets/images/alien/alien_convinced.png";
+const JOY_DELAY_MS = 500; // 단계가 끝나면 convinced를 잠깐 보여 준 뒤 기뻐한다
 let joyTimer = 0;
 
 // 가운데 외계인 이미지만 표정으로 교체 (게임 화면엔 글자 없음)
@@ -680,14 +681,14 @@ function updateGameState(data) {
   refreshUndo();
 
   if (finishedIndex >= 0) {
-    // 단계는 항상 joy로 끝난다: 판정 표정 → joy. 마지막 단계의 data.image는 요리 그림이라 바로 joy
-    if (currentState?.done) alienExpr.src = JOY_IMAGE;
-    else {
-      showAlien(data);
-      joyTimer = setTimeout(() => { alienExpr.src = JOY_IMAGE; }, reduceMotion ? 0 : JOY_DELAY_MS);
-    }
-    // 끝난 단계 타일을 내밀고(날아가고) 나서야 그 칸을 채운다. 표정은 다음 응답까지 joy
-    playOffer(finishedIndex, () => {
+    // 단계는 판정(잘못 알아들음·10번째 포함)과 상관없이 항상 convinced → joy로 끝난다
+    clearTimeout(joyTimer);
+    alienExpr.src = CONVINCED_IMAGE;
+    const joyShown = new Promise((resolve) => {
+      joyTimer = setTimeout(() => { alienExpr.src = JOY_IMAGE; resolve(); }, reduceMotion ? 0 : JOY_DELAY_MS);
+    });
+    // 끝난 단계 타일을 내밀고(날아가고) joy로 바뀐 뒤에 그 칸을 채운다. 표정은 다음 응답까지 joy
+    playOffer(finishedIndex, () => joyShown.then(() => {
       renderTileRecord();
       if (currentState?.done) {
         if (data.result && resultOverlayEl) showResult(data.result, true);
@@ -697,7 +698,7 @@ function updateGameState(data) {
         updateThink();   // 새 단계 진행 중 → 말풍선 다시
         showStageHint(); // 타일이 다 날아간 뒤에 새 단계 힌트
       }
-    });
+    }));
   } else {
     showAlien(data);
     renderTileRecord();
