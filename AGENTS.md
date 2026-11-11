@@ -4,7 +4,7 @@
 
 ## 컨셉 (기준: config/chatbot_config.json)
 - 요리 4단계: 재료 준비 → 손질 → 조리 → 플레이팅. 한 단계 = 한 턴
-- 한 턴 안에서 타일을 여러 번 주고받는다. 외계인의 확신이 기준(0.8)을 넘거나 최대 횟수(임시 4번)에 닿으면 다음 단계로
+- 한 턴 안에서 타일을 여러 번 주고받는다. 외계인(AI, 실패 시 규칙)이 확신하면 다음 단계로. 단계마다 최대 10번(config.game.max_attempts), 10번째는 판단과 무관하게 넘어가고 결과는 쌓인 신호로 판정(자동 성공 아님)
 - 외계인은 매번 타일 + 표정으로 응답한다
 - 네 단계에서 확정된 타일이 요리 목표와 가까우면 성공, 멀면 실패 이미지 (햄버거·오므라이스·피자·라멘)
 - 외계인 표정 이미지: alien_default·doubt·convinced·surprised·thinking·joy (config.expressions). 게임 진행 중 표정은 chatbot_service.turn_expression이 확신 변화로 고름(아래 "확신 표정"). 단계가 끝나면 판정과 상관없이(잘못 알아들음·10번째·마지막 단계 포함) convinced를 0.5초 보여 준 뒤 joy로 바뀌고 다음 응답까지 유지, 마지막 단계는 joy로 바뀐 뒤 결과 화면(chatbot.js updateGameState, 11/11). 진행 중 턴은 확신 표정 그대로. convinced·joy는 chat.html에서 preload. 배경: images/background/bg_* (단계별, style.css body[data-stage])
@@ -76,7 +76,7 @@
   - 논문 근거 문장과 결과 화면 외계인 대사(result-line)는 표시 안 함
 - 완료: 외계인 대사 제거. config의 greeting·stages[].alien_line·result.success_line/fail_line 삭제, persona.speaking_style을 "말하지 않음"으로. generator.py의 "…지직" 대사 삭제 → alien.word는 항상 ""(형식 유지), reply는 괄호 지문만(화면에 안 보임). judge_dish 결과의 line 삭제
 - 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
-  - 표정: 시작 default / 단계 확신 통과·요리 성공 joy / 횟수 차서 통과·요리 실패 thinking / 교환 중엔 위 "확신 표정". 단계별 포즈(alien_cute_a/b/c) 제거
+  - 표정: 시작 default / 교환 중엔 위 "확신 표정" / 단계가 끝나면(통과 이유와 무관) convinced → joy / 결과 화면 외계인은 요리 성공 alien_success, 실패 alien_fail. 단계별 포즈(alien_cute_a/b/c) 제거
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
   - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
