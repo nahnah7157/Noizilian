@@ -512,14 +512,21 @@ soundToggle?.addEventListener("click", () => {
   if (muted) { bgm?.pause(); tileAudio?.pause(); } else resumeBgm();
 });
 
-// 버튼 소리: data-sound가 있으면 그 소리(빈 값이면 따로 처리), 없으면 sfx_button. 링크는 소리가 들리게 잠깐 늦춰 이동
+// 버튼 소리: data-sound가 있으면 그 소리(빈 값이면 따로 처리), 없으면 sfx_button.
+// 링크(처음으로)는 소리를 틀고 400ms 뒤 이동(꺼짐·막힘이면 바로). 연타해도 한 번만
+let leaving = false;
 document.addEventListener("click", (event) => {
   const el = event.target.closest("button, a.start-button");
   if (!el || el.disabled) return;
   const name = el.dataset.sound ?? "button";
-  if (!name || !playSound(name) || !el.matches("a[href]")) return;
+  if (!el.matches("a[href]")) return void (name && playSound(name));
   event.preventDefault();
-  setTimeout(() => { location.href = el.href; }, 250);
+  if (leaving) return;
+  leaving = true;
+  const go = () => { clearTimeout(timer); location.href = el.href; };
+  const timer = setTimeout(go, 400);
+  const audio = name && playSound(name);
+  if (!audio) go(); else audio.addEventListener("skip", go, { once: true });
 });
 
 // ── 6. 채팅 및 요리 진행 ─────────────────────────────────────
@@ -1089,6 +1096,14 @@ undoBtn?.addEventListener("click", () => {
 const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
 const recordStatus = document.getElementById("record-status");
+const recordHint = document.getElementById("record-hint");
+let recordExplored = false; // 타일을 한 번이라도 조사했으면 아래 안내를 다시 띄우지 않는다
+
+/** 대사가 다 오면 아래 자리를 "신호를 보내는 중"에서 조사 안내로 바꾼다 */
+function linesReady() {
+  recordStatus.hidden = true;
+  if (recordHint) recordHint.hidden = recordExplored || !history.length;
+}
 const WAITING_LINE = "외계인이 신호를 보내는 중이에요";
 let lines = null; // 타일마다 {text, image} — null이면 아직 만드는 중
 let hovered = -1; // 마우스가 올라간 타일 번호
@@ -1195,6 +1210,8 @@ function onRecordPointer(event) {
     recordTip.hidden = true;
     recordCanvas.style.cursor = "";
   } else {
+    recordExplored = true; // 처음 조사하면 아래 안내는 사라진다
+    if (recordHint) recordHint.hidden = true;
     showTip(event, tile);
     recordCanvas.style.cursor = "pointer";
   }
@@ -1315,6 +1332,8 @@ async function requestRecord() {
   if (!recordCanvas) return;
   const token = ++recordToken;
   lines = null;
+  recordExplored = false;
+  if (recordHint) recordHint.hidden = true;
   recordStatus.hidden = !history.length;
   if (!history.length) return;
   try {
@@ -1332,12 +1351,12 @@ async function requestRecord() {
     if (!response.ok) throw new Error(data.error?.message || "대사를 받지 못했습니다.");
     if (token !== recordToken) return; // 그 사이 다시 시작함
     lines = data.lines;
-    recordStatus.hidden = true;
+    linesReady();
     if (data.source !== "openai") console.warn("레코드 대사: 준비된 대사 사용", data.source); // 화면엔 안 보임
   } catch (error) {
     if (token !== recordToken) return;
     lines = [];
-    recordStatus.hidden = true;
+    linesReady();
     console.warn("레코드 대사를 불러오지 못함", error); // "Failed to fetch" = 서버와 연결이 끊김
   }
 }

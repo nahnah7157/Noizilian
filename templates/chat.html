@@ -97,7 +97,10 @@
           <img src="{{ asset_url('assets/images/result/dome_cover.png') }}" alt="" onload="this.parentNode.classList.add('has-image')" onerror="this.remove()">
         </button>
         <img id="result-badge" class="result-badge" src="" alt="" hidden>
+        <!-- ② 레코드 화면 문구: 위 = 완성 안내, 아래 = 대사를 기다리는 동안 record-status, 다 오면 조사 안내(첫 조사 때 사라짐) -->
+        <p id="record-title" class="record-title">당신의 대화가 기록된 레코드가 완성되었습니다.</p>
         <p id="record-status" class="record-status" hidden>외계인이 신호를 보내는 중이에요</p>
+        <p id="record-hint" class="record-hint" hidden>새겨진 타일을 조사하여, 숨겨진 의미를 확인하세요</p>
         <!-- ③ 최종 카드 (docs/design/final_record_ref.png 구성). 레코드는 같은 .record 요소를 CSS로 왼쪽 칸에 옮긴다 -->
         <section id="result-card" class="result-card" aria-label="최종 기록">
           <h2 class="card-title">FINAL RECORD</h2>

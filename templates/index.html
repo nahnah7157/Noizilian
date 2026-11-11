@@ -26,12 +26,12 @@
           toggle.setAttribute("aria-pressed", String(muted));
           toggle.setAttribute("aria-label", muted ? "소리 켜기" : "소리 끄기");
         };
-        const play = (name) => {
+        const play = (name, onBlocked) => { // 꺼져 있거나 경로가 없으면 false, 재생이 막히면 onBlocked
           const s = sounds[name];
           if (muted || !s?.src) return false;
           const a = new Audio(s.src);
           a.volume = s.volume ?? 1;
-          a.play().catch(() => {});
+          a.play().catch(() => onBlocked?.());
           return true;
         };
         show();
@@ -40,13 +40,19 @@
           try { localStorage.setItem("oekcook.muted", muted ? "1" : "0"); } catch { /* 이번 페이지에서만 */ }
           show();
         });
-        // 링크·폼으로 페이지가 바뀌면 소리가 끊기므로 잠깐 늦춰 이동한다
+        // 링크로 페이지가 바뀌면 소리가 끊기므로 소리를 틀고 400ms 뒤 이동(꺼짐·막힘이면 바로). 연타해도 한 번만
+        let leaving = false;
         document.addEventListener("click", (event) => {
           const el = event.target.closest("button, a.start-button, .player-pick label");
           if (!el || el.disabled || el.type === "submit") return;
-          if (!play(el.dataset.sound || "button") || !el.matches("a[href]")) return;
+          const link = el.matches("a[href]");
+          if (link && leaving) return event.preventDefault();
+          if (!link) return void play(el.dataset.sound || "button");
           event.preventDefault();
-          setTimeout(() => { location.href = el.href; }, 250);
+          leaving = true;
+          const go = () => { clearTimeout(timer); location.href = el.href; };
+          const timer = setTimeout(go, 400);
+          if (!play(el.dataset.sound || "button", go)) go();
         });
         document.querySelector("form")?.addEventListener("submit", (event) => {
           if (!play("button")) return;
