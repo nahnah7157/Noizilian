@@ -82,6 +82,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .landing-page { background-image: url("../images/title/hero_portrait.png"); }
   .landing-page .landing-start { left: 50%; bottom: 6dvh; padding: min(18px, 2dvh) min(64px, 16vw); font-size: clamp(1.3rem, 3dvh, 2rem); }
 }
+/* 창 비율이 그림과 많이 다르면(세로 그림 9:16보다 넓은 세로 창, 16:10보다 좁은 가로 창) cover로 채우면 로고가 잘린다.
+   그때는 그림 전체를 보이게(contain) 두고, 남는 곳은 같은 그림을 흐리게 깔아 채운다. ::before = 흐린 바탕, ::after = 선명한 그림 */
+.landing-page { --hero: url("../images/title/hero_landscape.png"); position: relative; isolation: isolate; background: var(--navy); }
+.landing-page::before, .landing-page::after { content: ""; position: fixed; z-index: -1; pointer-events: none; }
+.landing-page::before { inset: -40px; background: var(--hero) center / cover no-repeat; filter: blur(28px) brightness(.85); }
+.landing-page::after { inset: 0; background: var(--hero) center / cover no-repeat; }
+@media (orientation: portrait) { .landing-page { --hero: url("../images/title/hero_portrait.png"); } }
+@media (orientation: portrait) and (min-aspect-ratio: 3/5), (orientation: landscape) and (max-aspect-ratio: 16/10) {
+  .landing-page::after { background-size: contain; }
+}
+@media (orientation: landscape) and (max-aspect-ratio: 16/10) {
+  .landing-page .landing-start { left: 50%; }
+}
 .start-button {
   display: inline-block;
   margin-top: 24px;
@@ -191,6 +204,25 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .detail-page .username-area { justify-self: stretch; }
   .detail-page .start-button { right: 16px; bottom: 24px; width: 118px; height: 62px; padding: 0; text-align: center; }
 }
+/* 이름 화면의 티저 영상: 시작하기를 누르면 그 화면 위에 띄워 소리와 함께 재생. 끝나거나 skip하면 게임 화면으로(detail.html 스크립트) */
+.teaser { position: fixed; inset: 0; z-index: 250; background: #000; }
+.teaser[hidden] { display: none; }
+.teaser video { width: 100%; height: 100%; object-fit: contain; }
+.teaser-skip { /* 컷신 skip(.intro-skip)과 같은 모양. 소리 버튼(오른쪽 위) 아래 */
+  position: absolute;
+  top: 56px;
+  right: 32px;
+  padding: 14px 40px;
+  border: 0;
+  border-radius: 100px;
+  background: rgb(122 144 170 / 50%);
+  color: #fff;
+  font-family: "HakgyoansimMabeopsa", var(--ui-font);
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+}
+@media (orientation: portrait) { .teaser-skip { top: 64px; right: 16px; min-height: 44px; padding: 0 24px; font-size: 1.2rem; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* 대화 화면: 상단 제목, 넓은 대화창, 하단 입력창 */
@@ -403,10 +435,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   transform: translate(-50%, -100%);
 }
 /* 1027×1532: 입(성공 벌린 입·실패 찡그린 입)이 접시 위로 보이게 */
+#result-alien[src*="alien_default"] { --show: .74; } /* 돔이 덮여 있는 동안 */
 #result-alien[src*="alien_joy"] { --show: .72; }
 #result-alien[src*="alien_success"] { --show: .74; }
 #result-alien[src*="alien_fail"] { --show: .76; }
-/* ① 돔 커버: 은은하게 숨 쉬는 글로우 + 통통 튀며 눌러 보라고 알린다(글자 없음). 누르면 살짝 들렸다가 하늘로 날아간다(0.8초, chatbot.js DOME_FLY_MS)
+/* ① 돔 커버: 은은하게 숨 쉬는 글로우 + 2.6초마다 좌우로 짧게 흔들흔들, 올리면 살짝 커짐(글자 없음). 누르면 살짝 들렸다가 하늘로 날아간다(0.8초, chatbot.js DOME_FLY_MS)
    dome_cover.png가 없으면 ::before(돔)·::after(손잡이)로 그린 은색 돔 */
 .result-dome {
   --silver-hi: #f4f6fa;
@@ -425,8 +458,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: none;
   cursor: pointer;
   transform: translate(-50%, -100%);
-  animation: dome-hint 2.4s ease-in-out infinite;
+  transform-origin: 50% 90%; /* 흔들림은 돔 테두리(그림 아래 90%)를 축으로 */
+  animation: dome-hint 2.6s ease-in-out infinite;
+  transition: scale .15s;
 }
+.result-dome:hover { scale: 1.05; }
 .result-dome img { width: 100%; height: 100%; object-fit: contain; }
 .result-dome:not(.has-image)::before {
   content: "";
@@ -450,10 +486,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   transform: translateX(-50%);
 }
 @keyframes dome-hint {
-  0%, 100% { translate: 0 0; filter: drop-shadow(0 0 10px rgb(255 244 200 / 45%)); }
-  15% { translate: 0 -12px; }
-  30% { translate: 0 0; }
+  0%, 100% { rotate: 0deg; filter: drop-shadow(0 0 10px rgb(255 244 200 / 45%)); }
   50% { filter: drop-shadow(0 0 34px rgb(255 244 200 / 95%)); }
+  /* 흔들흔들(약 0.6초) 뒤 쉼 */
+  70% { rotate: 0deg; }
+  75% { rotate: -4deg; }
+  80% { rotate: 4deg; }
+  85% { rotate: -3deg; }
+  90% { rotate: 2deg; }
+  95% { rotate: 0deg; }
 }
 .result-content[data-reveal="lifting"] .result-dome { animation: dome-fly .8s cubic-bezier(.45, 0, .8, .2) forwards; pointer-events: none; }
 @keyframes dome-fly {
@@ -469,6 +510,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 @keyframes badge-pop { 0% { scale: .3; opacity: 0; } 60% { scale: 1.15; opacity: 1; } 100% { scale: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .result-dome, .result-badge:not([hidden]) { animation: none; }
+  .result-dome:hover { scale: none; }
 }
 .result-actions { position: absolute; z-index: 4; right: 40px; bottom: 30px; display: flex; gap: 16px; }
 .result-actions .start-button { margin: 0; }
@@ -1038,10 +1080,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   }
   /* ① 가로와 같은 구도: 요리는 가운데, 외계인은 테이블 뒤. 배경이 높이 115%라 테이블 뒤 끝 = 511/941 × 115dvh ≈ 62.4dvh.
      크기는 배경 비율(가로 800/1081 × 115dvh ≈ 85dvh)을 따르되 좁은 화면에선 폭으로 제한 */
-  .result-content[data-screen="dish"] { --dish-h: min(26dvh, 37vw); } /* 돔(요리 높이 × 2.45)이 화면 폭 안에 들어오게 */
+  .result-content[data-screen="dish"] { --dish-h: min(22dvh, 32vw); } /* 돔(요리 높이 × 2.45)이 화면 폭 안에 들어오게 */
   /* 접시는 가로처럼 외계인 아래쪽을 조금 가린다: 아래 끝 = 테이블 뒤 끝 + 요리 높이 × 0.9 */
   .result-content[data-screen="dish"] { --dish-x: 47%; --alien-x: 70%; --badge-x: 27%; --plate-y: calc(62.4dvh + var(--dish-h) * .9); }
-  #result-alien { --alien-full: min(85dvh, 130vw); --edge: 62.4dvh; }
+  #result-alien { --alien-full: min(70dvh, 105vw); --edge: 62.4dvh; }
   .result-badge { top: 12dvh; width: min(46vw, 30dvh); }
   .record-disc { left: 50%; top: calc(50dvh - min(45vw, 28dvh)); width: min(90vw, 56dvh); height: min(90vw, 56dvh); transform: translateX(-50%); }
   .record-status { top: 3dvh; padding: 8px 16px; font-size: 1rem; }

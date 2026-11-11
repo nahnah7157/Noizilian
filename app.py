@@ -58,10 +58,13 @@ def llm_allowed(kind: str, per_ip_env: str, per_ip_default: int) -> bool:
 
 
 def asset_url(filename: str) -> str:
-    """배포 방식과 관계없이 public/ 파일을 같은 URL로 참조합니다."""
+    """배포 방식과 관계없이 public/ 파일을 같은 URL로 참조합니다.
+    파일 수정 시각을 ?v=로 붙여, 배포 뒤 브라우저가 옛 JS·CSS를 캐시로 쓰지 않게 한다(파일이 없으면 붙이지 않음)."""
+    path = BASE_DIR / "public" / filename.lstrip("/")
+    version = {"v": int(path.stat().st_mtime)} if path.is_file() else {}
     if IS_VERCEL:
-        return f"/{filename.lstrip('/')}"
-    return url_for("static", filename=filename)
+        return f"/{filename.lstrip('/')}" + (f"?v={version['v']}" if version else "")
+    return url_for("static", filename=filename, **version)
 
 
 app.jinja_env.globals["asset_url"] = asset_url

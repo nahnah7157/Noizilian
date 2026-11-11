@@ -475,7 +475,14 @@ function resumeBgm(fadeMs = 0) {
   });
 }
 
-/** 결과 발표: 배경음악을 멈추고 성공·실패 소리, 끝나면(없거나 실패해도) 배경음악을 페이드인으로 다시 */
+/** 돔이 덮인 결과 화면이 열리면: 배경음악을 멈추고(공개 소리가 끝날 때까지) sfx_result 한 번 */
+function holdBgmForResult() {
+  bgmHeld = true;
+  bgm?.pause();
+  playSound("result");
+}
+
+/** 돔이 사라지는 순간: 성공·실패 소리, 끝나면(없거나 실패해도) 배경음악을 페이드인으로 다시 */
 function playResultSound(success) {
   bgmHeld = true;
   bgm?.pause();
@@ -539,8 +546,12 @@ let currentStageId = null;
 let currentStageIndex = 0;
 let currentDishId = null;
 let resultSuccess = true;
-// 결과 화면 외계인(테이블 뒤). 돔을 열기 전엔 joy, 연 뒤 성공·실패 그림. 보이는 비율은 style.css #result-alien --show
-const RESULT_ALIEN = { success: "/assets/images/alien/alien_success.png", fail: "/assets/images/alien/alien_fail.png" };
+// 결과 화면 외계인(테이블 뒤). 돔을 열기 전엔 기본, 연 뒤 성공·실패 그림. 보이는 비율은 style.css #result-alien --show
+const RESULT_ALIEN = {
+  covered: "/assets/images/alien/alien_default.png",
+  success: "/assets/images/alien/alien_success.png",
+  fail: "/assets/images/alien/alien_fail.png",
+};
 const RESULT_BADGE = { success: "/assets/images/result/text_success.png", fail: "/assets/images/result/text_fail.png" };
 const DOME_FLY_MS = 800; // style.css @keyframes dome-fly 길이와 같게
 const DISH_COUNT_KEY = "oekcook.dishCount"; // 이 브라우저에서 끝까지 한 판 수 (최종 카드 "N번째 요리")
@@ -840,7 +851,7 @@ function showResult(result, requested = false) {
   lastResult = result;
   resultImageEl.src = result.image;
   resultSuccess = result.success;
-  resultAlienEl.src = JOY_IMAGE; // 돔을 열기 전엔 기대하는 얼굴
+  resultAlienEl.src = RESULT_ALIEN.covered; // 돔이 덮여 있는 동안은 기본 얼굴
   badgeEl.src = RESULT_BADGE[result.success ? "success" : "fail"];
   resetResultScreen();
   resultOverlayEl.hidden = false;
@@ -851,6 +862,7 @@ function showResult(result, requested = false) {
   renderCard(result);
   if (!requested) requestRecord();
   showRecord();
+  holdBgmForResult(); // 돔이 덮인 화면이 되자마자 배경음악 정지 + 결과 발표 소리
 }
 
 function resetResultScreen() {
