@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ bot.name }}와 대화하기</title>
+    <title>{{ bot.name }}과 대화하기</title>
     <link rel="stylesheet" href="{{ asset_url('assets/css/style.css') }}">
     <link rel="preload" as="image" href="{{ asset_url('assets/images/alien/alien_convinced.png') }}">
     <link rel="preload" as="image" href="{{ asset_url('assets/images/alien/alien_joy.png') }}">
@@ -60,19 +60,27 @@
     <!-- 인트로: 처음 들어올 때만 나오는 대화 장면 (chatbot.js 0번). 대사·그림은 config.intro -->
     <div id="intro" class="intro-overlay" tabindex="-1" hidden>
       <div class="intro-content stage">
-        <img class="intro-portrait intro-player" alt="">
+        <div class="intro-glow intro-glow-alien"></div>
+        <div class="intro-glow intro-glow-player"></div>
         <img class="intro-portrait intro-alien" alt="">
-        <div class="intro-board" hidden>
-          <img class="intro-board-image" alt="" hidden>
-          <div class="intro-tiles"><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas><canvas width="160" height="160"></canvas></div>
-        </div>
+        <img class="intro-portrait intro-player" alt="">
+        <!-- effect "panel": 게임의 타일 패널을 복제해 보여 주기만 한다(조작 안 됨) -->
+        <div class="intro-panel" aria-hidden="true" inert hidden></div>
         <section class="intro-box">
-          <p class="intro-name"></p>
-          <p class="intro-text" aria-hidden="true"></p>
+          <p class="intro-line"><span class="intro-name"></span><span class="intro-text" aria-hidden="true"></span></p>
           <p class="intro-sr sr-only" aria-live="polite"></p>
-          <span class="intro-next" aria-hidden="true">▼</span>
+          <button type="button" class="intro-next" aria-label="다음"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </section>
-        <button type="button" class="start-button intro-skip">SKIP</button>
+        <button type="button" class="intro-skip">skip</button>
+        <div class="intro-confirm-layer" hidden>
+          <div class="intro-confirm" role="dialog" aria-modal="true" aria-labelledby="intro-confirm-title">
+            <p id="intro-confirm-title" class="intro-confirm-title">외계인과의 대화를<br>전부 건너뛸까요?</p>
+            <div class="intro-confirm-buttons">
+              <button type="button" class="intro-confirm-yes">네</button>
+              <button type="button" class="intro-confirm-no">아니요</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <script type="application/json" id="intro-data">{{ intro|tojson }}</script>

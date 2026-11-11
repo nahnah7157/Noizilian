@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// Noizilien 학종이 작성기 + 채팅
+// 윅쿡 학종이 작성기 + 채팅
 // 1. 색 변환  2. 감각 공식  3. 색·질감 목록과 찾기  4. 타일 그리기  5. 학종이 작성기  6. 채팅
 // ════════════════════════════════════════════════════════════
 
@@ -388,7 +388,7 @@ if (tileCanvas && colorCanvas && hueSlider) {
     current = { color, texture, seed, scores, density: currentDensity, hsv, description: describe(scores) };
   }
 
-  window.noizilien = {
+  window.oekcook = {
     getSignal: () => current && structuredClone(current),
     tileImage: () => tileCanvas.toDataURL("image/png"),
     redraw: () => { renderColorCanvas(); update(); }, // 캔버스 해상도를 바꾼 뒤 다시 그리기 (8번)
@@ -800,7 +800,7 @@ restartBtn?.addEventListener("click", () => {
 
 // 보내기(✓): 색·질감 타일만 보낸다. 글은 고정 문자열 "타일" (app.py는 그대로)
 sendButton.addEventListener("click", async () => {
-  const signal = window.noizilien?.getSignal() ?? null;
+  const signal = window.oekcook?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
 
   // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
@@ -860,7 +860,7 @@ undoBtn?.addEventListener("click", () => {
   lastGame = snap.game;
   renderHud(lastGame);
   renderVerdict(lastGame, false);
-  window.noizilien?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
+  window.oekcook?.restore(snap.signal); // 선택기를 취소한 타일 값으로 (조금 고쳐 다시 보낼 수 있게)
   renderTileRecord();
   updateThink();
   refreshUndo();
@@ -1065,7 +1065,7 @@ function fitCanvases() {
   // shortcut: 색 네모·미리보기는 픽셀마다 다시 계산하므로 너비 1024·256px에서 멈춘다. 끌 때 느리지 않으면 더 키워도 된다
   const color = fitCanvas(document.getElementById("color-canvas"), stageScale, 1024);
   const tile = fitCanvas(document.getElementById("preview-tile"), stageScale, 256);
-  if (color || tile) window.noizilien?.redraw();
+  if (color || tile) window.oekcook?.redraw();
   if (recordCanvas && !resultOverlayEl?.hidden) {
     fitCanvas(recordCanvas, stageScale, 1600);
     drawRecord();
@@ -1084,21 +1084,13 @@ portrait.addEventListener("change", queueFit);
 fitStage();
 
 // 콘솔에서 성공·실패 결과 화면을 볼 때 쓴다 (게임을 끝낸 뒤 호출하면 타일·대사도 실제 값)
-if (window.noizilien) window.noizilien.showResult = showResult;
+if (window.oekcook) window.oekcook.showResult = showResult;
 
 // ── 0. 인트로 ───────────────────────────────────────────────
 // 처음 들어올 때만 주인공과 외계인의 대화 장면을 보여 주고, 끝나거나 SKIP하면 게임을 시작한다. 대사·그림은 config.intro
 const introEl = document.getElementById("intro");
-const INTRO_KEY = "noizilien.introSeen";
+const INTRO_KEY = "oekcook.introSeen";
 const INTRO_TYPE_MS = 35;
-// 가운데 틀에 보여 줄 타일 4장 (빨강·초록·파랑·노랑 계열, 무늬도 다르게)
-const INTRO_TILES = [
-  { color: { L: 50, C: 60, h: 30 }, texture: { oct: 2, freq: 0.5, pers: 0.5, lac: 2.0 } },
-  { color: { L: 65, C: 55, h: 140 }, texture: { oct: 6, freq: 0.7, pers: 0.6, lac: 2.5 } },
-  { color: { L: 55, C: 45, h: 270 }, texture: { oct: 10, freq: 0.45, pers: 0.7, lac: 3.0 } },
-  { color: { L: 85, C: 70, h: 95 }, texture: { oct: 4, freq: 0.8, pers: 0.5, lac: 2.2 } },
-];
-const INTRO_HIGHLIGHT = 2; // highlight 효과로 강조할 타일
 
 /** 이미 봤으면 false. 저장소가 막혀 있으면 매번 보여 준다 */
 function shouldShowIntro() {
@@ -1120,14 +1112,12 @@ function playIntro(done) {
   const lines = data.lines || [];
   if (!lines.length) return done();
   const q = (selector) => introEl.querySelector(selector);
-  const player = q(".intro-player"), alien = q(".intro-alien"), board = q(".intro-board");
-  const boardImage = q(".intro-board-image"), tiles = [...introEl.querySelectorAll(".intro-tiles canvas")];
+  const player = q(".intro-player"), alien = q(".intro-alien"), box = q(".intro-box"), panel = q(".intro-panel");
   const nameEl = q(".intro-name"), textEl = q(".intro-text"), srEl = q(".intro-sr");
-  const playerName = shell?.dataset.username || "사용자";
+  const confirmLayer = q(".intro-confirm-layer");
   player.src = data.player_portraits?.[shell?.dataset.player] || data.player_portraits?.male || "";
-  alien.src = data.alien_portraits?.default || "";
+  alien.src = data.alien_portrait || "";
   if (data.background) q(".intro-content").style.setProperty("--intro-bg", `url("${data.background}")`);
-  tiles.forEach((canvas, i) => renderTile(canvas, INTRO_TILES[i].color, INTRO_TILES[i].texture, 700 + i));
 
   let index = -1, chars = [], shown = 0, timer = 0, closed = false;
   const stopTyping = () => { clearInterval(timer); timer = 0; textEl.textContent = chars.join(""); };
@@ -1136,13 +1126,9 @@ function playIntro(done) {
     const alienSpeaks = line.speaker === "alien";
     player.classList.toggle("speaking", !alienSpeaks);
     alien.classList.toggle("speaking", alienSpeaks);
-    nameEl.textContent = alienSpeaks ? data.alien_name : playerName;
-    if (alienSpeaks && line.expression && data.alien_portraits?.[line.expression]) alien.src = data.alien_portraits[line.expression];
-    if (line.image || line.effect === "tiles" || line.effect === "highlight") board.hidden = false; // 한 번 나오면 끝까지 둔다
-    if (line.image) boardImage.src = line.image;
-    boardImage.hidden = !boardImage.getAttribute("src");
-    q(".intro-tiles").hidden = !boardImage.hidden;
-    tiles.forEach((canvas, i) => canvas.classList.toggle("highlight", line.effect === "highlight" && i === INTRO_HIGHLIGHT));
+    box.dataset.speaker = alienSpeaks ? "alien" : "player"; // 이름 색
+    nameEl.textContent = alienSpeaks ? data.alien_name : data.player_name;
+    if (line.effect === "panel" && panel.hidden) showPanel(); // 한 번 나오면 끝까지 둔다
     alien.classList.remove("shake", "nod");
     if (!reduceMotion && (line.effect === "shake" || line.effect === "nod")) {
       void alien.offsetWidth; // 같은 효과가 이어져도 다시 시작
@@ -1160,8 +1146,27 @@ function playIntro(done) {
     }, INTRO_TYPE_MS);
   }
 
+  // 게임의 타일 패널을 그대로 복제해 자리(532×436)에 맞춰 줄인다. 캔버스 그림은 복제되지 않아 따로 옮긴다
+  // shortcut: 배율은 처음 보일 때 한 번만 잰다. 인트로 중 화면을 돌리면 크기가 안 맞을 수 있다
+  function showPanel() {
+    const dock = document.querySelector(".signal-dock");
+    if (!dock) return;
+    // id는 남겨 둔다(#color-canvas 등 id로 걸린 스타일). 진짜 패널이 문서 앞쪽이라 getElementById는 진짜를 찾고, 닫을 때 복제본을 지운다
+    const copy = dock.cloneNode(true);
+    const from = dock.querySelectorAll("canvas"), to = copy.querySelectorAll("canvas");
+    to.forEach((canvas, i) => {
+      canvas.width = from[i].width;
+      canvas.height = from[i].height;
+      if (from[i].width && from[i].height) canvas.getContext("2d").drawImage(from[i], 0, 0);
+    });
+    panel.replaceChildren(copy);
+    panel.hidden = false;
+    copy.style.setProperty("--fit", Math.min(1, panel.clientWidth / copy.offsetWidth, panel.clientHeight / copy.offsetHeight));
+  }
+
   // 글자가 나오는 중이면 그 줄을 끝까지, 다 나왔으면 다음 줄, 마지막 뒤면 닫는다
   function advance() {
+    if (!confirmLayer.hidden) return;
     if (timer) return stopTyping();
     if (index + 1 >= lines.length) return close();
     show(lines[++index]);
@@ -1172,20 +1177,33 @@ function playIntro(done) {
     closed = true;
     clearInterval(timer);
     introEl.hidden = true;
+    panel.replaceChildren(); // 복제한 패널(같은 id)을 게임 전에 없앤다
     document.removeEventListener("keydown", onKey);
     try { localStorage.setItem(INTRO_KEY, "1"); } catch { /* 저장소가 막혀 있으면 다음에도 보여 준다 */ }
     done();
   }
 
+  // skip은 바로 건너뛰지 않고 확인창을 띄운다
+  function askSkip(open) {
+    confirmLayer.hidden = !open;
+    (open ? q(".intro-confirm-no") : introEl).focus();
+  }
+
   function onKey(event) {
+    if (!confirmLayer.hidden) {
+      if (event.key === "Escape") askSkip(false);
+      return;
+    }
     if ((event.key !== " " && event.key !== "Enter") || event.repeat) return;
-    if (event.target.closest?.(".intro-skip")) return; // SKIP에 포커스가 있으면 버튼이 처리한다
+    if (event.target.closest?.("button")) return; // 버튼에 포커스가 있으면 버튼이 처리한다
     event.preventDefault();
     advance();
   }
 
-  introEl.addEventListener("click", (event) => { if (!event.target.closest(".intro-skip")) advance(); });
-  q(".intro-skip").addEventListener("click", close);
+  introEl.addEventListener("click", (event) => { if (!event.target.closest(".intro-skip, .intro-confirm-layer")) advance(); });
+  q(".intro-skip").addEventListener("click", () => askSkip(true));
+  q(".intro-confirm-yes").addEventListener("click", close);
+  q(".intro-confirm-no").addEventListener("click", () => askSkip(false));
   document.addEventListener("keydown", onKey);
   introEl.hidden = false;
   queueFit(); // 스테이지 배율은 fitStage가 모든 .stage에 맞춘다
