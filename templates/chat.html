@@ -126,12 +126,12 @@
             <p id="card-style"></p>
           </div>
         </section>
-        <!-- ①② "다음 ▶" / ③ 기록 저장(PNG) · 다시 요리하기(같은 이름·성별, 인트로 없이) · 처음으로(시작 화면) -->
+        <!-- ①② "다음 ▶" / ③ 기록 저장(PNG) · 다시 요리하기(같은 이름·성별, 영상·컷신 없이 1단계) · 처음으로(이름 화면 → 티저 → 컷신) -->
         <div class="result-actions">
           <button id="result-next" class="start-button">다음 ▶</button>
           <button id="save-btn" class="start-button">기록 저장</button>
           <button id="restart-btn" class="start-button secondary" data-sound="start">다시 요리하기</button>
-          <a id="home-btn" class="start-button tertiary" href="{{ url_for('index') }}" data-sound="start">처음으로</a>
+          <a id="home-btn" class="start-button tertiary" href="{{ url_for('detail') }}" data-sound="start">처음으로</a>
         </div>
         <figure class="record">
           <div class="record-disc">

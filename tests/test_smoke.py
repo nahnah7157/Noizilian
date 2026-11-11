@@ -59,7 +59,8 @@ class SmokeTest(unittest.TestCase):
         chat_page = self.client.get("/chat").get_data(as_text=True)
         self.assertIn("/assets/js/chatbot.js", chat_page)
         self.assertIn('href="/detail"', self.client.get("/").get_data(as_text=True))  # 시작하기 → 이름 화면
-        self.assertIn('href="/"', chat_page)  # 결과 끝 화면의 처음으로
+        self.assertIn('href="/detail', chat_page)  # 결과 끝 화면의 처음으로 → 이름 화면(→ 티저 → 컷신)
+        self.assertIn("/assets/video/teaser.mp4", self.client.get("/detail").get_data(as_text=True))
         for path in (
             "/assets/js/chatbot.js",
             "/assets/css/style.css",

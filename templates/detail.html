@@ -26,6 +26,11 @@
       </div>
       <button class="start-button" type="submit">시작하기</button>
     </form>
+    <!-- 티저 영상: 시작하기를 누르는 순간(클릭 직후라 소리와 함께 재생 가능) 이 화면 위에 띄우고, 끝나거나 skip하면 게임 화면으로 → 컷신 -->
+    <div id="teaser" class="teaser" hidden>
+      <video src="{{ asset_url('assets/video/teaser.mp4') }}" playsinline preload="auto"></video>
+      <button type="button" class="teaser-skip">skip</button>
+    </div>
     <button type="button" id="sound-toggle" class="sound-toggle" aria-pressed="false" aria-label="소리 끄기">🔊</button>
     <script type="application/json" id="sound-data">{{ bot.sounds|tojson }}</script>
     <script>
@@ -49,10 +54,13 @@
           return true;
         };
         show();
+        const teaser = document.getElementById("teaser");
+        const video = teaser?.querySelector("video");
         toggle.addEventListener("click", () => {
           muted = !muted;
           try { localStorage.setItem("oekcook.muted", muted ? "1" : "0"); } catch { /* 이번 페이지에서만 */ }
           show();
+          if (video) video.muted = muted; // 소리를 끄면 티저 영상도 음소거
         });
         // 링크·폼으로 페이지가 바뀌면 소리가 끊기므로 잠깐 늦춰 이동한다
         document.addEventListener("click", (event) => {
@@ -62,10 +70,21 @@
           event.preventDefault();
           setTimeout(() => { location.href = el.href; }, 250);
         });
+        // 이름 화면 시작하기: 티저 영상 → (끝·skip) → 게임 화면. 영상이 없거나 재생이 막히면 바로 게임 화면으로
         document.querySelector("form")?.addEventListener("submit", (event) => {
-          if (!play("button")) return;
           event.preventDefault();
-          setTimeout(() => event.target.submit(), 250);
+          const form = event.target;
+          const target = `${form.action}?${new URLSearchParams(new FormData(form))}`;
+          let gone = false;
+          const go = () => { if (!gone) { gone = true; location.href = target; } };
+          play("button");
+          if (!video) return go();
+          video.muted = muted;
+          teaser.hidden = false;
+          video.addEventListener("ended", go);
+          video.addEventListener("error", go);
+          teaser.querySelector(".teaser-skip").addEventListener("click", go);
+          video.play().catch(go);
         });
       })();
     </script>
