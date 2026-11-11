@@ -98,11 +98,14 @@
   - 기록칸은 단계가 끝날 때만 채움(stageFinished). 진행 중엔 외계인 머리 위 말풍선(#alien-think)에 외계인이 방금 답한 타일(이번 단계에 아직 안 보냈으면 "…", 11/9 변경). 꼬리 달린 말풍선, 깜박임은 11/9에 뺌. 단계 끝나면 두 타일이 기록칸으로 날아감(flyTile)
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
-- 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view)
-  - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 SKIP하면 그때 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
-  - 1920×1080 스테이지: 왼쪽 주인공(이름 화면에서 고른 player_male/female), 오른쪽 외계인(줄마다 expression), 하단 대화창(이름 + 한 글자씩), 오른쪽 위 SKIP. 말하는 쪽 밝게·1.05배, 듣는 쪽 어둡게
-  - 넘기기: 아무 데나 클릭·터치·스페이스·엔터. 글자가 나오는 중이면 그 줄을 끝까지. effect: shake·nod(외계인), tiles(가운데 틀에 renderTile 타일 4장, 이후 유지), highlight(타일 하나 깜박임). image가 있으면 틀에 그 그림
-  - 그림 경로는 config.intro(배경·초상화). 세로 화면은 초상화를 대화창 위에 작게, 대화창은 아래 가득. 모션 줄이기면 글자 한 번에·효과 없음
+- 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view). 11/11 피그마 시안으로 교체
+  - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 skip → 확인창 "네"면 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
+  - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(남 intro_player_male, 여 아직 기존 player_female — config.intro.player_portraits.female만 바꾸면 됨, 1050·-4·816×1088), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
+  - 대화창: y 678부터 높이 402 띠(rgba(10,13,15,.8)). 이름(학교안심 마법사, 나 #F6B981·외계인 #B6F4F0, 주인공은 config.intro.player_name "나")과 대사(프리젠테이션 Regular, 흰색, 한 글자씩)가 한 줄(left 225·띠 기준 top 166·간격 70·이름 칸 180·60px). 다음 버튼 #B6F4F0 알약(1604·914). 아무 데나 클릭·스페이스·엔터도 넘김
+  - skip: 오른쪽 위(1675·47) 알약 → 확인창(655×406, 가운데) "네"(#CDD1D7) = 끝내고 게임 시작, "아니요"(#B6F4F0) = 계속(Esc도 닫음, 열리면 아니요에 포커스)
+  - effect panel(5번째 줄): 게임 타일 패널(.signal-dock)을 복제해 678·181·532×436 자리에 --fit배로 줄여 아래에서 올라옴(0.5초), 끝까지 유지. 보여 주기만(inert). 복제본은 id가 같아서 인트로를 닫을 때 지움. shake·nod는 남아 있음(지금 대사엔 안 씀). tiles·highlight·image 효과는 삭제
+  - 글꼴: style.css 맨 위 @font-face. 학교안심 마법사 = jsDelivr @kfonts/hakgyoansim-mabeopsa@0.1.0, 프리젠테이션 = jsDelivr gh/projectnoonnu/2404@1.0 (둘 다 OFL). 못 불러오면 IBM Plex Sans KR 등으로
+  - 세로 화면(시안 없음): 초상화는 대화창 위에 작게(외계인 26%·주인공 74%), 대화창 아래 28dvh(이름 위·대사 아래), 패널은 위쪽 30dvh. 색·글꼴·버튼 모양은 가로와 같음. 모션 줄이기면 글자 한 번에·애니메이션 없음
 - 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶"(③만 "다시 하기"), 짧은 페이드(모션 줄이기면 즉시)
   - ① 요리는 테이블 가운데(x 960·접시 끝 y 850·높이 300, 외계인보다 앞), 외계인은 테이블 뒤(11/10): 그림 위쪽 --show만 보이게 object-fit으로 잘라 잘린 끝을 테이블 뒤 끝 y 583에 맞춤. 성공 alien_success(--show .74), 실패 alien_fail(.76), 입이 접시 위로 보이게(11/11). 그림 경로는 chatbot.js RESULT_ALIEN. 세로 화면은 같은 구도(테이블 뒤 끝 62.4dvh, 외계인 min(85dvh,130vw), 접시가 외계인 아래쪽을 조금 가림). 외계인 그림을 바꾸면 --show를 다시 볼 것
   - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)

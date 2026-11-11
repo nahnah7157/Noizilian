@@ -226,13 +226,13 @@ def intro_view(config: dict) -> dict:
     """인트로 대화 설정. 그림 경로를 브라우저 주소로 바꾼다."""
     intro = config.get("intro") or {}
     url = lambda path: asset_url(path) if path else None
-    pictures = lambda group: {k: url(v) for k, v in (intro.get(group) or {}).items() if not k.startswith("_")}
     return {
         "background": url(intro.get("background")),
+        "player_name": intro.get("player_name", "나"),
         "alien_name": intro.get("alien_name", "외계인"),
-        "player_portraits": pictures("player_portraits"),
-        "alien_portraits": pictures("alien_portraits"),
-        "lines": [{**line, **({"image": url(line["image"])} if line.get("image") else {})} for line in intro.get("lines", [])],
+        "player_portraits": {k: url(v) for k, v in (intro.get("player_portraits") or {}).items() if not k.startswith("_")},
+        "alien_portrait": url(intro.get("alien_portrait")),
+        "lines": intro.get("lines", []),
     }
 
 
