@@ -11,6 +11,14 @@
       <!-- 고른 성별에 따라 가운데 그림이 바뀐다 (style.css의 :has 규칙) -->
       <img class="player-image player-male" src="{{ asset_url('assets/images/alien/player_male.png') }}" alt="남성 플레이어">
       <img class="player-image player-female" src="{{ asset_url('assets/images/alien/player_female.png') }}" alt="여성 플레이어">
+      <!-- 머리 위: 제목 + 이름 칸 / 발 아래: 성별 / 오른쪽 아래: 시작하기 (사람과 발을 가리지 않게) -->
+      <div class="name-top">
+        <h1 class="name-title">납치된 인간은 누구?</h1>
+        <div class="username-area">
+          <label for="username">이름:</label>
+          <input id="username" name="username" type="text" maxlength="50" placeholder="이름을 입력하세요" autocomplete="nickname">
+        </div>
+      </div>
       <div class="bottom-center">
         <fieldset class="player-pick">
           <legend class="sr-only">플레이어 성별</legend>
@@ -19,10 +27,6 @@
           <input id="player-female" name="player" type="radio" value="female">
           <label for="player-female">여성</label>
         </fieldset>
-        <div class="username-area">
-          <label for="username">이름:</label>
-          <input id="username" name="username" type="text" maxlength="50" placeholder="이름을 입력하세요" autocomplete="nickname">
-        </div>
       </div>
       <button class="start-button" type="submit">시작하기</button>
     </form>
