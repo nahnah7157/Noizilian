@@ -1,5 +1,5 @@
 {
-  "name": "윅쿡",
+  "name": "왹쿡",
   "description": "골든 레코드에서 지구 요리를 보고 따라 만들려던 외계인 요리사. 그런데 자꾸 실패해요. 말은 통하지 않으니, 색과 질감이 담긴 타일을 주고받으며 재료 준비부터 플레이팅까지 요리를 완성하도록 도와주세요.",
   "tags": [
     "#외계인",
@@ -317,11 +317,11 @@
     }
   },
   "intro": {
-    "_note": "게임 시작 전 대화 장면(chatbot.js 0번). 그림 경로만 바꾸면 교체된다(여자 주인공 그림이 생기면 player_portraits.female만 바꿀 것). 외계인은 모든 줄에서 alien_portrait 하나. 줄마다 speaker(player|alien), text, 선택 effect(panel = 가운데 타일 패널이 올라와 끝까지 유지, shake|nod = 외계인 흔들기)",
+    "_note": "게임 시작 전 대화 장면(chatbot.js 0번). 그림 경로만 바꾸면 교체된다(주인공은 고른 성별의 player_portraits, 지금은 남녀 모두 기본 player_male·female). 외계인은 모든 줄에서 alien_portrait 하나. 줄마다 speaker(player|alien), text, 선택 effect(panel = 가운데 타일 패널이 올라와 끝까지 유지, shake|nod = 외계인 흔들기)",
     "background": "assets/images/intro/intro_bg.png",
     "player_name": "나",
     "player_portraits": {
-      "male": "assets/images/intro/intro_player_male.png",
+      "male": "assets/images/alien/player_male.png",
       "female": "assets/images/alien/player_female.png"
     },
     "alien_name": "외계인",

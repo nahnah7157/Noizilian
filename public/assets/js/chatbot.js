@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// 윅쿡 학종이 작성기 + 채팅
+// 왹쿡 학종이 작성기 + 채팅
 // 1. 색 변환  2. 감각 공식  3. 색·질감 목록과 찾기  4. 타일 그리기  5. 학종이 작성기  6. 채팅
 // ════════════════════════════════════════════════════════════
 
@@ -434,8 +434,16 @@ let currentStageId = null;
 let currentStageIndex = 0;
 let currentDishId = null;
 let resultSuccess = true;
-// 결과 화면 외계인(테이블 뒤). 성공 = 손 흔드는 joy, 실패 = 찡그린 default. 보이는 비율은 style.css #result-alien --show
+// 결과 화면 외계인(테이블 뒤). 돔을 열기 전엔 joy, 연 뒤 성공·실패 그림. 보이는 비율은 style.css #result-alien --show
 const RESULT_ALIEN = { success: "/assets/images/alien/alien_success.png", fail: "/assets/images/alien/alien_fail.png" };
+const RESULT_BADGE = { success: "/assets/images/result/text_success.png", fail: "/assets/images/result/text_fail.png" };
+const DOME_FLY_MS = 800; // style.css @keyframes dome-fly 길이와 같게
+const DISH_COUNT_KEY = "oekcook.dishCount"; // 이 브라우저에서 끝까지 한 판 수 (최종 카드 "N번째 요리")
+const domeEl = document.getElementById("result-dome");
+const badgeEl = document.getElementById("result-badge");
+let lastResult = null;
+let currentDishName = "";
+let dishCount = 1;
 const RESULT_NEXT = { dish: "record", record: "end" };
 const RESULT_FADE_MS = 200; // style.css의 .result-content > * 전환 시간과 같게
 let resultFadeTimer = 0;
@@ -666,7 +674,7 @@ function updateGameState(data) {
     document.body.dataset.stage = data.stage.id; // 단계별 배경 (style.css)
     stageNames[data.stage.id] = data.stage.name;
   }
-  if (data.dish) currentDishId = data.dish.id;
+  if (data.dish) { currentDishId = data.dish.id; currentDishName = data.dish.name; }
 
   // 단계 종료 판정: done = 마지막 단계가 끝 / advanced = 직전 단계가 끝
   let finishedIndex = -1;
@@ -676,6 +684,7 @@ function updateGameState(data) {
   // 타일이 날아가고 요리 화면을 보는 동안 레코드 대사가 만들어지도록 마지막 응답을 받자마자 요청한다
   if (currentState?.done && data.result) {
     resultSuccess = data.result.success;
+    dishCount = countDish();
     requestRecord();
   }
   refreshUndo();
@@ -706,18 +715,31 @@ function updateGameState(data) {
   }
 }
 
-/** 결과 화면을 ① 요리부터 연다. requested면 대사는 이미 요청 중이다(콘솔에서 부를 때는 새로 요청) */
+/** 끝까지 한 판을 세어 몇 번째 요리인지 돌려준다. 저장소가 막혀 있으면 1 */
+function countDish() {
+  try {
+    const n = (parseInt(localStorage.getItem(DISH_COUNT_KEY), 10) || 0) + 1;
+    localStorage.setItem(DISH_COUNT_KEY, String(n));
+    return n;
+  } catch {
+    return 1;
+  }
+}
+
+/** 결과 화면을 ① 요리부터 연다. 요리는 돔 아래 숨겨 두고 누르면 공개. requested면 대사는 이미 요청 중이다(콘솔에서 부를 때는 새로 요청) */
 function showResult(result, requested = false) {
+  lastResult = result;
   resultImageEl.src = result.image;
   resultSuccess = result.success;
-  resultAlienEl.src = RESULT_ALIEN[result.success ? "success" : "fail"];
+  resultAlienEl.src = JOY_IMAGE; // 돔을 열기 전엔 기대하는 얼굴
+  badgeEl.src = RESULT_BADGE[result.success ? "success" : "fail"];
   resetResultScreen();
   resultOverlayEl.hidden = false;
   // 플레이팅 색을 결과 요리 그림에도 입힌다 (abnormal이면 파란 피자 같은 색 그대로)
   const shift = result.plating?.hue_shift;
   resultImageEl.classList.toggle("tinted", shift != null);
   resultImageEl.style.setProperty("--hue-shift", `${shift ?? 0}deg`);
-  renderConclusion();
+  renderCard(result);
   if (!requested) requestRecord();
   showRecord();
 }
@@ -726,17 +748,68 @@ function resetResultScreen() {
   clearTimeout(resultFadeTimer);
   resultFadeTimer = 0;
   resultContentEl?.classList.remove("fading");
-  if (resultContentEl) resultContentEl.dataset.screen = "dish";
+  if (resultContentEl) {
+    resultContentEl.dataset.screen = "dish";
+    resultContentEl.dataset.reveal = "covered";
+  }
+  if (badgeEl) badgeEl.hidden = true;
 }
 
-/** 결론 카드의 요리 결과·소통 결과 글 */
-function renderConclusion() {
+// 돔을 누르면 살짝 들렸다가 하늘로 날아가고, 화면 밖으로 완전히 사라진 뒤에야 외계인 표정과 성공·실패 배지가 바뀐다
+function revealDish() {
+  if (resultContentEl.dataset.reveal !== "covered") return;
+  const done = () => {
+    resultContentEl.dataset.reveal = "revealed";
+    resultAlienEl.src = RESULT_ALIEN[resultSuccess ? "success" : "fail"];
+    badgeEl.hidden = false;
+    resultNextBtn?.focus();
+  };
+  if (reduceMotion) return done();
+  resultContentEl.dataset.reveal = "lifting";
+  setTimeout(done, DOME_FLY_MS);
+}
+domeEl?.addEventListener("click", revealDish);
+
+const FAIL_REASONS = { prep: "손질 실패", cook: "조리 실패", plating: "플레이팅 색 실패" };
+
+/** 최종 카드: 지구인·시도 횟수·최종 요리·실패 원인(또는 성공 포인트)·결론 문장 */
+function renderCard(result) {
   const mine = history.filter((entry) => entry.who === "user");
-  const mean = Object.fromEntries(AXES.map((a) => [a, mine.reduce((sum, e) => sum + e.scores[a], 0) / mine.length]));
-  document.getElementById("card-dish").textContent = resultSuccess
-    ? "외계인이 처음으로 지구 요리를 완성했어요" : "요리는 조금 이상했지만, 신호는 전해졌어요";
-  document.getElementById("card-count").textContent = `${mine.length}번의 신호로 대화했어요`;
-  document.getElementById("card-style").textContent = `당신은 주로 ${strongestWords(mean, 2)} 신호를 보냈어요`;
+  const mean = Object.fromEntries(AXES.map((a) => [a, mine.reduce((sum, e) => sum + e.scores[a], 0) / (mine.length || 1)]));
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set("card-dish", result.success ? "요리도 신호도 완벽하게 전해졌어요." : "요리는 조금 이상했지만, 신호는 전해졌어요.");
+  set("card-count", `${mine.length}번의 신호로 대화했어요.`);
+  set("card-style", `당신은 주로 ${strongestWords(mean, 2)} 신호를 보냈어요.`);
+  set("card-name", shell?.dataset.username || "사용자");
+  set("card-tries", `${dishCount}번째 요리`);
+  set("card-menu", currentDishName || "");
+  const player = document.getElementById("card-player");
+  if (player) player.src = `/assets/images/alien/player_${shell?.dataset.player || "male"}.png`;
+  const badge = document.getElementById("card-badge");
+  if (badge) { badge.src = RESULT_BADGE[result.success ? "success" : "fail"]; badge.alt = result.success ? "성공!" : "실패!"; }
+  const dish = document.getElementById("card-dish-image");
+  if (dish) {
+    dish.src = result.image;
+    dish.alt = currentDishName;
+    dish.classList.toggle("tinted", result.plating?.hue_shift != null);
+    dish.style.setProperty("--hue-shift", `${result.plating?.hue_shift ?? 0}deg`);
+  }
+  set("card-points-label", result.success ? "성공 포인트" : "실패 원인");
+  const card = document.getElementById("result-card");
+  if (card) card.dataset.result = result.success ? "success" : "fail"; // 원인 칸 색(style.css)
+  const points = cardPoints(result);
+  document.getElementById("card-points")?.replaceChildren(...points.map((text) => {
+    const li = document.createElement("li");
+    li.textContent = text;
+    return li;
+  }));
+}
+
+/** 실패 원인 = 결과가 success가 아닌 단계. 단계는 다 맞았는데 실패면(평균 적합도 부족) 요리 과정 실패 */
+function cardPoints(result) {
+  if (result.success) return ["완벽한 소통"];
+  const failed = Object.entries(result.verdicts || {}).filter(([, v]) => v !== "success").map(([k]) => FAIL_REASONS[k]).filter(Boolean);
+  return failed.length ? failed : ["요리 과정 실패"];
 }
 
 /** 다음 장으로. 짧게 사라졌다가 바꾸고, 모션 줄이기면 바로 바꾼다. 페이드 중 연타는 무시 */
@@ -754,6 +827,8 @@ function showResultScreen(name) {
   resultContentEl.classList.add("fading");
   resultFadeTimer = setTimeout(swap, RESULT_FADE_MS);
 }
+
+document.getElementById("save-btn")?.addEventListener("click", saveCard);
 
 resultNextBtn?.addEventListener("click", () => {
   const next = RESULT_NEXT[resultContentEl.dataset.screen];
@@ -1000,6 +1075,99 @@ function showRecord() {
   recordTip.hidden = true;
   hovered = -1;
   fitCanvases(); // 결과 화면이 막 보여서 레코드 크기를 이제 알 수 있다 (drawRecord 포함)
+}
+
+/** 최종 카드를 canvas에 직접 그려 PNG로 내려받는다(라이브러리 없이). 화면 카드와 같은 구성·색 */
+function saveCard() {
+  const css = getComputedStyle(document.documentElement);
+  const color = (name) => css.getPropertyValue(name).trim();
+  const navy = color("--navy"), lavender = color("--lavender"), paper = color("--paper"), pink = color("--pink"), lime = color("--lime");
+  const W = 1720, H = 900, canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const font = (size) => `700 ${size}px KIMM, "IBM Plex Sans KR", sans-serif`;
+  const box = (x, y, w, h, r, fill, drop = 0, alpha = 1) => { // alpha는 안쪽 색에만(외곽선은 진하게)
+    ctx.beginPath();
+    ctx.roundRect(x, y + drop, w, h, r);
+    if (drop) { ctx.fillStyle = navy; ctx.fill(); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+    ctx.fillStyle = paper;
+    if (alpha < 1) ctx.fill();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = navy;
+    ctx.stroke();
+  };
+  const text = (str, x, y, size, align = "left", fill = navy) => {
+    ctx.font = font(size);
+    ctx.textAlign = align;
+    ctx.fillStyle = fill;
+    ctx.fillText(str, x, y);
+  };
+  const image = (img, ...args) => { if (img instanceof HTMLCanvasElement || (img?.complete && img.naturalWidth)) ctx.drawImage(img, ...args); };
+  const label = (str, x, y) => { ctx.font = font(26); const w = ctx.measureText(str).width + 36; box(x, y - 32, w, 44, 22, lavender); text(str, x + 18, y, 26); };
+  const value = (id) => document.getElementById(id)?.textContent || "";
+
+  box(8, 52, W - 16, H - 70, 36, paper, 8); // 카드
+  box(W / 2 - 280, 12, 560, 84, 30, lavender, 6); // 제목 탭 (양옆 ✦는 Lime)
+  text("FINAL RECORD", W / 2, 70, 46, "center");
+  ctx.font = font(46);
+  const half = ctx.measureText("FINAL RECORD").width / 2;
+  text("✦", W / 2 - half - 40, 68, 40, "center", lime);
+  text("✦", W / 2 + half + 40, 68, 40, "center", lime);
+  // 왼쪽: 레코드 · 주인공 상반신 · 지구인 · 요리 시도 횟수
+  box(40, 130, 960, 420, 28, lavender, 0, .28);
+  image(document.querySelector(".record-disc > img"), 66, 180, 320, 320);
+  image(recordCanvas, 66, 180, 320, 320);
+  const player = document.getElementById("card-player");
+  box(410, 160, 270, 360, 24, lavender);
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(412, 162, 266, 356, 22); ctx.clip();
+  if (player?.naturalWidth) { // 상반신: 화면 카드와 같게 칸 폭의 160%로 키워 위쪽만 (style.css .card-player img)
+    const w = 270 * 1.6, h = w * player.naturalHeight / player.naturalWidth;
+    image(player, 410 + (270 - w) / 2, 160 + 360 * .05, w, h);
+  }
+  ctx.restore();
+  label("지구인", 720, 210);
+  text(value("card-name"), 724, 290, 54);
+  label("요리 시도 횟수", 720, 380);
+  text(value("card-tries"), 724, 460, 54);
+  // 오른쪽: 배지 · 최종 요리 · 요리 그림(플레이팅 색 그대로) · 실패 원인/성공 포인트
+  box(1030, 130, 650, 420, 28, lavender, 0, .28);
+  const badge = document.getElementById("card-badge");
+  if (badge?.naturalWidth) image(badge, 1056, 150, 100 * badge.naturalWidth / badge.naturalHeight, 100);
+  label("최종 요리", 1060, 300);
+  text(value("card-menu"), 1064, 372, 50);
+  const dish = document.getElementById("card-dish-image");
+  ctx.save();
+  if (dish?.classList.contains("tinted")) ctx.filter = `hue-rotate(${dish.style.getPropertyValue("--hue-shift") || "0deg"})`;
+  if (dish?.naturalWidth) { const h = 200, w = h * dish.naturalWidth / dish.naturalHeight; image(dish, 1660 - w, 170, w, h); }
+  ctx.restore();
+  label(value("card-points-label"), 1060, 430);
+  let px = 1064;
+  [...document.querySelectorAll("#card-points li")].forEach((li) => {
+    const str = `${resultSuccess ? "✦" : "✕"} ${li.textContent}`;
+    ctx.font = font(26);
+    const w = ctx.measureText(str).width + 40;
+    box(px, 450, w, 44, 22, resultSuccess ? lime : pink);
+    text(str, px + 20, 482, 26);
+    px += w + 10;
+  });
+  // 아래: 결론 문장
+  box(40, 580, W - 80, 260, 28, lavender, 0, .28);
+  [...document.querySelectorAll(".card-summary p")].forEach((p, i) => text(p.textContent, W / 2, 640 + i * 54, 32, "center"));
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `oekcook-record-${dishCount}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, "image/png");
 }
 
 async function requestRecord() {

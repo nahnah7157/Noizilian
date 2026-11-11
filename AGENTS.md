@@ -1,4 +1,4 @@
-# 프로젝트: 윅쿡 (Oek-Cook, 이전 이름 Noizilien)
+# 프로젝트: 왹쿡 (Oek-Cook, 이전 이름 Noizilien)
 
 골든 레코드에서 지구 요리를 보고 따라 만들다 실패한 외계인을, 말 대신 색·질감 타일을 주고받으며 도와 요리를 완성하는 캐릭터 챗봇입니다.
 
@@ -80,7 +80,7 @@
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
   - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
-  - 이름 정하기 화면(detail.html): bg_default 전체 배경, 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
+  - 이름 정하기 화면(detail.html): 배경 bg_road(11/11, 파일이 없으면 아래 겹의 bg_default가 보임), 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
   - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기·보내기(✓)를 패널 하나(.signal-dock)로 합침
   - 반응형 게임 화면 (chat.html, style.css, chatbot.js 8번): 전환 기준은 orientation 하나(CSS @media·JS matchMedia 같음)
     - 가로: main.stage(1920×1080)를 scale=min(창너비/1920, 창높이/1080)로 가운데 확대·축소, 남는 곳은 --letterbox 여백. 배경은 body의 --bg를 스테이지가 그림
@@ -100,19 +100,20 @@
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
 - 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view). 11/11 피그마 시안으로 교체
   - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 skip → 확인창 "네"면 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
-  - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(남 intro_player_male, 여 아직 기존 player_female — config.intro.player_portraits.female만 바꾸면 됨, 1050·-4·816×1088), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
+  - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(이름 화면에서 고른 성별의 기본 player_male·player_female, config.intro.player_portraits. 1050·-4·816×1088 안에 contain), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
   - 대화창: y 678부터 높이 402 띠(rgba(10,13,15,.8)). 이름(학교안심 마법사, 나 #F6B981·외계인 #B6F4F0, 주인공은 config.intro.player_name "나")과 대사(프리젠테이션 Regular, 흰색, 한 글자씩)가 한 줄(left 225·띠 기준 top 166·간격 70·이름 칸 180·60px). 다음 버튼 #B6F4F0 알약(1604·914). 아무 데나 클릭·스페이스·엔터도 넘김
   - skip: 오른쪽 위(1675·47) 알약 → 확인창(655×406, 가운데) "네"(#CDD1D7) = 끝내고 게임 시작, "아니요"(#B6F4F0) = 계속(Esc도 닫음, 열리면 아니요에 포커스)
   - effect panel(5번째 줄): 게임 타일 패널(.signal-dock)을 복제해 678·181·532×436 자리에 --fit배로 줄여 아래에서 올라옴(0.5초), 끝까지 유지. 보여 주기만(inert). 복제본은 id가 같아서 인트로를 닫을 때 지움. shake·nod는 남아 있음(지금 대사엔 안 씀). tiles·highlight·image 효과는 삭제
   - 글꼴: style.css 맨 위 @font-face. 학교안심 마법사 = jsDelivr @kfonts/hakgyoansim-mabeopsa@0.1.0, 프리젠테이션 = jsDelivr gh/projectnoonnu/2404@1.0 (둘 다 OFL). 못 불러오면 IBM Plex Sans KR 등으로
   - 세로 화면(시안 없음): 초상화는 대화창 위에 작게(외계인 26%·주인공 74%), 대화창 아래 28dvh(이름 위·대사 아래), 패널은 위쪽 30dvh. 색·글꼴·버튼 모양은 가로와 같음. 모션 줄이기면 글자 한 번에·애니메이션 없음
-- 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶"(③만 "다시 하기"), 짧은 페이드(모션 줄이기면 즉시)
-  - ① 요리는 테이블 가운데(x 960·접시 끝 y 850·높이 300, 외계인보다 앞), 외계인은 테이블 뒤(11/10): 그림 위쪽 --show만 보이게 object-fit으로 잘라 잘린 끝을 테이블 뒤 끝 y 583에 맞춤. 성공 alien_success(--show .74), 실패 alien_fail(.76), 입이 접시 위로 보이게(11/11). 그림 경로는 chatbot.js RESULT_ALIEN. 세로 화면은 같은 구도(테이블 뒤 끝 62.4dvh, 외계인 min(85dvh,130vw), 접시가 외계인 아래쪽을 조금 가림). 외계인 그림을 바꾸면 --show를 다시 볼 것
-  - ② 레코드 left 560·top 110·지름 800. 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
-  - ③ 결론 카드. 레코드는 같은 요소를 CSS로 카드 안에 옮김. 소통 결과는 history로 계산(renderConclusion)
+- 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶", 짧은 페이드(모션 줄이기면 즉시). 11/11 돔 공개·최종 카드로 교체
+  - ① 돔 공개(data-reveal covered → lifting → revealed): 돔(images/result/dome_cover.png, 없으면 CSS 은색 돔)과 그 아래 요리는 x 860(가운데에서 살짝 왼쪽)·접시 끝 y 850·높이 300, 외계인은 x 1080 테이블 뒤(--show로 잘라 잘린 끝 y 583)이고 열기 전엔 joy. 돔은 숨 쉬는 글로우 + 통통 튀기(글자 없음), 누르면 살짝 들렸다 하늘로 0.8초(DOME_FLY_MS = @keyframes dome-fly), 다 날아간 뒤 외계인 alien_success/fail + 배지 그림(images/result/text_success·text_fail, 요리 위에 통통 등장) + "다음 ▶". 모션 줄이기면 바로 공개. 세로는 요리 40%·외계인 62%. 외계인·돔 그림을 바꾸면 --show·크기를 다시 볼 것
+  - ② 레코드 left 560·top 110·지름 800. 주변은 반투명 남보라 덮개(::before), 레코드 둘레는 천천히 밝아졌다 어두워지는 금빛(record-glow). 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 대사는 ①에서 미리 요청하고, 오는 동안 "외계인이 신호를 보내는 중이에요". 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
+  - ③ 최종 카드(docs/design/final_record_ref.png 구성, renderCard): FINAL RECORD 탭 / 왼쪽 칸 = 레코드(같은 .record-disc를 옮김) + 고른 성별 player_male·female 상반신(칸 폭 160%로 키워 위쪽만) + 지구인(이름 화면 이름) + 요리 시도 횟수("N번째 요리" = localStorage oekcook.dishCount, 끝까지 한 판마다 +1, 막히면 1) / 오른쪽 칸 = 배지 그림 + 최종 요리(응답 dish.name) + 요리 그림(플레이팅 색 그대로) + 실패 원인(result.verdicts에서 success가 아닌 단계: 손질·조리·플레이팅 색 실패, 없으면 요리 과정 실패) 또는 성공 포인트 "완벽한 소통" / 아래 결론 문장(성공 "요리도 신호도 완벽하게 전해졌어요." 실패 "요리는 조금 이상했지만, 신호는 전해졌어요.") / 버튼 기록 저장(Mint, saveCard가 canvas에 카드를 직접 그려 PNG 내려받기, oekcook-record-N.png) · 다시 요리하기(Pink, startCooking) · 처음으로(Lavender, index). 세로는 위아래로 쌓고 왼쪽 칸 아랫줄에 지구인·시도 횟수(360×740까지 스크롤 없음)
   - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
-  - 콘솔 시험: 게임을 끝낸 뒤 oekcook.showResult({success, image, plating:{hue_shift}})
-- 완료: 시작 화면 외계인 (index.html, style.css): 표정 6장을 1.5초마다 바꿈. 불러온 그림만 돌리고, 발 위치는 --foot로 고정. 모션 줄이기면 멈춤
+  - 콘솔 시험: 게임을 끝낸 뒤 oekcook.showResult({success, image, verdicts, plating:{hue_shift}})
+- 완료: 시작 화면 히어로샷 (index.html, style.css, 11/11): 가로 images/title/hero_landscape, 세로 hero_portrait를 cover(로고가 그림에 있어 제목 글자·표정 외계인 삭제). 시작하기는 큰 Mint 알약 — 가로 그림은 음식이 가운데 아래 91~96%까지라 가로는 로고 아래 빈 싱크대 쪽(left 25%·bottom 7dvh), 세로는 음식 아래 가운데(bottom 6dvh). 그림을 바꾸면 버튼 자리를 다시 볼 것
+- 완료: UI 규칙 통일 (style.css, 11/11): :root 변수 --navy #241D60(외곽선·글자) --mint #65E8DF(주요 버튼) --pink #F4AEDC(보조 버튼) --lavender #AAA0EE(패널·입력 컨트롤) --lime #C9F06E(진행·긍정: 성공 단계 칸, 지금 기록칸) --paper(카드·입력칸 안쪽), --ui-line(3px 남보라) --ui-radius(18px) --ui-drop(아래 5px 그림자, 흐림 없음). 버튼(.start-button·↺✓·?·성별)은 누르면 translate 3px + 그림자 2px. 패널(타일 패널·기록칸·진행 표시·이름 칸)은 Lavender, 카드(결론·툴팁·도움말·말풍선·레코드 상태)는 paper + 외곽선 + 그림자. 크기·밀도 막대는 Lavender 홈 + Mint 손잡이. 글꼴 한국기계연구원체(jsDelivr @noonnu/kimm-bold@0.1.0, MIT, Bold 하나). 인트로(대화창·skip·확인창)는 피그마 시안 그대로 둠
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
 - 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
   - 1단계 첫 타일 = 메뉴 결정(따뜻·차가움 × 노이즈 높음·낮음 → pizza/hamburger/ramen/omurice), 조리 판정에는 안 씀. 바로 손질로
@@ -131,12 +132,12 @@
   - 키 없을 때: 태그가 맞는 예시를 판 안 중복 없이 무작위로. 오해와 바로잡는 대사는 misread=짝이름으로 이어짐
 - 다음 작업 순서
   1. 사람이 직접 해 보기: 색으로 방법을 맞추는 난이도, AI가 묻는 횟수(무작위 입력은 단계당 7번까지 감)
-  2. 요리 재료 이미지 → 단계별 화면 연결, 레코드 예시(record_lines.md) 말투 다듬기, 디자인 토큰(tokens.css), README·공개 URL 최종 확인
+  2. 요리 재료 이미지 → 단계별 화면 연결, 레코드 예시(record_lines.md) 말투 다듬기, README·공개 URL 최종 확인
   3. 배포 전: Render에 키와 호출 제한 환경 변수 넣기, X-Forwarded-For로 IP가 제대로 잡히는지 확인
 - 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 예시(record_lines.md), 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
-- 색, 간격, 폰트는 public/assets/css/tokens.css의 변수만 사용. 새 색상 하드코딩 금지 (tokens.css는 레퍼런스 확정 후 작성 예정)
+- 색·모양은 style.css 맨 위 :root 변수(--navy·--mint·--pink·--lavender·--lime·--paper·--ui-*)를 쓴다. 새 색상 하드코딩 금지 (인트로는 피그마 시안 값, 옛 채팅 화면 CSS는 안 쓰는 코드라 그대로)
 - 레퍼런스 이미지: docs/design/
 - 레퍼런스는 구조와 분위기만 참고. 로고, 일러스트, 사진, 문구는 가져오지 않음
 

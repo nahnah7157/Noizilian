@@ -89,16 +89,47 @@
       <div class="result-content stage" data-screen="dish">
         <img id="result-image" src="" alt="요리 결과">
         <img id="result-alien" src="" alt="외계인">
+        <!-- ① 돔 커버: 누르면 하늘로 날아가고 그 아래 요리가 공개된다(data-reveal covered → lifting → revealed). dome_cover.png가 없으면 CSS 돔 -->
+        <button type="button" id="result-dome" class="result-dome" aria-label="돔 커버 열기">
+          <img src="{{ asset_url('assets/images/result/dome_cover.png') }}" alt="" onload="this.parentNode.classList.add('has-image')" onerror="this.remove()">
+        </button>
+        <img id="result-badge" class="result-badge" src="" alt="" hidden>
         <p id="record-status" class="record-status" hidden>외계인이 신호를 보내는 중이에요</p>
-        <section id="result-card" class="result-card" aria-label="결론">
-          <p>이 레코드는 외계인의 고향 별로 보내졌습니다.</p>
-          <p id="card-dish"></p>
-          <p id="card-count"></p>
-          <p id="card-style"></p>
-          <p class="card-closing">말이 통하지 않아도, 우리는 색과 질감으로 통했다.</p>
+        <!-- ③ 최종 카드 (docs/design/final_record_ref.png 구성). 레코드는 같은 .record 요소를 CSS로 왼쪽 칸에 옮긴다 -->
+        <section id="result-card" class="result-card" aria-label="최종 기록">
+          <h2 class="card-title">FINAL RECORD</h2>
+          <div class="card-left">
+            <div class="card-player"><img id="card-player" src="" alt=""></div>
+            <dl class="card-facts">
+              <dt>지구인</dt><dd id="card-name"></dd>
+              <dt>요리 시도 횟수</dt><dd id="card-tries"></dd>
+            </dl>
+          </div>
+          <div class="card-right">
+            <img id="card-badge" class="card-badge" src="" alt="">
+            <dl class="card-facts">
+              <dt>최종 요리</dt><dd id="card-menu"></dd>
+            </dl>
+            <img id="card-dish-image" class="card-dish-image" src="" alt="">
+            <div class="card-points">
+              <span id="card-points-label" class="card-label"></span>
+              <ul id="card-points"></ul>
+            </div>
+          </div>
+          <div class="card-summary">
+            <p>이 레코드는 외계인의 고향 별로 보내졌습니다.</p>
+            <p id="card-dish"></p>
+            <p id="card-count"></p>
+            <p id="card-style"></p>
+          </div>
         </section>
-        <button id="result-next" class="start-button">다음 ▶</button>
-        <button id="restart-btn" class="start-button">다시 하기</button>
+        <!-- ①② "다음 ▶" / ③ 기록 저장(PNG) · 다시 요리하기(같은 이름·성별, 인트로 없이) · 처음으로(시작 화면) -->
+        <div class="result-actions">
+          <button id="result-next" class="start-button">다음 ▶</button>
+          <button id="save-btn" class="start-button">기록 저장</button>
+          <button id="restart-btn" class="start-button secondary">다시 요리하기</button>
+          <a id="home-btn" class="start-button tertiary" href="{{ url_for('index') }}">처음으로</a>
+        </div>
         <figure class="record">
           <div class="record-disc">
             <img src="{{ asset_url('assets/images/golden_record_cut.png') }}" alt="">
