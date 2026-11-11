@@ -410,6 +410,111 @@ function densityToTexture(density) {
 }
 })();
 
+// ── 6-0. 소리 ───────────────────────────────────────────────
+// 경로·볼륨은 config.sounds(app.py bot_view → #sound-data). 파일이 없거나 브라우저가 막으면 조용히 건너뛴다.
+// 켜기/끄기는 localStorage oekcook.muted(시작·이름 화면의 짧은 스크립트와 같은 키). 배경음악은 인트로부터 결과까지 이어진다
+const SOUNDS = (() => {
+  try { return JSON.parse(document.getElementById("sound-data")?.textContent || "{}"); } catch { return {}; }
+})();
+const MUTE_KEY = "oekcook.muted";
+let muted = false;
+try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch { /* 막혀 있으면 켜짐 */ }
+const bgm = SOUNDS.bgm?.src ? Object.assign(new Audio(SOUNDS.bgm.src), { loop: true, preload: "auto" }) : null;
+let bgmWanted = false; // 인트로·게임이 시작됐으면 true. 결과 소리 동안만 잠깐 멈춘다
+let bgmHeld = false;
+let tileAudio = null;
+
+/** 효과음 한 번. 꺼져 있거나 경로가 없으면 null. 재생이 막히면(파일 없음·자동재생 제한) "skip" 이벤트 */
+function playSound(name) {
+  const s = SOUNDS[name];
+  if (muted || !s?.src) return null;
+  const audio = new Audio(s.src);
+  audio.volume = s.volume ?? 1;
+  audio.play().catch(() => audio.dispatchEvent(new Event("skip")));
+  return audio;
+}
+
+/** 볼륨을 ms 동안 to로 바꾼다 */
+function fadeAudio(audio, to, ms, done) {
+  const from = audio.volume, start = performance.now();
+  const step = () => {
+    const t = Math.min(1, (performance.now() - start) / Math.max(1, ms));
+    audio.volume = from + (to - from) * t;
+    if (t < 1) requestAnimationFrame(step); else done?.();
+  };
+  requestAnimationFrame(step);
+}
+
+/** ✓ 보내기 소리: 4초짜리라 앞 play_ms만 울리고 fade_ms로 줄인다. 새로 울리면 이전 소리를 끊는다 */
+function playTileSend() {
+  tileAudio?.pause();
+  const s = SOUNDS.tile_send;
+  const audio = playSound("tile_send");
+  tileAudio = audio;
+  if (!audio) return;
+  setTimeout(() => {
+    if (tileAudio === audio) fadeAudio(audio, 0, s.fade_ms ?? 250, () => audio.pause());
+  }, s.play_ms ?? 1200);
+}
+
+/** 배경음악 시작(이미 나오면 그대로). 자동재생이 막히면 첫 클릭·터치·키 입력 때 다시 시도 */
+function startBgm() {
+  bgmWanted = true;
+  resumeBgm();
+}
+function resumeBgm(fadeMs = 0) {
+  if (!bgm || muted || !bgmWanted || bgmHeld || !bgm.paused) return;
+  const volume = SOUNDS.bgm.volume ?? 1;
+  bgm.volume = fadeMs ? 0 : volume;
+  bgm.play().then(() => { if (fadeMs) fadeAudio(bgm, volume, fadeMs); }).catch(() => {
+    const retry = () => {
+      ["pointerdown", "keydown"].forEach((type) => document.removeEventListener(type, retry, true));
+      resumeBgm(fadeMs);
+    };
+    ["pointerdown", "keydown"].forEach((type) => document.addEventListener(type, retry, true));
+  });
+}
+
+/** 결과 발표: 배경음악을 멈추고 성공·실패 소리, 끝나면(없거나 실패해도) 배경음악을 페이드인으로 다시 */
+function playResultSound(success) {
+  bgmHeld = true;
+  bgm?.pause();
+  const audio = playSound(success ? "success" : "fail");
+  const back = () => {
+    if (!bgmHeld) return;
+    bgmHeld = false;
+    resumeBgm(SOUNDS.bgm?.fade_in_ms ?? 1000);
+  };
+  if (!audio) return back();
+  ["ended", "error", "skip"].forEach((type) => audio.addEventListener(type, back, { once: true }));
+}
+
+// 소리 켜기/끄기: 끄면 배경음악·✓ 소리도 바로 멈춘다
+const soundToggle = document.getElementById("sound-toggle");
+function showSoundToggle() {
+  if (!soundToggle) return;
+  soundToggle.textContent = muted ? "🔇" : "🔊";
+  soundToggle.setAttribute("aria-pressed", String(muted));
+  soundToggle.setAttribute("aria-label", muted ? "소리 켜기" : "소리 끄기");
+}
+showSoundToggle();
+soundToggle?.addEventListener("click", () => {
+  muted = !muted;
+  try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch { /* 이번 페이지에서만 */ }
+  showSoundToggle();
+  if (muted) { bgm?.pause(); tileAudio?.pause(); } else resumeBgm();
+});
+
+// 버튼 소리: data-sound가 있으면 그 소리(빈 값이면 따로 처리), 없으면 sfx_button. 링크는 소리가 들리게 잠깐 늦춰 이동
+document.addEventListener("click", (event) => {
+  const el = event.target.closest("button, a.start-button");
+  if (!el || el.disabled) return;
+  const name = el.dataset.sound ?? "button";
+  if (!name || !playSound(name) || !el.matches("a[href]")) return;
+  event.preventDefault();
+  setTimeout(() => { location.href = el.href; }, 250);
+});
+
 // ── 6. 채팅 및 요리 진행 ─────────────────────────────────────
 const shell = document.querySelector(".chat-area");
 const sendButton = document.getElementById("send-btn");
@@ -614,6 +719,7 @@ const HINT_AREAS = {
   plating: [{ x: 300, y: 590, w: 980, h: 150 }],
 };
 const HINT_MIN_VISIBLE = 0.3; // 세로 화면: 이만큼도 안 보이는 영역은 밝히지 않는다
+const HINT_FADE_AT = 0.8; // 빛이 사라지기 시작하는 지점(style.css @keyframes area-hint-fade의 80%)과 같게
 let hintEl = null;
 
 /** 스테이지 좌표 → 배경(cover)이 실제로 그려진 위치. 화면 밖·세로 화면 패널 뒤는 잘라 내고 거의 안 보이면 뺀다 */
@@ -648,6 +754,8 @@ function highlightAreas(areas, ms) {
   </svg>`;
   stageEl.prepend(el);
   hintEl = el;
+  playSound("hint");
+  setTimeout(() => { if (hintEl === el) playSound("stage"); }, ms * HINT_FADE_AT);
   setTimeout(() => {
     el.remove();
     if (hintEl === el) hintEl = null;
@@ -698,6 +806,7 @@ function updateGameState(data) {
     });
     // 끝난 단계 타일을 내밀고(날아가고) joy로 바뀐 뒤에 그 칸을 채운다. 표정은 다음 응답까지 joy
     playOffer(finishedIndex, () => joyShown.then(() => {
+      playSound("convinced"); // 두 타일이 기록칸에 박히는 순간(외계인은 joy)
       renderTileRecord();
       if (currentState?.done) {
         if (data.result && resultOverlayEl) showResult(data.result, true);
@@ -762,6 +871,7 @@ function revealDish() {
     resultContentEl.dataset.reveal = "revealed";
     resultAlienEl.src = RESULT_ALIEN[resultSuccess ? "success" : "fail"];
     badgeEl.hidden = false;
+    playResultSound(resultSuccess); // 소리와 그림이 같은 순간
     resultNextBtn?.focus();
   };
   if (reduceMotion) return done();
@@ -842,6 +952,7 @@ function addAlienToHistory(data) {
 }
 
 async function startCooking() {
+  startBgm();
   history = [];
   undoStack = [];
   awaiting = false;
@@ -877,6 +988,7 @@ restartBtn?.addEventListener("click", () => {
 sendButton.addEventListener("click", async () => {
   const signal = window.oekcook?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
+  playTileSend();
 
   // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
   undoStack.push({
@@ -1255,19 +1367,13 @@ fitStage();
 if (window.oekcook) window.oekcook.showResult = showResult;
 
 // ── 0. 인트로 ───────────────────────────────────────────────
-// 처음 들어올 때만 주인공과 외계인의 대화 장면을 보여 주고, 끝나거나 SKIP하면 게임을 시작한다. 대사·그림은 config.intro
+// 게임 화면에 들어올 때마다 주인공과 외계인의 대화 장면을 보여 주고, 끝나거나 skip하면 게임을 시작한다. 대사·그림은 config.intro
 const introEl = document.getElementById("intro");
-const INTRO_KEY = "oekcook.introSeen";
 const INTRO_TYPE_MS = 35;
 
-/** 이미 봤으면 false. 저장소가 막혀 있으면 매번 보여 준다 */
+/** 이름 화면에서 시작하기로 들어올 때마다(페이지를 열 때마다) 인트로. 다시 요리하기는 startCooking만 불러 건너뛴다 */
 function shouldShowIntro() {
-  if (!introEl) return false;
-  try {
-    return localStorage.getItem(INTRO_KEY) !== "1";
-  } catch {
-    return true;
-  }
+  return !!introEl;
 }
 
 function playIntro(done) {
@@ -1347,7 +1453,6 @@ function playIntro(done) {
     introEl.hidden = true;
     panel.replaceChildren(); // 복제한 패널(같은 id)을 게임 전에 없앤다
     document.removeEventListener("keydown", onKey);
-    try { localStorage.setItem(INTRO_KEY, "1"); } catch { /* 저장소가 막혀 있으면 다음에도 보여 준다 */ }
     done();
   }
 
@@ -1374,6 +1479,7 @@ function playIntro(done) {
   q(".intro-confirm-no").addEventListener("click", () => askSkip(false));
   document.addEventListener("keydown", onKey);
   introEl.hidden = false;
+  startBgm(); // 막히면 인트로의 첫 클릭·터치 때 시작
   queueFit(); // 스테이지 배율은 fitStage가 모든 .stage에 맞춘다
   introEl.focus();
   advance();

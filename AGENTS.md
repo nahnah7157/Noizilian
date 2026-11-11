@@ -80,7 +80,7 @@
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
   - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
-  - 이름 정하기 화면(detail.html): 배경 bg_road(11/11, 파일이 없으면 아래 겹의 bg_default가 보임), 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜
+  - 이름 정하기 화면(detail.html): 배경 bg_road(11/11, 파일이 없으면 아래 겹의 bg_default가 보임), 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜 11/11: 밤 골목 bg_road(1672×941, 인도 = 그림 높이 81~88%)에 발을 맞춤 — 가로는 85%(bottom = 50vh − 0.35 × max(100vh, 100vw×941/1672), 그림 아래 투명 여백 4.5%만큼 내림), 가로는 성별 | 이름을 한 줄로 낮게. 세로는 입력칸이 인도와 겹쳐 발을 82%에, 시작하기는 이름 칸 오른쪽 같은 줄
   - 채팅 화면 타일 기록(#tile-record)을 왼쪽 패널에서 꺼내 왼쪽 위 제목 오른쪽에 따로 띄움(칸 20px). 오른쪽 색 선택과 왼쪽 미리보기·보내기(✓)를 패널 하나(.signal-dock)로 합침
   - 반응형 게임 화면 (chat.html, style.css, chatbot.js 8번): 전환 기준은 orientation 하나(CSS @media·JS matchMedia 같음)
     - 가로: main.stage(1920×1080)를 scale=min(창너비/1920, 창높이/1080)로 가운데 확대·축소, 남는 곳은 --letterbox 여백. 배경은 body의 --bg를 스테이지가 그림
@@ -99,7 +99,7 @@
   - 가져오지 않은 것: 반응형 원복(이쪽 반응형 유지), 레코드 아래 안내 문구, 레코드 대사 단계별 병렬 호출(그림 겹침 감점이 대화 전체에 걸리도록 한 번에 요청. 서버의 wrong 필드는 남아 있음·하위호환)
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
 - 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view). 11/11 피그마 시안으로 교체
-  - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 skip → 확인창 "네"면 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
+  - 게임 화면에 들어올 때마다(11/11, 저장 안 함 — 이름 화면에서 시작하기로 올 때마다). 다 보거나 skip → 확인창 "네"면 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
   - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(이름 화면에서 고른 성별의 기본 player_male·player_female, config.intro.player_portraits. 1050·-4·816×1088 안에 contain), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
   - 대화창: y 678부터 높이 402 띠(rgba(10,13,15,.8)). 이름(학교안심 마법사, 나 #F6B981·외계인 #B6F4F0, 주인공은 config.intro.player_name "나")과 대사(프리젠테이션 Regular, 흰색, 한 글자씩)가 한 줄(left 225·띠 기준 top 166·간격 70·이름 칸 180·60px). 다음 버튼 #B6F4F0 알약(1604·914). 아무 데나 클릭·스페이스·엔터도 넘김
   - skip: 오른쪽 위(1675·47) 알약 → 확인창(655×406, 가운데) "네"(#CDD1D7) = 끝내고 게임 시작, "아니요"(#B6F4F0) = 계속(Esc도 닫음, 열리면 아니요에 포커스)
@@ -114,13 +114,19 @@
   - 콘솔 시험: 게임을 끝낸 뒤 oekcook.showResult({success, image, verdicts, plating:{hue_shift}})
 - 완료: 시작 화면 히어로샷 (index.html, style.css, 11/11): 가로 images/title/hero_landscape, 세로 hero_portrait를 cover(로고가 그림에 있어 제목 글자·표정 외계인 삭제). 시작하기는 큰 Mint 알약 — 가로 그림은 음식이 가운데 아래 91~96%까지라 가로는 로고 아래 빈 싱크대 쪽(left 25%·bottom 7dvh), 세로는 음식 아래 가운데(bottom 6dvh). 그림을 바꾸면 버튼 자리를 다시 볼 것
 - 완료: UI 규칙 통일 (style.css, 11/11): :root 변수 --navy #241D60(외곽선·글자) --mint #65E8DF(주요 버튼) --pink #F4AEDC(보조 버튼) --lavender #AAA0EE(패널·입력 컨트롤) --lime #C9F06E(진행·긍정: 성공 단계 칸, 지금 기록칸) --paper(카드·입력칸 안쪽), --ui-line(3px 남보라) --ui-radius(18px) --ui-drop(아래 5px 그림자, 흐림 없음). 버튼(.start-button·↺✓·?·성별)은 누르면 translate 3px + 그림자 2px. 패널(타일 패널·기록칸·진행 표시·이름 칸)은 Lavender, 카드(결론·툴팁·도움말·말풍선·레코드 상태)는 paper + 외곽선 + 그림자. 크기·밀도 막대는 Lavender 홈 + Mint 손잡이. 글꼴 한국기계연구원체(jsDelivr @noonnu/kimm-bold@0.1.0, MIT, Bold 하나). 인트로(대화창·skip·확인창)는 피그마 시안 그대로 둠
+- 완료: 소리 (config.sounds, app.py bot_view, chatbot.js 6-0, index·detail 템플릿의 짧은 스크립트, 11/11)
+  - 경로·볼륨은 config.sounds 한곳. 파일이 없거나 재생이 막히면 조용히 건너뜀(play() 실패 → "skip" 이벤트). src 빈 칸 = 아직 없음(alien_doubt·tile_pick 자리), result(sfx_result.wav)는 경로만 두고 재생 안 함
+  - 효과음: start = 시작 화면 시작하기·최종 카드 다시 요리하기·처음으로(data-sound="start"), button = 그 밖의 모든 버튼(문서 click 위임, 성별 label 포함), tile_send = ✓(앞 1.2초 + 0.25초 페이드, 새로 울리면 이전 것 끊음), convinced = 단계 끝 두 타일이 기록칸에 박히는 순간(playOffer 콜백), hint = 단계 힌트 빛 시작, stage = 빛이 사라지기 시작(HINT_FADE_AT 0.8 = area-hint-fade 80%), success/fail = 돔 공개가 끝나는 순간(revealDish done, 외계인·배지와 같은 순간)
+  - 배경음악 bgm: 인트로가 뜰 때 startBgm(다시 요리하기는 startCooking에서, 이미 나오면 그대로). 자동재생이 막히면 첫 pointerdown·keydown 때 다시. 시작·이름 화면엔 없음. 결과 소리 동안 멈췄다가 끝나면(실패·없음 포함) fade_in_ms(1초)로 다시
+  - 링크·폼 이동(시작하기·처음으로·이름 화면 시작하기)은 소리가 들리게 0.25초 늦춰 이동
+  - 소리 켜기/끄기: 모든 페이지 오른쪽 위 .sound-toggle(가로 36px·top 4 = 타일 패널 top 40·인트로 skip top 47 위, 세로 44px — 세로 인트로 skip은 top 64로 내림), localStorage oekcook.muted(막히면 켜짐). 끄면 배경음악·✓ 소리도 바로 멈춤
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
 - 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
   - 1단계 첫 타일 = 메뉴 결정(따뜻·차가움 × 노이즈 높음·낮음 → pizza/hamburger/ramen/omurice), 조리 판정에는 안 씀. 바로 손질로
   - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4, 메뉴 결정용), power=논문 hl(R6), hue·sat=HSV 색상·채도(서버가 LCh→sRGB로 되찾음). 단계별 쓰임은 위 "진행 중" 참고
   - 확신 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 쌓인 신호로 확정
   - main(#10 feat/layout, #11 feat/panel-size)과 합침(11/4): 가로 화면은 팀원 배치(외계인 바닥, 타일 패널 오른쪽 위, 결과 화면 스테이지)를 따르고 진행 표시는 위 가운데로. 세로 화면은 외계인을 배경 창에 고정하는 이쪽 배치를 유지(팀원의 세로 결과 화면 규칙은 그대로)
-  - 왼쪽 아래 ? (세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
+  - 왼쪽 아래 ? (그림 images/ui/hint_icon.png, 둥실 위아래로 뜸. 가로 120px·세로 60px 버튼, 세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
   - 외계인 표정·행동 묘사 alien_message는 decide_turn이 정하고, 규칙 대체 때는 verdict_expressions·config.game.messages. 행동 묘사는 화면에 글로 안 보임
   - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색. 재요청 ↻+남은 시도 점은 11/9에 뺌. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 완료: 레코드 대사 태그·검색 (data/knowledge/record_lines.md, retriever.search_lines, generator.record_lines, chatbot_service.py record_tags·pick_misreads, config.record.moods) — fallback_lines 삭제

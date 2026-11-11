@@ -84,6 +84,9 @@ def bot_view(config: dict) -> dict:
         "description": config.get("description", ""),
         "tags": config.get("tags", []),
         "image": asset_url(thumbnail),
+        # 소리: config.sounds 한곳에서 경로·볼륨. src가 빈 칸이면 아직 소리 없음(브라우저가 건너뜀)
+        "sounds": {k: {**v, "src": asset_url(v["src"]) if v.get("src") else None}
+                   for k, v in (config.get("sounds") or {}).items() if not k.startswith("_")},
     }
 
 
