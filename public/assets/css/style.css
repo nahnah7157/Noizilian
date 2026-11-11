@@ -64,36 +64,35 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 :is(.start-button, .signal-buttons button):active:not(:disabled),
 .player-pick label:active { translate: 0 3px; box-shadow: var(--ui-drop-pressed); }
 
-/* 첫 화면: 히어로샷(로고 포함) 화면 가득 + 아래쪽 큰 알약 "시작하기".
-   가로 그림은 음식이 가운데 아래 91~96%까지 차서, 가운데에 두면 라멘 그릇을 가린다 → 가로는 로고 아래 빈 싱크대 쪽(25%), 세로는 음식 아래 가운데 */
+/* 첫 화면: 히어로샷(로고 포함) 화면 가득 + 큰 알약 "시작하기".
+   가로: 그림 가로 = 창 가로(16:9 이상 cover, 더 좁으면 contain)라 그림 높이 = 56.28vw(1672×941). 버튼 가운데를 그림 속 싱크대 아래(가로 13%·세로 81%)에,
+   폭은 그림 가로 20% 이내 → 라면 그릇(가로 35~56%)을 가리지 않는다. 세로: 음식 아래 가운데 */
 .landing-page { min-height: 100dvh; background: var(--navy) url("../images/title/hero_landscape.png") center / cover no-repeat; }
 .landing-page .landing-start {
   position: fixed;
-  left: 25%;
-  bottom: 7dvh;
+  left: 13vw;
+  top: calc(50dvh + (.81 - .5) * 56.28vw);
+  max-width: 20vw;
   margin: 0;
-  padding: min(20px, 2dvh) min(88px, 7vw);
+  padding: clamp(8px, 1.1vw, 22px) clamp(14px, 3vw, 64px);
   border-radius: 999px;
-  font-size: clamp(1.3rem, 4dvh, 2.6rem);
+  font-size: clamp(1rem, 1.9vw, 2.6rem);
   white-space: nowrap;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 }
 @media (orientation: portrait) {
   .landing-page { background-image: url("../images/title/hero_portrait.png"); }
-  .landing-page .landing-start { left: 50%; bottom: 6dvh; padding: min(18px, 2dvh) min(64px, 16vw); font-size: clamp(1.3rem, 3dvh, 2rem); }
+  .landing-page .landing-start { left: 50%; top: auto; bottom: 6dvh; max-width: none; padding: min(18px, 2dvh) min(64px, 16vw); font-size: clamp(1.3rem, 3dvh, 2rem); transform: translateX(-50%); }
 }
-/* 창 비율이 그림과 많이 다르면(세로 창 전부, 16:10보다 좁은 가로 창) cover로 채우면 로고가 잘린다.
+/* 세로 창 전부와 16:9보다 좁은 가로 창은 cover로 채우면 로고가 잘린다(가로는 버튼 위치 계산을 위해서도 그림 가로 = 창 가로).
    그때는 그림 전체를 보이게(contain) 두고, 남는 곳은 같은 그림을 흐리게 깔아 채운다. ::before = 흐린 바탕, ::after = 선명한 그림 */
 .landing-page { --hero: url("../images/title/hero_landscape.png"); position: relative; isolation: isolate; background: var(--navy); }
 .landing-page::before, .landing-page::after { content: ""; position: fixed; z-index: -1; pointer-events: none; }
 .landing-page::before { inset: -40px; background: var(--hero) center / cover no-repeat; filter: blur(28px) brightness(.85); }
 .landing-page::after { inset: 0; background: var(--hero) center / cover no-repeat; }
 @media (orientation: portrait) { .landing-page { --hero: url("../images/title/hero_portrait.png"); } }
-@media (orientation: portrait), (orientation: landscape) and (max-aspect-ratio: 16/10) {
+@media (orientation: portrait), (orientation: landscape) and (max-aspect-ratio: 16/9) {
   .landing-page::after { background-size: contain; }
-}
-@media (orientation: landscape) and (max-aspect-ratio: 16/10) {
-  .landing-page .landing-start { left: 50%; }
 }
 .start-button {
   display: inline-block;
@@ -140,7 +139,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   gap: 12px;
   width: min(520px, calc(100% - 32px));
 }
-.name-title { /* 밤 배경에서 보이게: 흰 글자 + 남보라 외곽선 + 아래 그림자 */
+.name-title, .record-title, .record-hint { /* 어두운 배경에서 보이게: 흰 글자 + 남보라 외곽선 + 아래 그림자 */
   margin: 0;
   color: #fff;
   font-size: clamp(1.6rem, 5vh, 3rem);
@@ -422,7 +421,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .result-content.fading > * { opacity: 0; }
 .result-content:not([data-screen="dish"]) :is(#result-image, #result-alien) { display: none; }
 .result-content[data-screen="dish"] .record { display: none; }
-.result-content:not([data-screen="record"]) #record-status { display: none; }
+.result-content:not([data-screen="record"]) :is(#record-status, #record-title, #record-hint) { display: none; }
 .result-content:not([data-screen="dish"]) :is(#result-dome, #result-badge) { display: none; }
 .result-content:not([data-screen="end"]) :is(#result-card, #save-btn, #restart-btn, #home-btn) { display: none; }
 .result-content[data-screen="end"] #result-next { display: none; }
@@ -553,10 +552,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .result-content[data-screen="record"] .record-disc { animation: none; box-shadow: 0 0 70px 20px rgb(255 226 140 / 55%); }
 }
+/* ② 문구: 위 = 디스크 위 끝(y 110) 위, 아래 = 디스크 아래 끝(y 910) 아래. "신호를 보내는 중"은 아래 안내와 같은 자리(대사가 오면 안내로 바뀜) */
+.record-title { position: absolute; z-index: 2; left: 50%; top: 22px; font-size: 44px; transform: translateX(-50%); }
+.record-hint { position: absolute; z-index: 2; left: 50%; top: 958px; margin: 0; color: #fff; font-size: 34px; font-weight: 700; white-space: nowrap; transform: translateX(-50%); --o: 2px; animation: hint-breathe 2.4s ease-in-out infinite; }
+.record-hint[hidden] { display: none; }
+@keyframes hint-breathe { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .record-hint { animation: none; } }
 .record-status {
   position: absolute;
   left: 50%;
-  top: 36px;
+  top: 950px;
   margin: 0;
   padding: 10px 24px;
   border: var(--ui-line);
@@ -1112,7 +1117,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   #result-alien { --alien-full: min(70dvh, 105vw); --edge: 62.4dvh; }
   .result-badge { top: 12dvh; width: min(46vw, 30dvh); }
   .record-disc { left: 50%; top: calc(50dvh - min(45vw, 28dvh)); width: min(90vw, 56dvh); height: min(90vw, 56dvh); transform: translateX(-50%); }
-  .record-status { top: 3dvh; padding: 8px 16px; font-size: 1rem; }
+  /* ② 문구는 디스크(위 끝 --disc-top, 크기 --disc) 위·아래에 붙인다 */
+  .result-content { --disc: min(90vw, 56dvh); --disc-top: calc(50dvh - min(45vw, 28dvh)); }
+  .record-title { top: calc(var(--disc-top) - 14px); width: calc(100vw - 32px); font-size: min(1.3rem, 5.4vw); white-space: normal; word-break: keep-all; transform: translate(-50%, -100%); }
+  .record-status, .record-hint { top: calc(var(--disc-top) + var(--disc) + 18px); }
+  .record-status { padding: 8px 16px; font-size: 1rem; }
+  .record-hint { width: calc(100vw - 32px); font-size: min(1.05rem, 4.4vw); white-space: normal; word-break: keep-all; text-align: center; }
   /* ③ 카드는 위아래로 쌓는다(스크롤 없음). --rec = 레코드·주인공 칸 크기 */
   .result-overlay { --rec: min(34vw, 17dvh); }
   .result-card {
