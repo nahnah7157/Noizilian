@@ -607,12 +607,29 @@ function renderTileRecord() {
 const JOY_IMAGE = "/assets/images/alien/alien_joy.png";
 const CONVINCED_IMAGE = "/assets/images/alien/alien_convinced.png";
 const JOY_DELAY_MS = 500; // 단계가 끝나면 convinced를 잠깐 보여 준 뒤 기뻐한다
+const CONVINCED_MAX_MS = 1600; // 단계 끝 확신 소리(약 1.5초)를 기다리는 최대 시간
 let joyTimer = 0;
 
 // 가운데 외계인 이미지만 표정으로 교체 (게임 화면엔 글자 없음)
 function showAlien(data) {
   clearTimeout(joyTimer);
-  if (data.image) alienExpr.src = data.image;
+  if (data.image) setAlienImage(data.image);
+}
+
+/** 가운데 외계인 그림을 바꾼다. convinced(손가락 든 "!")로 처음 바뀌는 순간에만 확신 소리(이미 convinced면 다시 안 울림). 울린 소리를 돌려준다 */
+function setAlienImage(src) {
+  const was = alienExpr.getAttribute("src") || "";
+  alienExpr.src = src;
+  return src.includes("alien_convinced") && !was.includes("alien_convinced") ? playSound("convinced") : null;
+}
+
+/** 소리가 끝날 때까지(최대 maxMs) 기다린다. 소리가 없거나(꺼짐·경로 없음) 막히면 바로 */
+function afterSound(audio, maxMs) {
+  if (!audio) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, maxMs);
+    ["ended", "error", "skip"].forEach((type) => audio.addEventListener(type, () => { clearTimeout(timer); resolve(); }, { once: true }));
+  });
 }
 
 // 진행 중 외계인 머리 위 말풍선: 외계인이 방금 답한 타일을 띄운다.
@@ -811,21 +828,21 @@ function updateGameState(data) {
   if (finishedIndex >= 0) {
     // 단계는 판정(잘못 알아들음·10번째 포함)과 상관없이 항상 convinced → joy로 끝난다
     clearTimeout(joyTimer);
-    alienExpr.src = CONVINCED_IMAGE;
+    // 확신 소리가 끝난 뒤에 다음 단계 힌트·결과 화면을 띄워 소리가 겹치지 않게 한다
+    const convincedDone = afterSound(setAlienImage(CONVINCED_IMAGE), CONVINCED_MAX_MS);
     const joyShown = new Promise((resolve) => {
       joyTimer = setTimeout(() => { alienExpr.src = JOY_IMAGE; resolve(); }, reduceMotion ? 0 : JOY_DELAY_MS);
     });
     // 끝난 단계 타일을 내밀고(날아가고) joy로 바뀐 뒤에 그 칸을 채운다. 표정은 다음 응답까지 joy
     playOffer(finishedIndex, () => joyShown.then(() => {
-      playSound("convinced"); // 두 타일이 기록칸에 박히는 순간(외계인은 joy)
       renderTileRecord();
       if (currentState?.done) {
-        if (data.result && resultOverlayEl) showResult(data.result, true);
         sendButton.disabled = true;
         hideThink();
+        if (data.result && resultOverlayEl) convincedDone.then(() => showResult(data.result, true)); // 그다음 결과 발표 소리
       } else {
         updateThink();   // 새 단계 진행 중 → 말풍선 다시
-        showStageHint(); // 타일이 다 날아간 뒤에 새 단계 힌트
+        convincedDone.then(showStageHint); // 타일이 다 날아가고 확신 소리가 끝난 뒤에 새 단계 힌트
       }
     }));
   } else {
