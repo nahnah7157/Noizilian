@@ -100,7 +100,7 @@
 - 완료: 단계 힌트 (chatbot.js, style.css): 게임 시작과 단계가 바뀔 때(타일 날아가기 뒤) 약 1.8초 화면을 어둡게 하고 배경 속 그 단계 물건만 밝힘. 좌표는 HINT_AREAS(1920×1080 기준), 튜토리얼에서도 쓸 수 있게 highlightAreas(영역, 시간)로 분리. 막은 스테이지 맨 아래(z-index 0)라 패널·외계인은 위에 보이고 클릭은 통과. 세로 화면은 배경 가운데만 보여서 보이는 면적 30% 미만 영역은 뺌(지금은 플레이팅만 강조). 모션 줄이기면 빛 없이 0.8초
 - 완료: 인트로 대화 장면 (chat.html, style.css, chatbot.js 0번, config.intro, app.py intro_view). 11/11 피그마 시안으로 교체
   - 처음 들어올 때만(localStorage oekcook.introSeen, 막혀 있으면 매번). 다 보거나 skip → 확인창 "네"면 startCooking → /api/start·단계 힌트. 다시 하기는 인트로 없이
-  - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(남 intro_player_male, 여 아직 기존 player_female — config.intro.player_portraits.female만 바꾸면 됨, 1050·-4·816×1088), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
+  - 1920×1080 스테이지: 배경 intro_bg + rgba(14,19,21,.8) 덮개. 왼쪽 외계인(intro_alien 한 장, expression 무시, 158·120·482×724), 오른쪽 주인공(이름 화면에서 고른 성별에 따라 기본 player_male·player_female, config.intro.player_portraits. 1050·-4·816×1088 안에 contain), 뒤에 보라 radial 타원. 말하는 쪽 그대로, 듣는 쪽 brightness(.6)
   - 대화창: y 678부터 높이 402 띠(rgba(10,13,15,.8)). 이름(학교안심 마법사, 나 #F6B981·외계인 #B6F4F0, 주인공은 config.intro.player_name "나")과 대사(프리젠테이션 Regular, 흰색, 한 글자씩)가 한 줄(left 225·띠 기준 top 166·간격 70·이름 칸 180·60px). 다음 버튼 #B6F4F0 알약(1604·914). 아무 데나 클릭·스페이스·엔터도 넘김
   - skip: 오른쪽 위(1675·47) 알약 → 확인창(655×406, 가운데) "네"(#CDD1D7) = 끝내고 게임 시작, "아니요"(#B6F4F0) = 계속(Esc도 닫음, 열리면 아니요에 포커스)
   - effect panel(5번째 줄): 게임 타일 패널(.signal-dock)을 복제해 678·181·532×436 자리에 --fit배로 줄여 아래에서 올라옴(0.5초), 끝까지 유지. 보여 주기만(inert). 복제본은 id가 같아서 인트로를 닫을 때 지움. shake·nod는 남아 있음(지금 대사엔 안 씀). tiles·highlight·image 효과는 삭제
