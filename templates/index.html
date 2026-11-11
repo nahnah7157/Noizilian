@@ -10,7 +10,50 @@
   <body class="landing-page">
     <main>
       <h1 class="sr-only">{{ bot.name }}</h1>
-      <a class="start-button landing-start" href="{{ url_for('detail') }}">시작하기</a>
+      <a class="start-button landing-start" href="{{ url_for('detail') }}" data-sound="start">시작하기</a>
     </main>
+    <button type="button" id="sound-toggle" class="sound-toggle" aria-pressed="false" aria-label="소리 끄기">🔊</button>
+    <script type="application/json" id="sound-data">{{ bot.sounds|tojson }}</script>
+    <script>
+      // 버튼 소리 + 소리 켜기/끄기(chatbot.js 6-0과 같은 규칙, 상태는 localStorage oekcook.muted). 파일이 없거나 재생이 막히면 조용히 건너뛴다
+      (() => {
+        const sounds = JSON.parse(document.getElementById("sound-data").textContent || "{}");
+        const toggle = document.getElementById("sound-toggle");
+        let muted = false;
+        try { muted = localStorage.getItem("oekcook.muted") === "1"; } catch { /* 막혀 있으면 켜짐 */ }
+        const show = () => {
+          toggle.textContent = muted ? "🔇" : "🔊";
+          toggle.setAttribute("aria-pressed", String(muted));
+          toggle.setAttribute("aria-label", muted ? "소리 켜기" : "소리 끄기");
+        };
+        const play = (name) => {
+          const s = sounds[name];
+          if (muted || !s?.src) return false;
+          const a = new Audio(s.src);
+          a.volume = s.volume ?? 1;
+          a.play().catch(() => {});
+          return true;
+        };
+        show();
+        toggle.addEventListener("click", () => {
+          muted = !muted;
+          try { localStorage.setItem("oekcook.muted", muted ? "1" : "0"); } catch { /* 이번 페이지에서만 */ }
+          show();
+        });
+        // 링크·폼으로 페이지가 바뀌면 소리가 끊기므로 잠깐 늦춰 이동한다
+        document.addEventListener("click", (event) => {
+          const el = event.target.closest("button, a.start-button, .player-pick label");
+          if (!el || el.disabled || el.type === "submit") return;
+          if (!play(el.dataset.sound || "button") || !el.matches("a[href]")) return;
+          event.preventDefault();
+          setTimeout(() => { location.href = el.href; }, 250);
+        });
+        document.querySelector("form")?.addEventListener("submit", (event) => {
+          if (!play("button")) return;
+          event.preventDefault();
+          setTimeout(() => event.target.submit(), 250);
+        });
+      })();
+    </script>
   </body>
 </html>

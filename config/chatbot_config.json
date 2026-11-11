@@ -316,6 +316,72 @@
       ]
     }
   },
+  "sounds": {
+    "_note": "소리 경로·볼륨(0~1)은 여기 한곳. app.py bot_view가 브라우저로 넘기고, 파일이 없거나 재생이 막히면 건너뛴다. src가 빈 칸이면 아직 소리 없음. 켜기/끄기는 localStorage oekcook.muted(모든 페이지 공통)",
+    "bgm": {
+      "src": "assets/sounds/bgm_game.mp3",
+      "volume": 0.35,
+      "fade_in_ms": 1000,
+      "_note": "인트로부터 결과까지 반복. 결과 소리 동안 멈췄다가 fade_in_ms로 다시"
+    },
+    "start": {
+      "src": "assets/sounds/sfx_start.mp3",
+      "volume": 0.7,
+      "_note": "시작 화면 시작하기, 최종 카드 다시 요리하기·처음으로"
+    },
+    "button": {
+      "src": "assets/sounds/sfx_button.mp3",
+      "volume": 0.6,
+      "_note": "그 밖의 모든 버튼"
+    },
+    "tile_send": {
+      "src": "assets/sounds/sfx_tile_send.wav",
+      "volume": 0.7,
+      "play_ms": 1200,
+      "fade_ms": 250,
+      "_note": "✓ 보내기. 4초짜리라 앞 play_ms만 울리고 fade_ms로 줄인다. 새로 울리면 이전 소리를 끊음"
+    },
+    "convinced": {
+      "src": "assets/sounds/sfx_convinced.mp3",
+      "volume": 0.7,
+      "_note": "단계가 끝나 두 타일이 기록칸에 박히는 순간"
+    },
+    "hint": {
+      "src": "assets/sounds/sfx_hint.mp3",
+      "volume": 0.6,
+      "_note": "단계 힌트 빛이 밝아지기 시작할 때"
+    },
+    "stage": {
+      "src": "assets/sounds/sfx_stage.wav",
+      "volume": 0.6,
+      "_note": "단계 힌트 빛이 사라지기 시작할 때"
+    },
+    "result": {
+      "src": "assets/sounds/sfx_result.wav",
+      "volume": 0.7,
+      "_note": "지금은 재생하지 않음(결과 발표 소리 보류)"
+    },
+    "success": {
+      "src": "assets/sounds/sfx_success.wav",
+      "volume": 0.8,
+      "_note": "돔 공개가 끝나 성공일 때"
+    },
+    "fail": {
+      "src": "assets/sounds/sfx_fail.mp3",
+      "volume": 0.8,
+      "_note": "돔 공개가 끝나 실패일 때"
+    },
+    "alien_doubt": {
+      "src": "",
+      "volume": 0.7,
+      "_note": "외계인 의심 소리 자리(아직 없음)"
+    },
+    "tile_pick": {
+      "src": "",
+      "volume": 0.6,
+      "_note": "타일 고르는 소리 자리(아직 없음)"
+    }
+  },
   "intro": {
     "_note": "게임 시작 전 대화 장면(chatbot.js 0번). 그림 경로만 바꾸면 교체된다(주인공은 고른 성별의 player_portraits, 지금은 남녀 모두 기본 player_male·female). 외계인은 모든 줄에서 alien_portrait 하나. 줄마다 speaker(player|alien), text, 선택 effect(panel = 가운데 타일 패널이 올라와 끝까지 유지, shake|nod = 외계인 흔들기)",
     "background": "assets/images/intro/intro_bg.png",
