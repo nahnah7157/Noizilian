@@ -341,6 +341,11 @@
       "fade_ms": 250,
       "_note": "✓ 보내기. 4초짜리라 앞 play_ms만 울리고 fade_ms로 줄인다. 새로 울리면 이전 소리를 끊음"
     },
+    "disc": {
+      "src": "assets/sounds/sfx_disc.wav",
+      "volume": 0.6,
+      "_note": "결과 화면 ② 레코드에서 마우스(터치)가 다른 타일로 옮겨 갈 때마다 한 번(0.125초)"
+    },
     "convinced": {
       "src": "assets/sounds/sfx_convinced.mp3",
       "volume": 0.7,

@@ -19,7 +19,7 @@
         <div class="dish-help">
           <button type="button" class="dish-help-button" aria-label="만들 수 있는 요리 보기" aria-describedby="dish-help-pop"><img src="{{ asset_url('assets/images/ui/hint_icon.png') }}" alt=""></button>
           <div id="dish-help-pop" class="dish-help-pop" role="tooltip">
-            <p class="dish-help-line">재료들을 보아하니 이런 걸 만들 수 있을 거 같아~</p>
+            <p class="dish-help-line">재료들을 보아하니<br>이런 걸 만들 수 있을 거 같아~</p>
             {% for dish in dishes %}<img src="{{ dish.image }}" alt="{{ dish.name }}" title="{{ dish.name }}">{% endfor %}
           </div>
         </div>
