@@ -1097,12 +1097,11 @@ const recordCanvas = document.getElementById("record-canvas");
 const recordTip = document.getElementById("record-tip");
 const recordStatus = document.getElementById("record-status");
 const recordHint = document.getElementById("record-hint");
-let recordExplored = false; // 타일을 한 번이라도 조사했으면 아래 안내를 다시 띄우지 않는다
 
-/** 대사가 다 오면 아래 자리를 "신호를 보내는 중"에서 조사 안내로 바꾼다 */
+/** 대사가 다 오면 아래 자리를 "신호를 보내는 중"에서 조사 안내로 바꾼다. 안내는 타일을 조사해도 남아 은은하게 깜빡인다(style.css hint-breathe) */
 function linesReady() {
   recordStatus.hidden = true;
-  if (recordHint) recordHint.hidden = recordExplored || !history.length;
+  if (recordHint) recordHint.hidden = !history.length;
 }
 const WAITING_LINE = "외계인이 신호를 보내는 중이에요";
 let lines = null; // 타일마다 {text, image} — null이면 아직 만드는 중
@@ -1210,12 +1209,11 @@ function onRecordPointer(event) {
     recordTip.hidden = true;
     recordCanvas.style.cursor = "";
   } else {
-    recordExplored = true; // 처음 조사하면 아래 안내는 사라진다
-    if (recordHint) recordHint.hidden = true;
     showTip(event, tile);
     recordCanvas.style.cursor = "pointer";
   }
   if (tile !== hovered) {
+    if (tile >= 0) playSound("disc"); // 새 타일에 올라갈 때마다 한 번
     hovered = tile;
     drawRecord();
   }
@@ -1259,11 +1257,11 @@ function saveCard() {
     ctx.strokeStyle = navy;
     ctx.stroke();
   };
-  const text = (str, x, y, size, align = "left", fill = navy) => {
+  const text = (str, x, y, size, align = "left", fill = navy, maxWidth) => {
     ctx.font = font(size);
     ctx.textAlign = align;
     ctx.fillStyle = fill;
-    ctx.fillText(str, x, y);
+    ctx.fillText(str, x, y, maxWidth); // maxWidth를 넘으면 캔버스가 가로로 좁혀 칸 안에 넣는다
   };
   const image = (img, ...args) => { if (img instanceof HTMLCanvasElement || (img?.complete && img.naturalWidth)) ctx.drawImage(img, ...args); };
   const label = (str, x, y) => { ctx.font = font(26); const w = ctx.measureText(str).width + 36; box(x, y - 32, w, 44, 22, lavender); text(str, x + 18, y, 26); };
@@ -1290,9 +1288,9 @@ function saveCard() {
   }
   ctx.restore();
   label("지구인", 720, 210);
-  text(value("card-name"), 724, 290, 54);
+  text(value("card-name"), 724, 290, 54, "left", navy, 250);
   label("요리 시도 횟수", 720, 380);
-  text(value("card-tries"), 724, 460, 54);
+  text(value("card-tries"), 724, 460, 42, "left", navy, 250); // 왼쪽 칸 끝(1000) 안
   // 오른쪽: 배지 · 최종 요리 · 요리 그림(플레이팅 색 그대로) · 실패 원인/성공 포인트
   box(1030, 130, 650, 420, 28, lavender, 0, .28);
   const badge = document.getElementById("card-badge");
@@ -1305,13 +1303,15 @@ function saveCard() {
   if (dish?.naturalWidth) { const h = 200, w = h * dish.naturalWidth / dish.naturalHeight; image(dish, 1660 - w, 170, w, h); }
   ctx.restore();
   label(value("card-points-label"), 1060, 430);
-  let px = 1064;
+  // 박스 오른쪽 끝(1680)을 넘으면 다음 줄로. 실패 원인 3개까지 두 줄이면 박스 아래 끝(550) 안
+  let px = 1064, py = 450;
   [...document.querySelectorAll("#card-points li")].forEach((li) => {
     const str = `${resultSuccess ? "✦" : "✕"} ${li.textContent}`;
-    ctx.font = font(26);
-    const w = ctx.measureText(str).width + 40;
-    box(px, 450, w, 44, 22, resultSuccess ? lime : pink);
-    text(str, px + 20, 482, 26);
+    ctx.font = font(24);
+    const w = ctx.measureText(str).width + 36;
+    if (px > 1064 && px + w > 1660) { px = 1064; py += 50; }
+    box(px, py, w, 42, 21, resultSuccess ? lime : pink);
+    text(str, px + 18, py + 30, 24);
     px += w + 10;
   });
   // 아래: 결론 문장
@@ -1332,7 +1332,6 @@ async function requestRecord() {
   if (!recordCanvas) return;
   const token = ++recordToken;
   lines = null;
-  recordExplored = false;
   if (recordHint) recordHint.hidden = true;
   recordStatus.hidden = !history.length;
   if (!history.length) return;
@@ -1436,6 +1435,9 @@ function playIntro(done) {
   const q = (selector) => introEl.querySelector(selector);
   const player = q(".intro-player"), alien = q(".intro-alien"), box = q(".intro-box"), panel = q(".intro-panel");
   const nameEl = q(".intro-name"), textEl = q(".intro-text"), srEl = q(".intro-sr");
+  // 이름 화면에서 입력한 이름. 비워 두면 서버가 "사용자"로 채우므로 그때는 config의 기본값("나")
+  const username = shell?.dataset.username;
+  const playerName = username && username !== "사용자" ? username : data.player_name;
   const confirmLayer = q(".intro-confirm-layer");
   player.src = data.player_portraits?.[shell?.dataset.player] || data.player_portraits?.male || "";
   alien.src = data.alien_portrait || "";
@@ -1449,7 +1451,7 @@ function playIntro(done) {
     player.classList.toggle("speaking", !alienSpeaks);
     alien.classList.toggle("speaking", alienSpeaks);
     box.dataset.speaker = alienSpeaks ? "alien" : "player"; // 이름 색
-    nameEl.textContent = alienSpeaks ? data.alien_name : data.player_name;
+    nameEl.textContent = alienSpeaks ? data.alien_name : playerName;
     if (line.effect === "panel" && panel.hidden) showPanel(); // 한 번 나오면 끝까지 둔다
     alien.classList.remove("shake", "nod");
     if (!reduceMotion && (line.effect === "shake" || line.effect === "nod")) {
