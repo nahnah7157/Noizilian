@@ -289,9 +289,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .area-hint svg { display: block; width: 100%; height: 100%; }
 .area-hint-dim { fill: rgb(10 8 30 / 58%); }
 .area-hint-glow { fill: none; stroke: rgb(255 236 170 / 85%); filter: blur(5px); animation: area-hint-glow var(--hint-ms) ease-out both; }
-@keyframes area-hint-fade {
+@keyframes area-hint-fade { /* 2.1초 기준: 나타남 0.3초(14.3%) · 유지 1.4초 · 사라짐 0.4초(81%~). 81%는 chatbot.js HINT_FADE_AT과 같게 */
   0% { opacity: 0; }
-  15%, 80% { opacity: 1; }
+  14.3%, 81% { opacity: 1; }
   100% { opacity: 0; }
 }
 @keyframes area-hint-glow {
