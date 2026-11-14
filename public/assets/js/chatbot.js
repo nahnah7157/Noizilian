@@ -999,6 +999,7 @@ function addAlienToHistory(data) {
 
 async function startCooking() {
   startBgm();
+  signalCenter?.classList.add("idle"); // 첫 타일을 보내기 전까지 외계인이 미세하게 둥실(style.css alien-idle)
   history = [];
   undoStack = [];
   awaiting = false;
@@ -1035,6 +1036,7 @@ sendButton.addEventListener("click", async () => {
   const signal = window.oekcook?.getSignal() ?? null;
   if (!signal || sendButton.disabled) return;
   playTileSend();
+  signalCenter?.classList.remove("idle");
 
   // 보내기 직전 스냅샷: 이전 state·history 길이·단계·보낸 타일 값(취소 시 선택기 복원)
   undoStack.push({
@@ -1385,8 +1387,16 @@ function fitStage() {
   stageScale = portrait.matches ? 1 : Math.min(window.innerWidth / w, window.innerHeight / h);
   document.querySelectorAll(".stage").forEach((el) => el.style.setProperty("--stage-scale", stageScale)); // 게임·결과 화면
   // 세로 화면: 배경·외계인은 패널 위 영역(--scene-h)에만 맞춰 그린다 → 배경이 작아져 좌우가 더 보이고 외계인도 같이 작아진다(style.css)
-  if (portrait.matches) stageEl.style.setProperty("--scene-h", `${Math.round(sceneHeight())}px`);
-  else stageEl.style.removeProperty("--scene-h");
+  if (portrait.matches) {
+    const scene = sceneHeight();
+    stageEl.style.setProperty("--scene-h", `${Math.round(scene)}px`);
+    // 외계인 발 = 배경 속 바닥(y 975)과 진행 표시 윗선 바로 위 중 더 높은 쪽 → 바닥에 닿되 진행 표시에 가리지 않게
+    const hudTop = document.getElementById("game-hud")?.getBoundingClientRect().top ?? scene;
+    stageEl.style.setProperty("--feet-y", `${Math.round(Math.min(scene * 975 / 1080, hudTop - 6))}px`);
+  } else {
+    stageEl.style.removeProperty("--scene-h");
+    stageEl.style.removeProperty("--feet-y");
+  }
   fitCanvases();
 }
 
