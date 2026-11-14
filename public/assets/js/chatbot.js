@@ -513,7 +513,7 @@ soundToggle?.addEventListener("click", () => {
 });
 
 // 버튼 소리: data-sound가 있으면 그 소리(빈 값이면 따로 처리), 없으면 sfx_button.
-// 링크(처음으로)는 소리를 틀고 400ms 뒤 이동(꺼짐·막힘이면 바로). 연타해도 한 번만
+// 링크(처음으로)는 소리가 끝나면(최대 1.5초) 이동. 꺼짐·막힘이면 바로. 연타해도 한 번만
 let leaving = false;
 document.addEventListener("click", (event) => {
   const el = event.target.closest("button, a.start-button");
@@ -523,10 +523,8 @@ document.addEventListener("click", (event) => {
   event.preventDefault();
   if (leaving) return;
   leaving = true;
-  const go = () => { clearTimeout(timer); location.href = el.href; };
-  const timer = setTimeout(go, 400);
-  const audio = name && playSound(name);
-  if (!audio) go(); else audio.addEventListener("skip", go, { once: true });
+  const go = () => { location.href = el.href; };
+  afterSound(name && playSound(name), 1500).then(go);
 });
 
 // ── 6. 채팅 및 요리 진행 ─────────────────────────────────────

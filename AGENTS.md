@@ -119,7 +119,7 @@
   - 경로·볼륨은 config.sounds 한곳. 파일이 없거나 재생이 막히면 조용히 건너뜀(play() 실패 → "skip" 이벤트). src 빈 칸 = 아직 없음(alien_doubt·tile_pick 자리)
   - 효과음: start = 시작 화면 시작하기·최종 카드 다시 요리하기·처음으로(→ 이름 화면)(data-sound="start"), button = 그 밖의 모든 버튼(문서 click 위임, 성별 label 포함), tile_send = ✓(앞 1.2초 + 0.25초 페이드, 새로 울리면 이전 것 끊음), convinced = 외계인 그림이 alien_convinced로 바뀌는 순간(setAlienImage: 단계 끝 CONVINCED_IMAGE, 대화 중 showAlien. 이미 convinced면 안 울림). 단계 끝은 이 소리가 끝난 뒤(최대 CONVINCED_MAX_MS 1.6초, 꺼짐·막힘이면 바로) 다음 단계 힌트, 마지막 단계는 그 뒤에 결과 화면(afterSound), hint = 단계 힌트 빛 시작, stage = 빛이 사라지기 시작(HINT_FADE_AT 0.81 = area-hint-fade 81%), result = 결과 화면(돔이 덮인 화면)이 열리자마자 배경음악 정지와 함께 한 번(holdBgmForResult), success/fail = 돔이 사라지는 순간(revealDish done, 외계인·배지와 같은 순간), disc = ② 레코드에서 다른 타일에 올라갈 때마다(onRecordPointer, 0.125초, 11/12)
   - 배경음악 bgm: 인트로가 뜰 때 startBgm(다시 요리하기는 startCooking에서, 이미 나오면 그대로). 자동재생이 막히면 첫 pointerdown·keydown 때 다시. 시작·이름 화면·티저 영상 동안엔 없음. 결과 화면이 열리면 멈췄다가 성공·실패 소리가 끝나면(실패·없음 포함) fade_in_ms(1초)로 다시
-  - 링크 이동(시작 화면 시작하기·최종 카드 처음으로)은 소리를 틀고 400ms 뒤 이동(꺼짐·막힘이면 바로, 연타해도 한 번). 이름 화면 시작하기는 티저 영상으로
+  - 링크 이동(시작 화면 시작하기·최종 카드 처음으로)은 소리가 끝나면 이동(ended, 최대 1.5초 — 첫 재생은 파일을 받느라 늦음. 꺼짐·막힘이면 바로, 연타해도 한 번). 이름 화면 시작하기는 티저 영상으로
   - 소리 켜기/끄기: 모든 페이지 오른쪽 위 .sound-toggle(가로 36px·top 4 = 타일 패널 top 40·인트로 skip top 47 위, 세로 44px — 세로 인트로 skip은 top 64로 내림), localStorage oekcook.muted(막히면 켜짐). 끄면 배경음악·✓ 소리도 바로 멈춤
 - asset_url(app.py)은 파일 수정 시각을 ?v=로 붙인다(11/11). 배포 뒤 브라우저가 옛 chatbot.js·style.css를 캐시로 써서 바뀐 화면이 안 보이던 문제 방지
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
