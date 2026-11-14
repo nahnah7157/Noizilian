@@ -754,7 +754,7 @@ const HINT_AREAS = {
   plating: [{ x: 300, y: 590, w: 980, h: 150 }],
 };
 const HINT_MIN_VISIBLE = 0.3; // 세로 화면: 이만큼도 안 보이는 영역은 밝히지 않는다
-const HINT_FADE_AT = 0.8; // 빛이 사라지기 시작하는 지점(style.css @keyframes area-hint-fade의 80%)과 같게
+const HINT_FADE_AT = 0.81; // 빛이 사라지기 시작하는 지점(style.css @keyframes area-hint-fade의 81%)과 같게
 let hintEl = null;
 
 /** 스테이지 좌표 → 배경(cover)이 실제로 그려진 위치. 화면 밖·세로 화면 패널 뒤는 잘라 내고 거의 안 보이면 뺀다 */
@@ -800,7 +800,7 @@ function highlightAreas(areas, ms) {
 function showStageHint() {
   const areas = HINT_AREAS[currentStageId];
   if (document.querySelector(".fly-tile")) return; // 날아가는 중에 또 보냈으면 그 타일이 끝난 뒤에 한다
-  if (areas && !currentState?.done) highlightAreas(areas, reduceMotion ? 800 : 1800);
+  if (areas && !currentState?.done) highlightAreas(areas, reduceMotion ? 800 : 2100); // 나타남 0.3초 · 유지 1.4초 · 사라짐 0.4초
 }
 
 function updateGameState(data) {
