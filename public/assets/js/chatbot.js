@@ -512,6 +512,11 @@ soundToggle?.addEventListener("click", () => {
   if (muted) { bgm?.pause(); tileAudio?.pause(); } else resumeBgm();
 });
 
+// 힌트 ?: 마우스는 올리기만 해도, 터치·펜은 누를 때 버튼 소리(클릭 때 공통 버튼 소리는 data-sound=""로 끔)
+const hintButton = document.querySelector(".dish-help-button");
+hintButton?.addEventListener("pointerenter", (event) => { if (event.pointerType === "mouse") playSound("button"); });
+hintButton?.addEventListener("pointerdown", (event) => { if (event.pointerType !== "mouse") playSound("button"); });
+
 // 버튼 소리: data-sound가 있으면 그 소리(빈 값이면 따로 처리), 없으면 sfx_button.
 // 링크(처음으로)는 소리가 끝나면(최대 1.5초) 이동. 꺼짐·막힘이면 바로. 연타해도 한 번만
 let leaving = false;
@@ -756,12 +761,19 @@ const HINT_FADE_AT = 0.81; // 빛이 사라지기 시작하는 지점(style.css 
 let hintEl = null;
 
 /** 스테이지 좌표 → 배경(cover)이 실제로 그려진 위치. 화면 밖·세로 화면 패널 뒤는 잘라 내고 거의 안 보이면 뺀다 */
+/** 세로 화면 배경 높이 = 패널 윗선(배경은 그 위에만 위쪽 정렬로 깐다) */
+function sceneHeight() {
+  return document.querySelector(".signal-dock")?.getBoundingClientRect().top || stageEl.clientHeight;
+}
+
 function visibleAreas(areas) {
   const W = stageEl.clientWidth, H = stageEl.clientHeight;
-  const s = Math.max(W / 1920, H / 1080);
-  const floor = portrait.matches ? document.querySelector(".signal-dock").getBoundingClientRect().top : H;
+  // 가로: 배경 cover·가운데 / 세로: 배경 높이 = 패널 윗선, 위쪽 정렬
+  const floor = portrait.matches ? sceneHeight() : H;
+  const s = portrait.matches ? floor / 1080 : Math.max(W / 1920, H / 1080);
+  const top = portrait.matches ? 0 : H / 2 - 540 * s;
   return areas.map((a) => {
-    const x = W / 2 + (a.x - 960) * s, y = H / 2 + (a.y - 540) * s, w = a.w * s, h = a.h * s;
+    const x = W / 2 + (a.x - 960) * s, y = top + a.y * s, w = a.w * s, h = a.h * s;
     const l = Math.max(x, 0), t = Math.max(y, 0), r = Math.min(x + w, W), b = Math.min(y + h, floor);
     return { x: l, y: t, w: r - l, h: b - t, shown: r > l && b > t ? ((r - l) * (b - t)) / (w * h) : 0 };
   }).filter((a) => a.shown >= HINT_MIN_VISIBLE);
@@ -1372,6 +1384,9 @@ function fitStage() {
   const h = parseFloat(css.getPropertyValue("--stage-h"));
   stageScale = portrait.matches ? 1 : Math.min(window.innerWidth / w, window.innerHeight / h);
   document.querySelectorAll(".stage").forEach((el) => el.style.setProperty("--stage-scale", stageScale)); // 게임·결과 화면
+  // 세로 화면: 배경·외계인은 패널 위 영역(--scene-h)에만 맞춰 그린다 → 배경이 작아져 좌우가 더 보이고 외계인도 같이 작아진다(style.css)
+  if (portrait.matches) stageEl.style.setProperty("--scene-h", `${Math.round(sceneHeight())}px`);
+  else stageEl.style.removeProperty("--scene-h");
   fitCanvases();
 }
 

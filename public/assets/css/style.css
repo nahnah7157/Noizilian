@@ -1171,15 +1171,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 /* 세로 화면(모바일 9:16 등): 외계인은 가로 화면처럼 배경 둥근 창 안(조리대 위)에 고정하고, 기록칸·진행 표시·패널은 그 바깥 여백에 둔다 */
 @media (orientation: portrait) {
   .stage { left: 0; top: 0; width: 100%; height: 100dvh; transform: none; }
-  /* 배경이 화면 높이에 맞춰 깔리므로 창 안 위치를 dvh 비율로: 위 86/1080, 높이 607/1080 */
+  /* 게임 화면 배경은 패널 위 영역(--scene-h, chatbot.js fitStage가 패널 윗선으로 넣음)에만 위쪽 정렬로 깐다.
+     화면 높이 전체에 깔면 그림이 커서 가로 26%밖에 안 보였다 → 작아져서 좌우가 더 보인다 */
+  .chat-area.stage { background-size: auto var(--scene-h, 100dvh); background-position: center top; }
   .layout-row { display: grid; grid-template-rows: 1fr auto auto; } /* 외계인 영역 / 진행 표시 / 패널 */
   /* 가로 화면처럼 외계인 크기 상자라 말풍선이 머리 옆을 따라간다 */
+  /* 외계인도 배경과 같은 비율(배경 높이 1080 기준)로: 발 끝은 배경 y 797 그대로, 크기는 가로 화면 비율(607)보다 10% 작게 */
   .signal-center {
+    --alien-h: calc(var(--scene-h, 100dvh) * 546 / 1080);
     position: absolute;
     left: 50%;
-    top: calc(100dvh * 190 / 1080); /* 아래로 내림 (86 → 190): 다리가 선반 아래로, 진행 표시 위로 */
+    top: calc(var(--scene-h, 100dvh) * 797 / 1080 - var(--alien-h));
     bottom: auto;
-    height: calc(100dvh * 607 / 1080);
+    height: var(--alien-h);
     max-width: 100vw;
     transform: translateX(-50%);
     pointer-events: none;
