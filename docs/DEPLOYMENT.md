@@ -45,7 +45,7 @@ Vercel은 루트 `app.py`의 Flask `app`을 Function으로 인식하고 `public/
 2. **Root Directory**가 `app.py`가 있는 저장소 루트인지 확인합니다. Flask가 감지되면 특별한 이유 없이 Build Command나 Output Directory를 덮어쓰지 않습니다.
 3. 실제 모델을 연결했다면 운영진이 제공한 키 등 필요한 값을 **Environment Variables**에 설정합니다.  [Vercel 환경 변수 설정](https://vercel.com/docs/environment-variables/managing-environment-variables)
 4. **Deploy**를 누르고 빌드 로그에서 의존성 설치와 Function 생성 결과를 확인합니다.
-5. 배포된 `https://….vercel.app` 주소에서 `/`, `/chat`, `/health`, `/assets/css/style.css`, `/assets/js/chatbot.js`, `/assets/images/hateslop-logo.png`를 각각 엽니다.
+5. 배포된 `https://….vercel.app` 주소에서 `/`, `/chat`, `/health`, `/assets/css/style.css`, `/assets/js/chatbot.js`, `/assets/images/golden_record_cut.png`를 각각 엽니다.
 6. 채팅 화면에서 메시지를 보내고 브라우저 개발자 도구 **Network**에서 `POST /api/chat`의 상태 코드와 응답을 확인합니다.
 
 로컬 Flask는 `public/`을 직접 제공하지만 Vercel에서는 `public/`이 CDN의 정적 자산 경로입니다. 앱은 Vercel의 `VERCEL=1` 환경 변수가 있으면 Flask의 정적 파일 라우트를 끄고 같은 `/assets/...` 주소를 사용합니다. 프로젝트에서 시스템 환경 변수 자동 노출을 껐다면 다시 켜거나 `VERCEL=1`을 환경 변수로 설정하세요. 화면만 확인하지 말고 CSS·JS·이미지 URL도 확인해야 합니다. Function의 실행 시간·패키지 크기·파일 저장 제약은 [Vercel Flask 제한](https://vercel.com/docs/frameworks/backend/flask#limitations)에서 확인합니다. 요청 중 생성하는 인덱스나 대화 기록을 Function의 로컬 파일에만 저장하지 마세요. [Vercel 시스템 환경 변수](https://vercel.com/docs/environment-variables/system-environment-variables)
