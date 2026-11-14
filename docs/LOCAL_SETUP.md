@@ -1,5 +1,5 @@
 # 로컬 실행
-## (가상환경 설정 후 기본 데모 실행과 동일한 이야기입니다. 자세히 읽어보지 않으셔도 상관없습니다.)
+## (팀 실행 방법은 [ENVIRONMENT.txt](../ENVIRONMENT.txt)가 기준입니다. 이 문서는 베이스 코드의 자세한 안내입니다.)
 
 ## 실행 방법 선택
 
@@ -17,8 +17,8 @@ Conda, Python venv, Docker Compose 중 **하나만 선택**하면 됩니다. 기
 프로젝트 루트에서 실행합니다. 운영체제에 관계없이 Conda가 초기화된 터미널에서 같은 명령을 사용합니다.
 
 ```bash
-conda create -n chatbot-base python=3.12 pip
-conda activate chatbot-base
+conda create -n oekcook python=3.12 pip
+conda activate oekcook
 python -m pip install -r requirements.txt
 python app.py
 ```
@@ -34,7 +34,6 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env
 python app.py
 ```
 
@@ -45,11 +44,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-cp .env.example .env
 python app.py
 ```
 
-Conda와 venv는 모두 <http://localhost:5000>을 엽니다. 이름을 입력해 대화해 보세요. 정지하려면 터미널에서 `Ctrl+C`를 누릅니다. `.env`는 데모에는 없어도 됩니다. 모델 API를 붙일 때에는 운영진이 제공한 키를 포함해 `.env.example`의 필요한 변수만 `.env`에 추가하세요. `.gitignore`는 `.env`, `.env.local` 등 `.env.*`를 제외합니다. 실제 API 키를 Markdown, 소스 코드, 브라우저 JS, 스크린샷이나 팀 채팅에 적어 공유하지 마세요. 커밋 전 `git status --short`로 파일 목록을 보고, `git check-ignore .env`가 `.env`를 출력하는지 확인하세요. 키가 Git이나 외부에 노출되면 운영진에게 바로 알려 교체를 요청하세요.
+Conda와 venv는 모두 <http://localhost:5000>을 엽니다. 이름을 입력해 대화해 보세요. 정지하려면 터미널에서 `Ctrl+C`를 누릅니다. `.env`가 없어도 게임은 규칙으로 끝까지 돌아갑니다. OpenAI를 쓰려면 프로젝트 루트에 `.env`를 직접 만들고 [ENVIRONMENT.txt](../ENVIRONMENT.txt)의 변수를 적으세요(이 저장소에는 `.env.example`이 없습니다). `.gitignore`는 `.env`, `.env.local` 등 `.env.*`를 제외합니다. 실제 API 키를 Markdown, 소스 코드, 브라우저 JS, 스크린샷이나 팀 채팅에 적어 공유하지 마세요. 커밋 전 `git status --short`로 파일 목록을 보고, `git check-ignore .env`가 `.env`를 출력하는지 확인하세요. 키가 Git이나 외부에 노출되면 운영진에게 바로 알려 교체를 요청하세요.
 
 ## Docker Compose로 실행
 

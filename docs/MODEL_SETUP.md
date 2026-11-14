@@ -1,5 +1,7 @@
 # OpenAI 모델 연결 예시
 
+> **왹쿡 팀 안내:** 이 저장소는 이미 OpenAI가 연결돼 있습니다(`openai`는 `requirements.txt`에 있음). `services/generator.py`의 `decide_turn`·`record_lines`가 OpenAI를 부르고, 실패하거나 키가 없으면 규칙으로 대신합니다. **아래 3번처럼 `generator.py` 파일 전체를 바꾸면 게임 코드가 지워지니 따라 하지 마세요.** 키 넣는 방법은 [ENVIRONMENT.txt](../ENVIRONMENT.txt), 구조는 [ARCHITECTURE.md](ARCHITECTURE.md)를 보세요. 아래는 베이스 코드의 원래 안내입니다.
+
 이 문서는 **데모 화면과 `/api/chat`이 동작하는 것을 확인한 다음** 읽는 선택 예시입니다. 기본 코드에는 OpenAI SDK와 실제 모델 호출이 들어 있지 않습니다. 다른 공급자를 선택하면 같은 `generate()` 입력과 문자열 반환 계약에 맞춰 구현하면 됩니다.
 
 ## 1. SDK 설치
@@ -14,7 +16,7 @@ python -m pip install openai
 
 ## 2. 로컬 환경 변수 설정
 
-`.env.example`을 복사해 프로젝트 루트에 `.env`를 만듭니다. PowerShell에서는 `Copy-Item .env.example .env`, macOS/Linux에서는 `cp .env.example .env`를 실행하세요. `.env`에서 주석 처리된 `OPENAI_API_KEY` 줄의 `#`을 지우고 운영진이 준 키를 넣습니다. 최종 설정은 다음 형태입니다.
+프로젝트 루트에 `.env` 파일을 직접 만들고 아래 세 줄을 적습니다(이 저장소에는 `.env.example`이 없습니다). `OPENAI_API_KEY`에는 운영진이 준 키를 넣습니다.
 
 ```dotenv
 OPENAI_API_KEY=

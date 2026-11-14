@@ -45,7 +45,7 @@
   - 단계 id(ingredient/prep/cook/plating)는 화면 배경·기록칸·레코드가 쓰므로 바꾸지 않는다. 화면용 이름은 config.game.stage_names
 - generator.py의 first_guess / respond_to_tile / finish는 반환 형식(dict: scores, word, expression, reading, reply)을 유지한다
 
-## 현재 진행 상황 (2026-11-07)
+## 현재 진행 상황 (2026-11-14)
 - 완료: 외계인 판단 AI 연결 (브랜치 feat/ai-decide, push 안 함). 실제 10판 측정까지 끝남
   - 1단계 규칙: judge_stage 연속 적합도(soft_fit, 코사인), reason(method/size/power/density/color), 손질=색상·크기·밀도, 조리=색상·무거움(power, hl)·밀도(wc 뺌), 플레이팅=요리별 center(판정 ±40, 결과 그림 색은 ±60 안이면 그대로)+밀도(max_roughness 60, 넘으면 unstable). seed·bluff·finalize 제거, seed는 그림용으로 세션마다 새로
   - 규칙 대체 확신 = 쌓인 적합도 × 일관성(이전 확신과 섞음). 일관성은 쌓인 신호가 최근 3장 동안 덜 흔들린 정도이고, 쌓인 적합도가 오르는 중이면 감점 없음(틀린 타일을 고쳐 보내면 손해가 없게), 멈춤 기준 confidence.thresholds는 시도마다 낮아져 규칙 경로는 5번 안에 끝남. max_attempts 네 단계 10, MAX_RECORD_ENTRIES 100
@@ -62,7 +62,7 @@
   - 레코드 GPT 응답: items(모든 타일) + pairs(오해 대사와 바로잡는 대사를 한 묶음, 개수 고정). 짝 타일은 pairs로 덮어쓴다. 외국어·물음표 위반·빈칸은 그 줄만 예시로, 짝은 둘 다 예시 짝으로 교체(_clean_lines). 절반 넘게 교체되면 source=openai_failed:too_many_replaced
   - 키 없는 대사: 태그 reason이 method면 record_lines.md의 method 섹션(방법이 틀렸을 때)을 쓴다
   - 재료 대표 색은 외계인 타일로 다시 그려도 같은 구간이 되게 골랐다. 색을 바꾸면 화면에서 구간이 유지되는지 다시 볼 것
-- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 128개
+- 완료: 학종이 작성기, 4단계 요리 API 및 로직. 테스트 129개
 - 완료: docs/design/03_stage1_ingredients.png 와이어프레임으로 채팅 화면 전면 재배치 (chat.html, style.css, chatbot.js)
   - 배경 가득 + 좌상단 제목(#title) + 가운데 외계인 이미지 하나만. 입력창·단계 안내 글·확신 막대·알림 전부 제거(게임 진행 중에는 한국어 설명 없음. 인트로·결과·결론 화면과 다음에 만들 미션은 짧은 문구 허용). 보내기는 message="타일" 고정(app.py 안 건드림)
   - 오른쪽: HSV 색 선택기(가로 채도·세로 명도 + 무지개 hue 막대, 클릭·드래그). 고른 HSV→RGB→CIELAB(L·C·h)로 변환해 signal.color로 보냄(chatbot.js 1번에 hsvToRgb·rgbToLch 추가). 크기·밀도 막대는 아이콘만
@@ -78,7 +78,7 @@
 - 완료: 비주얼 에셋 적용 (config, generator.py, image_selector.py, style.css, chatbot.js, chat.html, index.html)
   - 표정: 시작 default / 교환 중엔 위 "확신 표정" / 단계가 끝나면(통과 이유와 무관) convinced → joy / 결과 화면 외계인은 요리 성공 alien_success, 실패 alien_fail. 단계별 포즈(alien_cute_a/b/c) 제거
   - 배경: 시작 bg_default, 단계별 bg_selection·bg_preparation·bg_cooking·bg_plating, 결과 화면 bg_result(흰 카드 없앰)
-  - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식은 x 600·접시 끝 y 840·보이는 높이 380(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
+  - 결과 화면: 게임 화면처럼 1920×1080 스테이지(.result-content.stage)라 배경·음식·레코드가 같은 좌표를 씀. 테이블 윗면 y 590~910. 음식 위치는 아래 "결과 화면 세 장 흐름"이 최신(음식별 투명 여백은 --fill·--foot로 보정, 음식 이미지를 바꾸면 다시 잴 것). 세로 화면은 배경을 115%로 키워 테이블을 내림. 스크롤 없음, 다시 하기 버튼 오른쪽 아래. 레코드 아래 안내·오류 문구 삭제(대사 실패는 브라우저 콘솔에만)
   - 레코드 대사 그림: 문장부호(?!·?·!)로 후보 표정을 좁힌 뒤, record.line_images의 표정별 예시 대사와 임베딩 유사도(가장 비슷한 예시)로 고름. 키 없으면 문장부호로만. 이미 쓴 표정·바로 앞과 같은 표정은 감점해 고루 섞음(image_selector.pick_diverse). 놀람은 ! 있을 때만, "모르"가 있으면 고민·의심. 시험 대사 18개 중 17개 맞음(전엔 6개). 
   - 이름 정하기 화면(detail.html): 배경 bg_road(11/11, 파일이 없으면 아래 겹의 bg_default가 보임), 가운데 플레이어 그림, 남성/여성 버튼으로 player_male/female 전환(CSS :has, JS 없음), 가운데 아래 이름 칸, 오른쪽 아래 시작하기. 소개 글·태그·닫기 버튼 제거. 고른 성별은 player=male|female로 /chat에 넘어가(app.py가 검증, chat.html data-player) 채팅 화면 기록 아랫줄 "나" 아이콘(흰 원 자리)이 player_male/female로 바뀜 11/11: 밤 골목 bg_road(1672×941, 인도 = 그림 높이 81~88%)에 발을 맞춤 — 가로는 85%(bottom = 50vh − 0.35 × max(100vh, 100vw×941/1672), 그림 아래 투명 여백 4.5%만큼 내림), 가로는 성별 | 이름을 한 줄로 낮게. 세로는 입력칸이 인도와 겹쳐 발을 82%에, 시작하기는 이름 칸 오른쪽 같은 줄
     - 배치(11/11 최신): 머리 위 = 제목 "납치된 인간은 누구?"(KIMM, 흰 글자 + 남보라 여덟 방향 그림자 외곽선 + 아래 그림자) + 이름 칸(.name-top), 발 아래 = 성별(.bottom-center), 오른쪽 아래 = 시작하기. 발은 가로·세로 모두 인도 85%(--feet), 머리 끝 --head = 발 + 그림 높이 × 0.925(아래 여백 4.5%·위 여백 3%). 1920×1080·1440×900·390×844에서 남녀 모두 발이 다 보임
@@ -88,7 +88,7 @@
     - 가로 배치(1920×1080 기준): 기록칸 왼쪽 위, 패널 오른쪽 위(right 40·top 40·폭 430, 아래 끝 y 585라 조리 배경의 프라이팬(y 625~)·냄비를 안 가림. 위에서부터 색 네모·색상 막대 → 크기·밀도 막대 → 미리보기·↺·✓), 외계인 가운데 바닥(.signal-center 높이 700·bottom 10)
     - 외계인 발 맞춤: 표정 이미지마다 아래 투명 여백이 달라 style.css의 --foot 값으로 내림. 표정 이미지를 바꾸면 이 값도 다시 잴 것
     - 말풍선: .signal-center가 외계인 크기 상자라 그 상자 기준으로 머리 옆을 따라감. 가로는 머리 오른쪽, 세로는 외계인이 화면 폭을 다 써서 머리 왼쪽 위
-    - 세로: 위에서부터 기록칸 → 외계인(패널 바로 위, 높이 최대 124vw) → 패널(내용 높이, 390×844에서 약 26%, 스크롤 없음). 패널은 [색 네모 | 색상·크기·밀도 막대] + [미리보기·↺·✓]. 터치 요소 --touch(44px) 이상
+    - 세로: 위에서부터 기록칸 → 외계인(패널 바로 위, 높이 최대 124vw) → 패널(내용 높이, 390×844에서 약 26%, 스크롤 없음). 11/14: 배경은 패널 윗선(--scene-h, fitStage가 넣음)까지만 위쪽 정렬로 깔아 좌우가 더 보임(390×844 가로 26% → 34%), 외계인도 그 배경 비율로(높이 = scene × 546/1080, 발 끝 = scene × 797/1080) 화면의 약 39%. 단계 힌트 빛 좌표(visibleAreas)도 같은 기준 패널은 [색 네모 | 색상·크기·밀도 막대] + [미리보기·↺·✓]. 터치 요소 --touch(44px) 이상
     - 기록칸은 윗줄 나, 아랫줄 외계인
     - 캔버스 실제 픽셀 = 보이는 크기 × 배율 × devicePixelRatio (색 네모 최대 1024, 미리보기 256, 레코드 1600). 레코드는 기준 좌표 600 고정(RECORD_SIZE)
     - 결과 화면도 같은 --stage-scale을 씀. record-tip 위치는 showTip이 화면 좌표를 배율로 나눠 계산하고 스테이지 안으로 제한
@@ -108,18 +108,18 @@
   - 글꼴: style.css 맨 위 @font-face. 학교안심 마법사 = jsDelivr @kfonts/hakgyoansim-mabeopsa@0.1.0, 프리젠테이션 = jsDelivr gh/projectnoonnu/2404@1.0 (둘 다 OFL). 못 불러오면 IBM Plex Sans KR 등으로
   - 세로 화면(시안 없음): 초상화는 대화창 위에 작게(외계인 26%·주인공 74%), 대화창 아래 28dvh(이름 위·대사 아래), 패널은 위쪽 30dvh. 색·글꼴·버튼 모양은 가로와 같음. 모션 줄이기면 글자 한 번에·애니메이션 없음
 - 완료: 결과 화면 세 장 흐름 (chat.html, style.css, chatbot.js 6·7번). .result-content의 data-screen으로 dish → record → end, 오른쪽 아래 "다음 ▶", 짧은 페이드(모션 줄이기면 즉시). 11/11 돔 공개·최종 카드로 교체
-  - ① 돔 공개(data-reveal covered → lifting → revealed): 돔(images/result/dome_cover.png, 없으면 CSS 은색 돔)과 그 아래 요리는 x 860(가운데에서 살짝 왼쪽)·접시 끝 y 850·높이 300, 외계인은 x 1080 테이블 뒤(--show로 잘라 잘린 끝 y 583)이고 덮여 있는 동안은 기본(alien_default, --show .74). 돔은 숨 쉬는 글로우 + 2.6초마다 좌우로 짧게 흔들흔들(±4도, transform-origin 테두리), 올리면 scale 1.05(글자 없음, 모션 줄이기면 없음). 돔 위치·크기·배지 값은 직접 맞춘 것이라 바꾸지 말 것, 누르면 살짝 들렸다 하늘로 0.8초(DOME_FLY_MS = @keyframes dome-fly), 다 날아간 뒤 외계인 alien_success/fail + 배지 그림(images/result/text_success·text_fail, 요리 위에 통통 등장) + "다음 ▶". 모션 줄이기면 바로 공개. 세로는 요리 40%·외계인 62%. 외계인·돔 그림을 바꾸면 --show·크기를 다시 볼 것
+  - ① 돔 공개(data-reveal covered → lifting → revealed): 돔(images/result/dome_cover.png, 없으면 CSS 은색 돔)과 그 아래 요리는 x 860(가운데에서 살짝 왼쪽)·접시 끝 y 850·높이 300, 외계인은 x 1240 테이블 뒤(--show로 잘라 잘린 끝 y 583)이고 덮여 있는 동안은 기본(alien_default, --show .74). 돔은 숨 쉬는 글로우 + 2.6초마다 좌우로 짧게 흔들흔들(±4도, transform-origin 테두리), 올리면 scale 1.05(글자 없음, 모션 줄이기면 없음). 돔 위치·크기·배지 값은 직접 맞춘 것이라 바꾸지 말 것, 누르면 살짝 들렸다 하늘로 0.8초(DOME_FLY_MS = @keyframes dome-fly), 다 날아간 뒤 외계인 alien_success/fail + 배지 그림(images/result/text_success·text_fail, 요리 위에 통통 등장) + "다음 ▶". 모션 줄이기면 바로 공개. 글자 그림은 x 560. 세로는 요리 47%·외계인 70%·글자 27%. 외계인·돔 그림을 바꾸면 --show·크기를 다시 볼 것
   - ② 레코드 left 560·top 110·지름 800. 주변은 반투명 남보라 덮개(::before), 레코드 둘레는 천천히 밝아졌다 어두워지는 금빛(record-glow). 띠 band 0.07·pitch 0.08, 한 바퀴 타일 수 = max(12, 타일 수 ÷ 3)이라 최대 3바퀴. 문구: 위 "당신의 대화가 기록된 레코드가 완성되었습니다."(흰 글자 + 남보라 외곽선, 디스크 위), 아래는 대사가 오는 동안 "외계인이 신호를 보내는 중이에요" → 다 오면 "새겨진 타일을 조사하여, 숨겨진 의미를 확인하세요"(은은하게 깜박임, 타일을 조사해도 계속 남음(11/12), 툴팁이 그 위에 뜸). 세로는 디스크 위·아래 끝(--disc-top, --disc)에 붙임. 대사는 ①에서 미리 요청. 툴팁에 감각 의미 추가(서버 lines[i].meaning 우선, 없으면 tileMeaning)
-  - ③ 최종 카드(docs/design/final_record_ref.png 구성, renderCard): FINAL RECORD 탭 / 왼쪽 칸 = 레코드(같은 .record-disc를 옮김) + 고른 성별 player_male·female 상반신(칸 폭 160%로 키워 위쪽만) + 지구인(이름 화면 이름) + 요리 시도 횟수("N번째 요리" = localStorage oekcook.dishCount, 끝까지 한 판마다 +1, 막히면 1) / 오른쪽 칸 = 배지 그림 + 최종 요리(응답 dish.name) + 요리 그림(플레이팅 색 그대로) + 실패 원인(result.verdicts에서 success가 아닌 단계: 손질·조리·플레이팅 색 실패, 없으면 요리 과정 실패) 또는 성공 포인트 "완벽한 소통". 라벨과 칩은 한 흐름으로 줄바꿈해 칸 아래에 붙임(넘침 방지, 11/12), 세로는 요리 그림 왼쪽에서만 줄바꿈, 저장 PNG도 넘치면 다음 줄 / 아래 결론 문장(성공 "요리도 신호도 완벽하게 전해졌어요." 실패 "요리는 조금 이상했지만, 신호는 전해졌어요.") / 버튼 기록 저장(Mint, saveCard가 canvas에 카드를 직접 그려 PNG 내려받기, oekcook-record-N.png) · 다시 요리하기(Pink, startCooking) · 처음으로(Lavender, index). 세로는 위아래로 쌓고 왼쪽 칸 아랫줄에 지구인·시도 횟수(360×740까지 스크롤 없음)
+  - ③ 최종 카드(docs/design/final_record_ref.png 구성, renderCard): FINAL RECORD 탭 / 왼쪽 칸 = 레코드(같은 .record-disc를 옮김) + 고른 성별 player_male·female 상반신(칸 폭 160%로 키워 위쪽만) + 지구인(이름 화면 이름) + 요리 시도 횟수("N번째 요리" = localStorage oekcook.dishCount, 끝까지 한 판마다 +1, 막히면 1) / 오른쪽 칸 = 배지 그림 + 최종 요리(응답 dish.name) + 요리 그림(플레이팅 색 그대로) + 실패 원인(result.verdicts에서 success가 아닌 단계: 손질·조리·플레이팅 색 실패, 없으면 요리 과정 실패) 또는 성공 포인트 "완벽한 소통". 라벨과 칩은 한 흐름으로 줄바꿈해 칸 아래에 붙임(넘침 방지, 11/12), 세로는 요리 그림 왼쪽에서만 줄바꿈, 저장 PNG도 넘치면 다음 줄 / 아래 결론 문장(성공 "요리도 신호도 완벽하게 전해졌어요." 실패 "요리는 조금 이상했지만, 신호는 전해졌어요.") / 버튼 기록 저장(Mint, saveCard가 canvas에 카드를 직접 그려 PNG 내려받기, oekcook-record-N.png) · 다시 요리하기(Pink, startCooking) · 처음으로(Lavender, 이름 화면 detail → 티저 → 컷신). 세로는 위아래로 쌓고 왼쪽 칸 아랫줄에 지구인·시도 횟수(360×740까지 스크롤 없음)
   - 축 낱말 SENSE_WORDS는 브라우저가 config를 못 받아 chatbot.js에 있음. config.axis_labels를 바꾸면 같이 고칠 것
   - 콘솔 시험: 게임을 끝낸 뒤 oekcook.showResult({success, image, verdicts, plating:{hue_shift}})
-- 완료: 시작 화면 히어로샷 (index.html, style.css, 11/11): 가로 images/title/hero_landscape, 세로 hero_portrait를 cover(로고가 그림에 있어 제목 글자·표정 외계인 삭제). 시작하기는 큰 Mint 알약 — 가로 그림은 음식이 가운데 아래 91~96%까지라 가로는 로고 아래 빈 싱크대 쪽(left 25%·bottom 7dvh), 세로는 음식 아래 가운데(bottom 6dvh). 그림을 바꾸면 버튼 자리를 다시 볼 것 — 11/11 최신: 가로는 그림 가로 = 창 가로(16:9 이상 cover, 더 좁으면 contain + 흐린 바탕)라 그림 높이 56.28vw. 시작하기 가운데를 그림 속 싱크대 아래(가로 13%·세로 81%: left 13vw, top 50dvh + 0.31 × 56.28vw), 폭은 그림 가로 20% 이내라 라면 그릇(35~56%)을 안 가림. 1920×1080·1440×900·1280×800·1024×768·2560×1080 확인. 세로는 음식 아래 가운데
+- 완료: 시작 화면 히어로샷 (index.html, style.css, 11/11): 로고가 그림에 있어 제목 글자·표정 외계인 없음. 시작하기는 큰 Mint 알약. 가로는 그림 가로 = 창 가로(16:9 이상 cover, 더 좁으면 contain + 흐린 바탕)라 그림 높이 56.28vw. 시작하기 가운데를 그림 속 싱크대 아래(가로 13%·세로 81%: left 13vw, top 50dvh + 0.31 × 56.28vw), 폭은 그림 가로 20% 이내라 라면 그릇(35~56%)을 안 가림. 1920×1080·1440×900·1280×800·1024×768·2560×1080 확인. 세로는 음식 아래 가운데
 - 완료: UI 규칙 통일 (style.css, 11/11): :root 변수 --navy #241D60(외곽선·글자) --mint #65E8DF(주요 버튼) --pink #F4AEDC(보조 버튼) --lavender #AAA0EE(패널·입력 컨트롤) --lime #C9F06E(진행·긍정: 성공 단계 칸, 지금 기록칸) --paper(카드·입력칸 안쪽), --ui-line(3px 남보라) --ui-radius(18px) --ui-drop(아래 5px 그림자, 흐림 없음). 버튼(.start-button·↺✓·?·성별)은 누르면 translate 3px + 그림자 2px. 패널(타일 패널·기록칸·진행 표시·이름 칸)은 Lavender, 카드(결론·툴팁·도움말·말풍선·레코드 상태)는 paper + 외곽선 + 그림자. 크기·밀도 막대는 Lavender 홈 + Mint 손잡이. 글꼴 한국기계연구원체(jsDelivr @noonnu/kimm-bold@0.1.0, MIT, Bold 하나). 인트로(대화창·skip·확인창)는 피그마 시안 그대로 둠
 - 완료: 소리 (config.sounds, app.py bot_view, chatbot.js 6-0, index·detail 템플릿의 짧은 스크립트, 11/11)
   - 경로·볼륨은 config.sounds 한곳. 파일이 없거나 재생이 막히면 조용히 건너뜀(play() 실패 → "skip" 이벤트). src 빈 칸 = 아직 없음(alien_doubt·tile_pick 자리)
   - 효과음: start = 시작 화면 시작하기·최종 카드 다시 요리하기·처음으로(→ 이름 화면)(data-sound="start"), button = 그 밖의 모든 버튼(문서 click 위임, 성별 label 포함), tile_send = ✓(앞 1.2초 + 0.25초 페이드, 새로 울리면 이전 것 끊음), convinced = 외계인 그림이 alien_convinced로 바뀌는 순간(setAlienImage: 단계 끝 CONVINCED_IMAGE, 대화 중 showAlien. 이미 convinced면 안 울림). 단계 끝은 이 소리가 끝난 뒤(최대 CONVINCED_MAX_MS 1.6초, 꺼짐·막힘이면 바로) 다음 단계 힌트, 마지막 단계는 그 뒤에 결과 화면(afterSound), hint = 단계 힌트 빛 시작, stage = 빛이 사라지기 시작(HINT_FADE_AT 0.81 = area-hint-fade 81%), result = 결과 화면(돔이 덮인 화면)이 열리자마자 배경음악 정지와 함께 한 번(holdBgmForResult), success/fail = 돔이 사라지는 순간(revealDish done, 외계인·배지와 같은 순간), disc = ② 레코드에서 다른 타일에 올라갈 때마다(onRecordPointer, 0.125초, 11/12)
   - 배경음악 bgm: 인트로가 뜰 때 startBgm(다시 요리하기는 startCooking에서, 이미 나오면 그대로). 자동재생이 막히면 첫 pointerdown·keydown 때 다시. 시작·이름 화면·티저 영상 동안엔 없음. 결과 화면이 열리면 멈췄다가 성공·실패 소리가 끝나면(실패·없음 포함) fade_in_ms(1초)로 다시
-  - 링크 이동(시작 화면 시작하기·최종 카드 처음으로)은 소리를 틀고 400ms 뒤 이동(꺼짐·막힘이면 바로, 연타해도 한 번). 이름 화면 시작하기는 티저 영상으로
+  - 링크 이동(시작 화면 시작하기·최종 카드 처음으로)은 소리가 끝나면 이동(ended, 최대 1.5초 — 첫 재생은 파일을 받느라 늦음. 꺼짐·막힘이면 바로, 연타해도 한 번). 이름 화면 시작하기는 티저 영상으로
   - 소리 켜기/끄기: 모든 페이지 오른쪽 위 .sound-toggle(가로 36px·top 4 = 타일 패널 top 40·인트로 skip top 47 위, 세로 44px — 세로 인트로 skip은 top 64로 내림), localStorage oekcook.muted(막히면 켜짐). 끄면 배경음악·✓ 소리도 바로 멈춤
 - asset_url(app.py)은 파일 수정 시각을 ?v=로 붙인다(11/11). 배포 뒤 브라우저가 옛 chatbot.js·style.css를 캐시로 써서 바뀐 화면이 안 보이던 문제 방지
 - 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
@@ -128,7 +128,7 @@
   - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4, 메뉴 결정용), power=논문 hl(R6), hue·sat=HSV 색상·채도(서버가 LCh→sRGB로 되찾음). 단계별 쓰임은 위 "진행 중" 참고
   - 확신 기준 이상이면 다음 단계, 아니면 retry. max_attempts에서 쌓인 신호로 확정
   - main(#10 feat/layout, #11 feat/panel-size)과 합침(11/4): 가로 화면은 팀원 배치(외계인 바닥, 타일 패널 오른쪽 위, 결과 화면 스테이지)를 따르고 진행 표시는 위 가운데로. 세로 화면은 외계인을 배경 창에 고정하는 이쪽 배치를 유지(팀원의 세로 결과 화면 규칙은 그대로)
-  - 왼쪽 아래 ? (그림 images/ui/hint_icon.png, 둥실 위아래로 뜸. 가로 120px·세로 60px 버튼, 세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
+  - 왼쪽 아래 ? (그림 images/ui/hint_icon.png, 둥실 위아래로 뜸. 마우스는 올리기만 해도·터치는 누를 때 sfx_button, 클릭 때 공통 버튼 소리는 끔(data-sound=""). 가로 120px·세로 60px 버튼, 세로 화면은 진행 표시 왼쪽): 마우스를 올리거나 누르면 "재료들을 보아하니 이런 걸 만들 수 있을 거 같아~" + 요리 4개 성공 그림 (app.py chat()이 config.dishes에서 넘김). 지금 만드는 요리는 끝날 때까지 화면에 안 나옴
   - 외계인 표정·행동 묘사 alien_message는 decide_turn이 정하고, 규칙 대체 때는 verdict_expressions·config.game.messages. 행동 묘사는 화면에 글로 안 보임
   - 화면: 오른쪽 위(세로 화면은 패널 위) 진행 표시(4단계 칸 판정 색. 재요청 ↻+남은 시도 점은 11/9에 뺌. 메뉴는 끝날 때까지 숨김 — 메뉴 그림은 11/4에 뺌), 외계인 반응 애니메이션, 플레이팅 hue_shift를 결과 그림에 입힘 (조리대 위 요리 그림은 11/4에 뺌)
 - 완료: 레코드 대사 태그·검색 (data/knowledge/record_lines.md, retriever.search_lines, generator.record_lines, chatbot_service.py record_tags·pick_misreads, config.record.moods) — fallback_lines 삭제
