@@ -122,7 +122,7 @@
   - 링크 이동(시작 화면 시작하기·최종 카드 처음으로)은 소리가 끝나면 이동(ended, 최대 1.5초 — 첫 재생은 파일을 받느라 늦음. 꺼짐·막힘이면 바로, 연타해도 한 번). 이름 화면 시작하기는 티저 영상으로
   - 소리 켜기/끄기: 모든 페이지 오른쪽 위 .sound-toggle(가로 36px·top 4 = 타일 패널 top 40·인트로 skip top 47 위, 세로 44px — 세로 인트로 skip은 top 64로 내림), localStorage oekcook.muted(막히면 켜짐). 끄면 배경음악·✓ 소리도 바로 멈춤
 - asset_url(app.py)은 파일 수정 시각을 ?v=로 붙인다(11/11). 배포 뒤 브라우저가 옛 chatbot.js·style.css를 캐시로 써서 바뀐 화면이 안 보이던 문제 방지
-- 배포: Render 무료 인스턴스(main에 merge하면 자동 재배포). 환경 변수에 OpenAI 키 없음 → 레코드 대사는 record_lines.md 예시, 그림은 문장부호 규칙으로만 고름. 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수). 시연·제출 전에 키를 넣을 것
+- 배포: Vercel https://noizilian.vercel.app/ (11/19 Render에서 옮김). 키는 Vercel Settings → Environments → Production에 넣고 Redeploy. 11/19 확인: 키를 다시 넣은 뒤 게임 판단 decision_source=openai, 레코드 source=openai로 정상(전에는 APIConnectionError. 키 끝 줄바꿈이면 이 오류가 남). 호출 제한은 코드에 있음(LLM_*·RECORD_* 환경 변수, 서버리스라 인스턴스마다 따로 셈)
 - 완료: 요리 게임 규칙 (config.game, chatbot_service.py 2-2부, app.py parse_state, generator.act, retriever.py, data/knowledge/cooking_rules.md, chat.html·style.css·chatbot.js, tests) — 테스트 59개
   - 1단계 첫 타일 = 메뉴 결정(따뜻·차가움 × 노이즈 높음·낮음 → pizza/hamburger/ramen/omurice), 조리 판정에는 안 씀. 바로 손질로
   - 판정값 0~100: size=크기 막대(freq), roughness·noise=밀도 막대(oct), heat=논문 wc(R4, 메뉴 결정용), power=논문 hl(R6), hue·sat=HSV 색상·채도(서버가 LCh→sRGB로 되찾음). 단계별 쓰임은 위 "진행 중" 참고
@@ -141,7 +141,7 @@
 - 다음 작업 순서
   1. 사람이 직접 해 보기: 색으로 방법을 맞추는 난이도, AI가 묻는 횟수(무작위 입력은 단계당 7번까지 감)
   2. 요리 재료 이미지 → 단계별 화면 연결, 레코드 예시(record_lines.md) 말투 다듬기, README·공개 URL 최종 확인
-  3. 배포 전: Render에 키와 호출 제한 환경 변수 넣기, X-Forwarded-For로 IP가 제대로 잡히는지 확인
+  3. 배포 전: Vercel에 키와 호출 제한 환경 변수 넣기, X-Forwarded-For로 IP가 제대로 잡히는지 확인
 - 팀 확정 필요: config의 "초안: 팀 확정 필요" 값(확신 기준·상승 폭·최대 횟수·요리 목표 점수·성공 거리), 표정 고르는 기준(generator.py), 레코드 예시(record_lines.md), 결과 화면을 음식+레코드 한 화면으로 둘지(와이어프레임은 07 → 11 따로)
 
 ## 디자인 규칙
